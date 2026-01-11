@@ -1,0 +1,13 @@
+opencv-python>=4.8.0
+numpy>=1.24.0,<2.0.0
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.0.0
+scipy>=1.10.0
+Pillow>=10.0.0
+# Optional dependencies (install as needed):
+# transformers>=4.30.0  # For DETR detector
+# rfdetr>=0.1.0  # For RF-DETR detector
+# supervision>=0.18.0  # For RF-DETR detector
+# pyyaml>=6.0  # For YAML config file support
+
