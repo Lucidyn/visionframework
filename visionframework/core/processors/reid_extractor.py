@@ -1,0 +1,158 @@
+"""
+ReID Feature Extractor
+
+Provides person re-identification feature extraction.
+"""
+
+from typing import List, Optional, Any, Tuple, Union
+import numpy as np
+import cv2
+
+try:
+    import torch
+    import torchvision.transforms as T
+    from torchvision.models import resnet50, ResNet50_Weights
+except ImportError:
+    torch = None
+
+from .feature_extractor import FeatureExtractor
+from ...utils.logger import get_logger
+from ...utils.config import Config
+
+logger = get_logger(__name__)
+
+
+class ReIDExtractor(FeatureExtractor):
+    """
+    Person Re-Identification Feature Extractor
+    
+    Extracts appearance features (embeddings) from image crops using ResNet50
+    or custom ReID models. Can be used for person tracking and re-identification.
+    """
+    
+    def __init__(self, model_name: str = "resnet50", device: str = "cpu",
+                 input_size: Tuple[int, int] = (128, 256),
+                 model_path: Optional[str] = None,
+                 use_pretrained: bool = True):
+        """
+        Initialize ReID extractor.
+        
+        Args:
+            model_name: Model architecture name
+            device: Device to run on ("cpu", "cuda", etc.)
+            input_size: Input size as (width, height)
+            model_path: Path to custom model weights
+            use_pretrained: Whether to use pretrained weights
+        """
+        super().__init__(model_name, device)
+        self.input_size = input_size
+        self.model_path = model_path
+        self.use_pretrained = use_pretrained
+        
+        self.transform = T.Compose([
+            T.ToPILImage(),
+            T.Resize(input_size[::-1]),  # (H, W) for Resize
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406], 
+                       std=[0.229, 0.224, 0.225])
+        ])
+    
+    def initialize(self) -> None:
+        """Initialize the ReID model."""
+        if torch is None:
+            raise ImportError("PyTorch is required for ReID extraction. "
+                            "Install with: pip install 'visionframework[reid]'")
+        
+        try:
+            if self.model_path:
+                logger.info(f"Loading custom ReID model from {self.model_path}")
+                base_model = resnet50(weights=None)
+                state_dict = torch.load(self.model_path, map_location=self.device)
+                base_model.load_state_dict(state_dict)
+            else:
+                logger.info("Loading ReID feature extractor (ResNet50)")
+                weights = ResNet50_Weights.IMAGENET1K_V1 if self.use_pretrained else None
+                base_model = resnet50(weights=weights)
+            
+            # Remove classification head, keep feature extraction layers
+            self.model = torch.nn.Sequential(*list(base_model.children())[:-1])
+            self.model.to(self.device)
+            self.model.eval()
+            self._initialized = True
+            logger.info("ReID extractor initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize ReID extractor: {e}", exc_info=True)
+            raise RuntimeError(f"ReID initialization failed: {e}")
+    
+    def extract(self, image: np.ndarray, 
+                bboxes: Optional[List[Tuple[float, float, float, float]]] = None) -> np.ndarray:
+        """
+        Extract features for bounding boxes.
+        
+        Args:
+            image: Full frame image (BGR)
+            bboxes: List of (x1, y1, x2, y2) bounding boxes
+        
+        Returns:
+            Feature embeddings shape (N, feature_dim)
+        """
+        return self.process(image, bboxes or [])
+    
+    def process(self, image: np.ndarray, 
+                bboxes: List[Tuple[float, float, float, float]]) -> np.ndarray:
+        """
+        Extract features for multiple bounding boxes.
+        
+        Args:
+            image: Full frame image (BGR)
+            bboxes: List of (x1, y1, x2, y2) bounding boxes
+        
+        Returns:
+            Feature embeddings shape (N, 2048)
+        """
+        if not self.is_initialized():
+            self.initialize()
+        
+        if not bboxes:
+            return np.empty((0, 2048))
+        
+        # Crop images from bboxes
+        crops = []
+        h, w = image.shape[:2]
+        
+        for box in bboxes:
+            x1, y1, x2, y2 = map(int, box)
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(w, x2)
+            y2 = min(h, y2)
+            
+            if x2 <= x1 or y2 <= y1:
+                # Invalid crop
+                crop = np.zeros((self.input_size[1], self.input_size[0], 3), 
+                               dtype=np.uint8)
+            else:
+                crop = image[y1:y2, x1:x2]
+                # Convert BGR to RGB
+                crop = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+            
+            crops.append(self.transform(crop))
+        
+        if not crops:
+            return np.empty((0, 2048))
+        
+        # Forward pass
+        batch = torch.stack(crops).to(self.device)
+        with torch.no_grad():
+            features = self.model(batch)
+            # Flatten (N, 2048, 1, 1) -> (N, 2048)
+            features = features.view(features.size(0), -1)
+            # L2 normalize
+            features = torch.nn.functional.normalize(features, p=2, dim=1)
+        
+        return features.cpu().numpy()
+    
+    def _move_to_device(self, device: str) -> None:
+        """Move model to device."""
+        if self.model is not None:
+            self.model.to(device)

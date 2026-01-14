@@ -1,5 +1,39 @@
 # 更新日志
 
+## v0.2.8 - 架构重构与模块管理
+
+### 新功能
+
+#### 1. 统一异常系统
+- ✅ 创建 `visionframework/exceptions.py` 定义异常层级
+- ✅ 基础异常类：`VisionFrameworkError`
+- ✅ 专项异常类：
+  - `DetectorInitializationError`, `DetectorInferenceError`
+  - `TrackerInitializationError`, `TrackerUpdateError`
+  - `ConfigurationError`, `ModelNotFoundError`, `ModelLoadError`
+  - `DeviceError`, `DependencyError`, `DataFormatError`, `ProcessingError`
+- ✅ 所有异常可在主包中导入
+
+#### 2. 模型管理器
+- ✅ 创建 `visionframework/models/model_manager.py`
+- ✅ `ModelManager` 类用于模型缓存、下载和版本管理
+- ✅ 全局 `get_model_manager()` 函数
+- ✅ 模型注册表和源管理
+
+#### 3. 特征提取器重构
+- ✅ 创建 `visionframework/core/processors/` 目录
+- ✅ `FeatureExtractor` 基类定义统一接口
+- ✅ 迁移模块：
+  - `CLIPExtractor` → `core/processors/clip_extractor.py`
+  - `ReIDExtractor` → `core/processors/reid_extractor.py` 
+  - `PoseEstimator` → `core/processors/pose_estimator.py`
+- ✅ 统一的特征提取接口
+
+#### 4. 导入更新
+- ✅ `visionframework/__init__.py` 更新至 v0.2.8
+- ✅ 新增异常和模型管理器导出
+- ✅ 保持向后兼容性
+
 ## v0.2.7 - CLIP 集成、性能优化和评估工具
 
 ### 新功能

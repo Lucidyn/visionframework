@@ -2,7 +2,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.5-orange.svg)](https://github.com/visionframework/visionframework)
+[![Version](https://img.shields.io/badge/version-0.2.8-orange.svg)](https://github.com/visionframework/visionframework)
 
 一个功能完整的计算机视觉框架，包含目标检测、目标跟踪等功能，可以轻松集成到您的项目中。
 

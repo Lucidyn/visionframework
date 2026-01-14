@@ -3,51 +3,74 @@
 ```
 visionframework/
 ├── visionframework/          # 主包目录
-│   ├── __init__.py          # 包初始化文件
+│   ├── __init__.py          # 包初始化文件（导出所有公共 API）
+│   ├── exceptions.py        # 统一异常类定义
 │   ├── core/                # 核心功能模块
 │   │   ├── __init__.py
 │   │   ├── base.py          # 基础模块类
-    │   │   ├── reid.py          # ReID特征提取
-    │   │   ├── detector.py      # 统一检测器接口
-    │   │   ├── tracker.py       # 目标跟踪器
+│   │   ├── detector.py      # 统一检测器接口
+│   │   ├── tracker.py       # 目标跟踪器
 │   │   ├── pipeline.py      # 完整管道
-│   │   ├── roi_detector.py  # ROI区域检测
+│   │   ├── roi_detector.py  # ROI 区域检测
 │   │   ├── counter.py       # 计数功能
-│   │   ├── pose_estimator.py # 姿态估计
+│   │   ├── processors/      # 特征提取器模块
+│   │   │   ├── __init__.py
+│   │   │   ├── feature_extractor.py   # 特征提取器基类
+│   │   │   ├── clip_extractor.py      # CLIP 特征提取
+│   │   │   ├── reid_extractor.py      # ReID 特征提取
+│   │   │   └── pose_estimator.py      # 姿态估计
 │   │   ├── detectors/       # 检测器实现
 │   │   │   ├── __init__.py
-│   │   │   ├── base_detector.py  # 检测器基类
-│   │   │   ├── yolo_detector.py  # YOLO 检测器
-│   │   │   ├── detr_detector.py  # DETR 检测器
-│   │   │   └── rfdetr_detector.py # RF-DETR 检测器
-│   │   └── trackers/         # 跟踪器实现
+│   │   │   ├── base_detector.py       # 检测器基类
+│   │   │   ├── yolo_detector.py       # YOLO 检测器
+│   │   │   ├── detr_detector.py       # DETR 检测器
+│   │   │   └── rfdetr_detector.py     # RF-DETR 检测器
+│   │   └── trackers/        # 跟踪器实现
 │   │       ├── __init__.py
-│   │       ├── base_tracker.py   # 跟踪器基类
-    │   │       ├── iou_tracker.py    # IoU 跟踪器
-    │   │       ├── byte_tracker.py   # ByteTrack 跟踪器
-    │   │       └── reid_tracker.py   # ReID 跟踪器
-    │   ├── data/                # 数据结构模块
+│   │       ├── base_tracker.py        # 跟踪器基类
+│   │       ├── iou_tracker.py         # IoU 跟踪器
+│   │       ├── byte_tracker.py        # ByteTrack 跟踪器
+│   │       └── reid_tracker.py        # ReID 跟踪器
+│   ├── data/                # 数据结构模块
 │   │   ├── __init__.py
 │   │   ├── detection.py     # Detection 数据结构
 │   │   ├── track.py         # Track 和 STrack 数据结构
 │   │   ├── pose.py          # Pose 和 KeyPoint 数据结构
 │   │   └── roi.py           # ROI 数据结构
+│   ├── models/              # 模型管理模块
+│   │   └── __init__.py      # ModelManager 类和全局实例
 │   └── utils/               # 工具模块
 │       ├── __init__.py
 │       ├── config.py        # 配置管理
+│       ├── logger.py        # 日志工具
+│       ├── image_utils.py   # 图像处理工具
+│       ├── export.py        # 结果导出
+│       ├── performance.py   # 性能分析
+│       ├── trajectory_analyzer.py # 轨迹分析
+│       ├── video_utils.py   # 视频处理工具
 │       ├── visualization/   # 可视化工具模块
-│       ├── image_utils.py    # 图像处理工具
-│       ├── export.py         # 结果导出
-│       ├── performance.py    # 性能分析
-│       └── video_utils.py    # 视频处理工具
+│       │   ├── __init__.py
+│       │   ├── base_visualizer.py    # 可视化器基类
+│       │   ├── detection_visualizer.py
+│       │   ├── track_visualizer.py
+│       │   ├── pose_visualizer.py
+│       │   └── unified_visualizer.py
+│       └── evaluation/      # 评估工具
+│           ├── __init__.py
+│           ├── detection_evaluator.py
+│           └── tracking_evaluator.py
 │
 ├── examples/                # 示例代码目录
-│   ├── basic_usage.py       # 基本使用示例（详细注释）
-│   ├── video_tracking.py    # 视频跟踪示例（详细注释）
-│   ├── config_example.py    # 使用配置文件示例（推荐）
-│   ├── advanced_features.py # 高级功能示例（详细注释）
+│   ├── basic_usage.py       # 基本使用示例
+│   ├── video_tracking.py    # 视频跟踪示例
+│   ├── config_example.py    # 配置文件示例
+│   ├── advanced_features.py # 高级功能示例
+│   ├── batch_processing.py  # 批处理示例
 │   ├── rfdetr_example.py    # RF-DETR 检测器示例
 │   ├── rfdetr_tracking.py   # RF-DETR 检测 + 跟踪示例
+│   ├── yolo_pose_example.py # YOLO 姿态估计示例
+│   ├── clip_example.py      # CLIP 零样本分类示例
+│   └── tracking_evaluation_example.py # 跟踪评估示例
 │   ├── yolo_pose_example.py # YOLO Pose 姿态估计示例
 │   └── batch_processing.py  # 批量图像处理示例
 │

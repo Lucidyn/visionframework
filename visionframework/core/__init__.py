@@ -8,8 +8,9 @@ from .tracker import Tracker
 from .pipeline import VisionPipeline
 from .roi_detector import ROIDetector
 from .counter import Counter
-from .pose_estimator import PoseEstimator
-from .clip import CLIPExtractor
+
+# Feature processors
+from .processors import PoseEstimator, CLIPExtractor, ReIDExtractor, FeatureExtractor
 
 # Data structures
 from ..data import Detection, Track, STrack, Pose, KeyPoint, ROI
@@ -27,8 +28,11 @@ __all__ = [
     "VisionPipeline",
     "ROIDetector",
     "Counter",
+    # Feature processors
+    "FeatureExtractor",
     "PoseEstimator",
     "CLIPExtractor",
+    "ReIDExtractor",
     # Data structures
     "Detection",
     "Track",

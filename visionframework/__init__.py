@@ -5,7 +5,7 @@ Vision Framework - A comprehensive framework for computer vision tasks
 # Core modules
 from .core import (
     Detector, Tracker, VisionPipeline,
-    ROIDetector, Counter, PoseEstimator, CLIPExtractor
+    ROIDetector, Counter, PoseEstimator, CLIPExtractor, ReIDExtractor
 )
 
 # Data structures
@@ -19,6 +19,25 @@ from .core.detectors import YOLODetector, DETRDetector, RFDETRDetector
 # Tracker implementations
 from .core.trackers import IOUTracker, ByteTracker
 
+# Exceptions
+from .exceptions import (
+    VisionFrameworkError,
+    DetectorInitializationError,
+    DetectorInferenceError,
+    TrackerInitializationError,
+    TrackerUpdateError,
+    ConfigurationError,
+    ModelNotFoundError,
+    ModelLoadError,
+    DeviceError,
+    DependencyError,
+    DataFormatError,
+    ProcessingError
+)
+
+# Model management
+from .models import ModelManager, get_model_manager
+
 # Utilities
 from .utils import (
     Visualizer, Config, ImageUtils,
@@ -27,7 +46,7 @@ from .utils import (
     TrajectoryAnalyzer, DetectionEvaluator, TrackingEvaluator
 )
 
-__version__ = "0.2.5"
+__version__ = "0.2.7"
 __all__ = [
     # Core
     "Detector",
@@ -37,6 +56,7 @@ __all__ = [
     "Counter",
     "PoseEstimator",
     "CLIPExtractor",
+    "ReIDExtractor",
     # Data structures
     "Detection",
     "Track",
@@ -50,6 +70,22 @@ __all__ = [
     "RFDETRDetector",
     "IOUTracker",
     "ByteTracker",
+    # Exceptions
+    "VisionFrameworkError",
+    "DetectorInitializationError",
+    "DetectorInferenceError",
+    "TrackerInitializationError",
+    "TrackerUpdateError",
+    "ConfigurationError",
+    "ModelNotFoundError",
+    "ModelLoadError",
+    "DeviceError",
+    "DependencyError",
+    "DataFormatError",
+    "ProcessingError",
+    # Model management
+    "ModelManager",
+    "get_model_manager",
     # Utilities
     "Visualizer",
     "Config",
@@ -64,3 +100,4 @@ __all__ = [
     "DetectionEvaluator",
     "TrackingEvaluator",
 ]
+
