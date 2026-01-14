@@ -36,13 +36,31 @@ setup(
         "ultralytics>=8.0.0",
         "scipy>=1.10.0",
         "Pillow>=10.0.0",
-        "transformers>=4.30.0",
-        "rfdetr>=0.1.0",
-        "supervision>=0.18.0",
+        "pyyaml>=6.0",
     ],
     python_requires=">=3.8",
     extras_require={
+        "clip": [
+            "transformers>=4.30.0",
+        ],
+        "detr": [
+            "transformers>=4.30.0",
+        ],
+        "rfdetr": [
+            "rfdetr>=0.1.0",
+            "supervision>=0.18.0",
+        ],
         "dev": [
+            "pytest>=7.0.0",
+            "pytest-cov>=4.0.0",
+            "black>=23.0.0",
+            "flake8>=6.0.0",
+            "mypy>=1.0.0",
+        ],
+        "all": [
+            "transformers>=4.30.0",
+            "rfdetr>=0.1.0",
+            "supervision>=0.18.0",
             "pytest>=7.0.0",
             "pytest-cov>=4.0.0",
             "black>=23.0.0",

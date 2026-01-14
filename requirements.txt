@@ -5,9 +5,22 @@ torchvision>=0.15.0
 ultralytics>=8.0.0
 scipy>=1.10.0
 Pillow>=10.0.0
+pyyaml>=6.0
+
 # Optional dependencies (install as needed):
-# transformers>=4.30.0  # For DETR detector
-# rfdetr>=0.1.0  # For RF-DETR detector
-# supervision>=0.18.0  # For RF-DETR detector
-# pyyaml>=6.0  # For YAML config file support
+# For CLIP or DETR support:
+# transformers>=4.30.0
+
+# For RF-DETR support:
+# rfdetr>=0.1.0
+# supervision>=0.18.0
+
+# Install all optional dependencies:
+# pip install -e ".[all]"
+# 
+# Or install specific feature groups:
+# pip install -e ".[clip]"       # For CLIP support
+# pip install -e ".[detr]"       # For DETR support
+# pip install -e ".[rfdetr]"     # For RF-DETR support
+# pip install -e ".[dev]"        # For development (testing, linting)
 

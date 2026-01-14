@@ -9,6 +9,7 @@ from .pipeline import VisionPipeline
 from .roi_detector import ROIDetector
 from .counter import Counter
 from .pose_estimator import PoseEstimator
+from .clip import CLIPExtractor
 
 # Data structures
 from ..data import Detection, Track, STrack, Pose, KeyPoint, ROI
@@ -27,6 +28,7 @@ __all__ = [
     "ROIDetector",
     "Counter",
     "PoseEstimator",
+    "CLIPExtractor",
     # Data structures
     "Detection",
     "Track",

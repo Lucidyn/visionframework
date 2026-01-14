@@ -5,7 +5,7 @@ Vision Framework - A comprehensive framework for computer vision tasks
 # Core modules
 from .core import (
     Detector, Tracker, VisionPipeline,
-    ROIDetector, Counter, PoseEstimator
+    ROIDetector, Counter, PoseEstimator, CLIPExtractor
 )
 
 # Data structures
@@ -36,6 +36,7 @@ __all__ = [
     "ROIDetector",
     "Counter",
     "PoseEstimator",
+    "CLIPExtractor",
     # Data structures
     "Detection",
     "Track",
