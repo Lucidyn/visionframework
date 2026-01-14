@@ -1,4 +1,7 @@
 """Example showing CLIP usage with the framework's CLIP wrapper."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from PIL import Image
 from visionframework.core.clip import CLIPExtractor
 
