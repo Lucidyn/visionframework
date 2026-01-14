@@ -4,25 +4,37 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.2.8-orange.svg)](https://github.com/visionframework/visionframework)
 
-一个功能完整的计算机视觉框架，包含目标检测、目标跟踪等功能，可以轻松集成到您的项目中。
+一个功能完整、易于使用的计算机视觉框架，提供检测、跟踪、分割、姿态估计等多种 CV 任务支持。
 
-## 功能特性
+## ✨ 主要功能
 
-- **目标检测**: 支持 YOLO、DETR 和 RF-DETR 三种检测模型
-- **实例分割**: 支持 YOLO 实例分割，可获取对象掩码
-- **目标跟踪**: 支持基础跟踪、ByteTrack 高级跟踪和 ReID 特征跟踪
-- **姿态估计**: 人体/物体姿态检测，支持关键点检测和骨架绘制
-- **轨迹分析**: 速度、方向、距离等轨迹分析工具
-- **评估工具**: 检测评估（mAP）和跟踪评估（MOTA）工具
-- **可视化工具**: 丰富的可视化功能，支持检测框、跟踪轨迹、姿态骨架等
-- **区域检测**: ROI/Zone 检测，支持矩形、多边形、圆形区域
-- **计数功能**: 对象进入/离开/停留计数
-- **结果导出**: 支持 JSON、CSV、COCO 格式导出
-- **性能分析**: FPS 统计、处理时间分析
-- **视频处理**: 便捷的视频读取、写入和处理工具
-- **模块化设计**: 各模块独立，可灵活组合使用
+- 🎯 **目标检测**: YOLO、DETR、RF-DETR 多种模型
+- 📍 **实例分割**: YOLO 分割，支持掩码输出
+- 🔍 **目标跟踪**: IOU、ByteTrack、ReID 三种跟踪方案
+- 🧘 **姿态估计**: YOLO Pose，COCO 17 关键点检测
+- 🛣️ **轨迹分析**: 速度、方向、距离计算
+- 📊 **评估工具**: 检测评估（mAP）、跟踪评估（MOTA/MOTP/IDF1）
+- 🎨 **可视化**: 检测框、轨迹、骨架、热力图等
+- 📍 **区域检测**: ROI/Zone 检测，矩形/多边形/圆形支持
+- 🔢 **计数功能**: 进入/离开/停留计数
+- 📤 **结果导出**: JSON、CSV、COCO 格式
+- ⚡ **性能工具**: FPS 统计、处理时间分析
+- 🎬 **视频处理**: 视频读取、写入、处理工具
+- 🧩 **模块化**: 独立模块，灵活组合
 
-## 安装
+## 📚 文档
+
+| 文档 | 说明 |
+|------|------|
+| [快速开始](docs/QUICKSTART.md) | 新手入门指南 |
+| [功能特性](docs/FEATURES.md) | 完整功能列表 |
+| [项目结构](docs/PROJECT_STRUCTURE.md) | 代码组织说明 |
+| [迁移指南](docs/MIGRATION_GUIDE.md) | v0.2.7 升级指南 |
+| [架构设计](docs/ARCHITECTURE_V0.2.8.md) | v0.2.8 架构说明 |
+| [版本历史](docs/CHANGELOG.md) | 更新日志 |
+| [快速参考](QUICK_REFERENCE.md) | API 快速查询 |
+
+## 📦 安装
 
 ### 基础安装
 
@@ -52,13 +64,7 @@ pip install -e ".[dev]"
 pip install -e ".[all]"
 ```
 
-或从 requirements.txt 安装：
-
-```bash
-pip install -r requirements.txt
-```
-
-## 快速开始
+## 🚀 快速开始
 
 ### 基本使用 - 仅检测
 
@@ -387,14 +393,24 @@ pipeline_config = Config.get_default_pipeline_config()
 - `advanced_features.py`: 高级功能示例（ROI、计数、性能监控等，详细注释）
 - `batch_processing.py`: 批量图像处理示例
 
-## 文档
+## 📚 示例代码
 
-- [快速开始指南](docs/QUICKSTART.md)
-- [高级功能文档](docs/FEATURES.md)
-- [项目结构说明](docs/PROJECT_STRUCTURE.md)
-- [更新日志](docs/CHANGELOG.md)
+查看 `examples/` 目录获取完整示例代码：
 
-## 依赖项
+| 示例 | 说明 |
+|------|------|
+| `basic_usage.py` | 基本使用示例 |
+| `config_example.py` | 配置文件用法 ⭐ 推荐 |
+| `video_tracking.py` | 视频跟踪示例 |
+| `advanced_features.py` | 高级功能（ROI、计数等） |
+| `batch_processing.py` | 批量处理示例 |
+| `yolo_pose_example.py` | 姿态估计示例 |
+| `rfdetr_example.py` | RF-DETR 检测器示例 |
+| `rfdetr_tracking.py` | RF-DETR 跟踪示例 |
+| `clip_example.py` | CLIP 零样本分类示例 |
+| `tracking_evaluation_example.py` | 跟踪评估示例 |
+
+## ⚙️ 依赖项
 
 ### 必需依赖
 - opencv-python >= 4.8.0
@@ -406,9 +422,38 @@ pipeline_config = Config.get_default_pipeline_config()
 - Pillow >= 10.0.0
 
 ### 可选依赖
-- transformers >= 4.30.0 (用于 DETR 模型)
+- transformers >= 4.30.0 (用于 DETR/CLIP 模型)
 - rfdetr >= 0.1.0 (用于 RF-DETR 模型)
 - supervision >= 0.18.0 (用于 RF-DETR 模型)
+
+## 📄 许可证
+
+MIT License - 详见 [LICENSE](LICENSE) 文件
+
+## 🙋 常见问题
+
+**Q: 如何选择检测器？**  
+A: YOLO 最快，DETR 精度最高，RF-DETR 平衡两者。根据需求选择。
+
+**Q: 支持 GPU 加速吗？**  
+A: 是的，所有模块都支持 CUDA。设置 `device: "cuda"` 即可。
+
+**Q: 如何使用自定义模型？**  
+A: 通过 `model_path` 参数指定模型文件路径即可。
+
+**Q: 能扩展新功能吗？**  
+A: 可以，所有模块都是可扩展的，支持继承和定制。
+
+## 📞 支持
+
+- 📖 阅读 [文档](docs/)
+- 🔍 查看 [示例代码](examples/)
+- 🧪 运行 [测试](tests/)
+- 💬 提出 [问题/建议](https://github.com/visionframework/visionframework/issues)
+
+---
+
+**Vision Framework v0.2.8** | 🎉 架构优化版本 | 🚀 生产就绪
 - pyyaml >= 6.0 (用于 YAML 配置文件支持)
 
 ## 许可证

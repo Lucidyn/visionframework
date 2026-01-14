@@ -2,16 +2,15 @@
 
 ## 📚 文档导航
 
-### 主要文档
-| 文档 | 用途 | 位置 |
-|------|------|------|
-| **COMPLETION_REPORT.md** | 项目完成报告 | 项目根目录 |
-| **ARCHITECTURE_RESTRUCTURING.md** | 架构改进总结 | 项目根目录 |
-| **FILE_MANIFEST.md** | 文件清单 | 项目根目录 |
-| **MIGRATION_GUIDE.md** | 导入迁移指南 | `docs/` |
-| **ARCHITECTURE_V0.2.8.md** | 详细架构说明 | `docs/` |
-| **CHANGELOG.md** | 版本变更历史 | `docs/` |
-| **PROJECT_STRUCTURE.md** | 项目结构 | `docs/` |
+| 文档 | 用途 |
+|------|------|
+| [README.md](README.md) | 项目概览 |
+| [docs/QUICKSTART.md](docs/QUICKSTART.md) | 快速开始指南 |
+| [docs/MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) | 迁移指南 |
+| [docs/ARCHITECTURE_V0.2.8.md](docs/ARCHITECTURE_V0.2.8.md) | 架构设计 |
+| [docs/FEATURES.md](docs/FEATURES.md) | 功能特性 |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 版本历史 |
+| [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) | 项目结构 |
 
 ## 🚀 快速开始
 
@@ -214,9 +213,7 @@ print(visionframework.__version__)  # "0.2.8"
 
 ## 🔗 相关链接
 
-- [完成报告](COMPLETION_REPORT.md)
-- [架构说明](ARCHITECTURE_RESTRUCTURING.md)
-- [文件清单](FILE_MANIFEST.md)
+- [快速开始](docs/QUICKSTART.md)
 - [迁移指南](docs/MIGRATION_GUIDE.md)
 - [项目结构](docs/PROJECT_STRUCTURE.md)
 - [变更日志](docs/CHANGELOG.md)
