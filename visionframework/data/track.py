@@ -32,7 +32,10 @@ class Track:
         self.confidence = confidence
         self.time_since_update = 0
         self.history.append(bbox)
-        if len(self.history) > 30:  # Keep last 30 positions
+        # Lazy import to avoid circular imports
+        from ..utils.config import Config
+        max_len = Config.get_default_tracker_config().get("track_history_length", 30)
+        if len(self.history) > max_len:
             self.history.pop(0)
     
     def predict(self):
@@ -97,7 +100,10 @@ class STrack:
         self.score = score
         self.confidence = score
         self.history.append(bbox)
-        if len(self.history) > 30:
+        # Lazy import to avoid circular imports
+        from ..utils.config import Config
+        max_len = Config.get_default_tracker_config().get("track_history_length", 30)
+        if len(self.history) > max_len:
             self.history.pop(0)
     
     def activate(self, frame_id: int):

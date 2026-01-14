@@ -150,77 +150,102 @@ class RFDETRDetector(BaseDetector):
                 return []
         
         detections: List[Detection] = []
-        
+
         try:
             from PIL import Image
-            import supervision as sv
-            
-            # Convert BGR to RGB (OpenCV to PIL format)
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            pil_image = Image.fromarray(image_rgb)
-            
-            # Run RF-DETR inference
-            # model.predict() returns a supervision.Detections object
-            supervision_detections = self.model.predict(pil_image, threshold=self.conf_threshold)
-            
-            # Convert supervision Detections to our Detection objects
-            # supervision.Detections has attributes: xyxy, confidence, class_id
-            if isinstance(supervision_detections, sv.Detections) and len(supervision_detections.xyxy) > 0:
-                boxes = supervision_detections.xyxy
-                
-                # Extract confidences (handle both array and scalar)
-                if hasattr(supervision_detections, 'confidence') and supervision_detections.confidence is not None:
-                    confidences = supervision_detections.confidence
-                    if hasattr(confidences, '__len__') and not isinstance(confidences, str):
-                        confidences = [float(c) for c in confidences]
-                    else:
-                        confidences = [float(confidences)] * len(boxes)
+
+            # Support batch or single image
+            is_batch = isinstance(image, (list, tuple)) or (isinstance(image, np.ndarray) and image.ndim == 4)
+
+            images = []
+            if is_batch:
+                for img in image:
+                    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    images.append(Image.fromarray(img_rgb))
+            else:
+                img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                images.append(Image.fromarray(img_rgb))
+
+            # Run inference for each image (model.predict may not support batch)
+            try:
+                import torch
+                if self.config.get('use_fp16', False) and self.device == 'cuda':
+                    amp_ctx = torch.cuda.amp.autocast()
                 else:
-                    confidences = [1.0] * len(boxes)
-                
-                # Extract class IDs
-                if hasattr(supervision_detections, 'class_id') and supervision_detections.class_id is not None:
-                    class_ids = supervision_detections.class_id
-                    if hasattr(class_ids, '__len__') and not isinstance(class_ids, str):
-                        class_ids = [int(cid) for cid in class_ids]
+                    amp_ctx = torch.no_grad()
+            except Exception:
+                amp_ctx = None
+
+            results_list = []
+            if amp_ctx is not None:
+                with amp_ctx:
+                    for pil_image in images:
+                        res = self.model.predict(pil_image, threshold=self.conf_threshold)
+                        results_list.append(res)
+            else:
+                for pil_image in images:
+                    res = self.model.predict(pil_image, threshold=self.conf_threshold)
+                    results_list.append(res)
+
+            # Convert supervision-like detections to our Detection objects
+            for supervision_detections in results_list:
+                # Accept any object with attribute 'xyxy'
+                if hasattr(supervision_detections, 'xyxy') and len(supervision_detections.xyxy) > 0:
+                    boxes = supervision_detections.xyxy
+
+                    # Extract confidences
+                    if hasattr(supervision_detections, 'confidence') and supervision_detections.confidence is not None:
+                        confidences = supervision_detections.confidence
+                        if hasattr(confidences, '__len__') and not isinstance(confidences, str):
+                            confidences = [float(c) for c in confidences]
+                        else:
+                            confidences = [float(confidences)] * len(boxes)
                     else:
-                        class_ids = [int(class_ids)] * len(boxes)
-                else:
-                    class_ids = [0] * len(boxes)
-                
-                # Extract class names
-                class_names_list = None
-                if hasattr(supervision_detections, 'data') and supervision_detections.data:
-                    if isinstance(supervision_detections.data, dict):
-                        class_names_list = supervision_detections.data.get('class_name', None)
-                    elif hasattr(supervision_detections.data, 'class_name'):
-                        class_names_list = supervision_detections.data.class_name
-                
-                # Create Detection objects
-                for i in range(len(boxes)):
-                    box = boxes[i]
-                    conf = confidences[i] if i < len(confidences) else 1.0
-                    cls_id = class_ids[i] if i < len(class_ids) else 0
-                    
-                    # Get class name
-                    cls_name: str
-                    if class_names_list and i < len(class_names_list):
-                        cls_name = str(class_names_list[i])
-                    elif hasattr(self.model, 'class_names') and isinstance(self.model.class_names, (list, tuple)) and cls_id < len(self.model.class_names):
-                        cls_name = str(self.model.class_names[cls_id])
+                        confidences = [1.0] * len(boxes)
+
+                    # Extract class IDs
+                    if hasattr(supervision_detections, 'class_id') and supervision_detections.class_id is not None:
+                        class_ids = supervision_detections.class_id
+                        if hasattr(class_ids, '__len__') and not isinstance(class_ids, str):
+                            class_ids = [int(cid) for cid in class_ids]
+                        else:
+                            class_ids = [int(class_ids)] * len(boxes)
                     else:
-                        cls_name = f"class_{cls_id}"
-                    
-                    detection = Detection(
-                        bbox=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
-                        confidence=conf,
-                        class_id=cls_id,
-                        class_name=cls_name
-                    )
-                    detections.append(detection)
-            
+                        class_ids = [0] * len(boxes)
+
+                    # Extract class names
+                    class_names_list = None
+                    if hasattr(supervision_detections, 'data') and supervision_detections.data:
+                        if isinstance(supervision_detections.data, dict):
+                            class_names_list = supervision_detections.data.get('class_name', None)
+                        elif hasattr(supervision_detections.data, 'class_name'):
+                            class_names_list = supervision_detections.data.class_name
+
+                    # Create Detection objects
+                    for i in range(len(boxes)):
+                        box = boxes[i]
+                        conf = confidences[i] if i < len(confidences) else 1.0
+                        cls_id = class_ids[i] if i < len(class_ids) else 0
+
+                        # Get class name
+                        cls_name: str
+                        if class_names_list and i < len(class_names_list):
+                            cls_name = str(class_names_list[i])
+                        elif hasattr(self.model, 'class_names') and isinstance(self.model.class_names, (list, tuple)) and cls_id < len(self.model.class_names):
+                            cls_name = str(self.model.class_names[cls_id])
+                        else:
+                            cls_name = f"class_{cls_id}"
+
+                        detection = Detection(
+                            bbox=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
+                            confidence=conf,
+                            class_id=cls_id,
+                            class_name=cls_name
+                        )
+                        detections.append(detection)
+
             return detections
-            
+
         except RuntimeError as e:
             logger.error(f"Runtime error during RF-DETR detection: {e}", exc_info=True)
             return []

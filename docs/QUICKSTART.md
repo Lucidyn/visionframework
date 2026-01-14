@@ -151,6 +151,29 @@ cv2.imwrite("output_seg.jpg", result)
 - `detr_model_name`: DETR 模型名称（默认: "facebook/detr-resnet-50"）
 - `rfdetr_model_name`: RF-DETR 模型名称（默认: None，使用默认模型）
 
+性能选项（可通过 `performance` 子配置控制）:
+
+- `batch_inference` (bool): 是否启用批量推理接口（对于支持的后端）；当为 True 时，`Detector.detect()` 可接受图像列表并返回按图像分组的检测结果。默认: False。
+- `use_fp16` (bool): 在 GPU 上启用半精度推理（FP16），需在 `device` 设置为 `cuda` 时使用以获得加速。默认: False。
+
+示例（在配置中启用性能选项）:
+
+```python
+detector_cfg = {
+    "model_type": "detr",
+    "device": "cuda",
+    "performance": {"batch_inference": True, "use_fp16": True}
+}
+detector = Detector(detector_cfg)
+detector.initialize()
+
+# 单张图像
+detections = detector.detect(image)
+
+# 批量图像（返回按图像分组的检测结果）
+batch_results = detector.detect([img1, img2])
+```
+
 ### 使用不同的检测模型
 
 #### YOLO（默认）

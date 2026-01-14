@@ -10,6 +10,7 @@ from ...data.track import STrack
 from ...data.detection import Detection
 from ..reid import ReIDExtractor
 from ...utils.logger import get_logger
+from ...utils.config import Config
 
 logger = get_logger(__name__)
 
@@ -43,6 +44,13 @@ class ReIDTracker(BaseTracker):
         self.iou_threshold = self.config.get("iou_threshold", 0.3)
         self.reid_weight = self.config.get("reid_weight", 0.7)
         self.reid_config = self.config.get("reid_config", {})
+        # Additional configurable parameters
+        tracker_defaults = Config.get_default_tracker_config()
+        self.track_history_length = int(self.config.get("track_history_length", tracker_defaults.get("track_history_length", 30)))
+        self.new_track_activation_conf = float(self.config.get("new_track_activation_conf", tracker_defaults.get("new_track_activation_conf", 0.6)))
+        self.embedding_dim = int(self.config.get("embedding_dim", tracker_defaults.get("embedding_dim", 2048)))
+        self.matching_strategy = str(self.config.get("matching_strategy", tracker_defaults.get("matching_strategy", "hungarian")))
+        self.matching_cost_threshold = float(self.config.get("matching_cost_threshold", tracker_defaults.get("matching_cost_threshold", 0.7)))
         
         self.reid_extractor = ReIDExtractor(self.reid_config)
         self.tracked_tracks: List[STrack] = []
@@ -147,7 +155,7 @@ class ReIDTracker(BaseTracker):
         self.frame_id += 1
         
         # 1. Extract ReID features
-        embeddings = np.empty((0, 2048))
+        embeddings = np.empty((0, self.embedding_dim))
         if image is not None and len(detections) > 0:
             bboxes = [d.bbox for d in detections]
             embeddings = self.reid_extractor.extract(image, bboxes)
@@ -168,28 +176,28 @@ class ReIDTracker(BaseTracker):
         if len(candidate_tracks) > 0 and len(detections) > 0:
             cost_matrix = self._get_cost_matrix(candidate_tracks, detections, embeddings)
             
-            if SCIPY_AVAILABLE:
+            row_indices, col_indices = [], []
+            if self.matching_strategy == "hungarian" and SCIPY_AVAILABLE:
                 row_indices, col_indices = linear_sum_assignment(cost_matrix)
             else:
-                # Fallback greedy matching
-                row_indices, col_indices = [], []
-                # Copy matrix to modify it
+                # Greedy fallback matching: repeatedly pick minimal cost below threshold
                 cost_copy = cost_matrix.copy()
                 num_rows, num_cols = cost_copy.shape
-                iter_limit = min(num_rows, num_cols)
-                
-                for _ in range(iter_limit):
-                    # Find min
-                    min_idx = np.argmin(cost_copy)
-                    r, c = np.unravel_index(min_idx, (num_rows, num_cols))
-                    
-                    if cost_copy[r, c] == np.inf:
+                assigned_rows = set()
+                assigned_cols = set()
+
+                while True:
+                    if cost_copy.size == 0:
                         break
-                        
+                    min_idx = np.argmin(cost_copy)
+                    r, c = np.unravel_index(min_idx, cost_copy.shape)
+                    min_cost = cost_copy[r, c]
+                    if not np.isfinite(min_cost) or min_cost > self.matching_cost_threshold:
+                        break
+                    # Map r,c back to original indices
                     row_indices.append(r)
                     col_indices.append(c)
-                    
-                    # Mask row and col
+                    # Set row and col to inf in cost_copy to exclude
                     cost_copy[r, :] = np.inf
                     cost_copy[:, c] = np.inf
                 
@@ -198,7 +206,7 @@ class ReIDTracker(BaseTracker):
             unmatched_detections = set(range(len(detections)))
             
             for row, col in zip(row_indices, col_indices):
-                if cost_matrix[row, col] < 1.0: # Threshold?
+                if cost_matrix[row, col] <= self.matching_cost_threshold:
                     matches.append((row, col))
                     unmatched_tracks.discard(row)
                     unmatched_detections.discard(col)
@@ -238,7 +246,7 @@ class ReIDTracker(BaseTracker):
                 # For simplicity, activate immediately if conf is high enough?
                 # Standard logic: New -> (hits) -> Activated
                 # Here simplified:
-                if det.confidence > 0.6: # Configurable
+                if det.confidence > self.new_track_activation_conf: # Configurable
                     new_track.is_activated = True
                     new_track.state = "Tracked"
                     self.tracked_tracks.append(new_track)
@@ -262,7 +270,7 @@ class ReIDTracker(BaseTracker):
                 new_track.embedding = emb
                 new_track.frame_id = self.frame_id
                 new_track.start_frame = self.frame_id
-                if det.confidence > 0.6:
+                if det.confidence > self.new_track_activation_conf:
                     new_track.is_activated = True
                     new_track.state = "Tracked"
                     self.tracked_tracks.append(new_track)

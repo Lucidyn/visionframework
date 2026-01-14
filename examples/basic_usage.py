@@ -194,6 +194,13 @@ def example_pipeline():
             "conf_threshold": 0.3,          # 置信度阈值（30%）
             "device": "cpu"                  # 设备类型：cpu/cuda/mps
         },
+
+        # 性能选项示例：可选开启批量推理与 FP16（在 cuda 下）
+        # 将性能参数放在 pipeline 顶层，或直接放到 detector_config 的 "performance" 字段
+        "performance": {
+            "batch_inference": False,
+            "use_fp16": False
+        },
         
         # 跟踪器配置
         "tracker_config": {

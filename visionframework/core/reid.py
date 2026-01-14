@@ -10,6 +10,7 @@ import torchvision.transforms as T
 from torchvision.models import resnet50, ResNet50_Weights
 from .base import BaseModule
 from ..utils.logger import get_logger
+from ..utils.config import Config
 
 logger = get_logger(__name__)
 
@@ -91,12 +92,15 @@ class ReIDExtractor(BaseModule):
         Returns:
             np.ndarray: Feature matrix of shape (N, 2048) where N is number of boxes
         """
+        defaults = Config.get_default_tracker_config()
+        emb_dim = int(self.config.get("embedding_dim", defaults.get("embedding_dim", 2048)))
+
         if not self.is_initialized:
             if not self.initialize():
-                return np.empty((0, 2048))
+                return np.empty((0, emb_dim))
                 
         if not bboxes:
-            return np.empty((0, 2048))
+            return np.empty((0, emb_dim))
             
         crops = []
         h, w = image.shape[:2]
@@ -119,7 +123,7 @@ class ReIDExtractor(BaseModule):
             crops.append(self.transform(crop))
             
         if not crops:
-            return np.empty((0, 2048))
+            return np.empty((0, emb_dim))
             
         batch = torch.stack(crops).to(self.device)
         

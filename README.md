@@ -179,6 +179,28 @@ detector = Detector({
 - `enable_segmentation`: 是否开启实例分割 (默认: False)
 - `device`: 设备 ("cpu", "cuda", "mps") (默认: "cpu")
 
+性能选项（可通过 `performance` 子配置控制）:
+
+- `batch_inference` (bool): 是否启用批量推理接口（对于支持的后端）；当为 True 时，`Detector.detect()` 可接受图像列表并返回按图像分组的检测结果。默认: False。
+- `use_fp16` (bool): 在 GPU 上启用半精度推理（FP16），需在 `device` 设置为 `cuda` 时使用以获得加速。默认: False。
+
+示例（启用 FP16 和批量推理）:
+
+```python
+detector = Detector({
+    "model_type": "detr",
+    "device": "cuda",
+    "performance": {"batch_inference": True, "use_fp16": True}
+})
+detector.initialize()
+
+# 单张图像
+detections = detector.detect(image)
+
+# 批量图像（返回按图像分组的检测结果）
+batch_results = detector.detect([img1, img2])
+```
+
 ### Tracker (跟踪器)
 
 跟踪器用于跟踪检测到的目标。
