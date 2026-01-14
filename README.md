@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.2.8-orange.svg)](https://github.com/visionframework/visionframework)
 
-一个功能完整、易于使用的计算机视觉框架，提供检测、跟踪、分割、姿态估计等多种 CV 任务支持。
+一个功能完整、易于使用的计算机视觉框架，提供检测、跟踪、分割、姿态估计等多种 CV 任务支持。(100% supported by vibe coding)
 
 ## ✨ 主要功能
 
