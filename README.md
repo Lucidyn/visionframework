@@ -24,16 +24,38 @@
 
 ## 安装
 
-### 安装依赖
+### 基础安装
+
+```bash
+# 最小依赖安装
+pip install -e .
+```
+
+### 可选功能安装
+
+框架支持可选的功能组，可以按需安装：
+
+```bash
+# 安装 CLIP 零样本分类支持
+pip install -e ".[clip]"
+
+# 安装 DETR 检测器支持
+pip install -e ".[detr]"
+
+# 安装 RF-DETR 检测器支持
+pip install -e ".[rfdetr]"
+
+# 安装开发工具（测试、代码检查）
+pip install -e ".[dev]"
+
+# 安装所有功能和开发工具
+pip install -e ".[all]"
+```
+
+或从 requirements.txt 安装：
 
 ```bash
 pip install -r requirements.txt
-```
-
-或使用 setup.py 安装：
-
-```bash
-pip install -e .
 ```
 
 ## 快速开始
@@ -163,6 +185,71 @@ detector = Detector({
     "conf_threshold": 0.5,
     "device": "cuda"  # 推荐使用 GPU
 })
+```
+
+### CLIP 零样本分类
+
+```python
+from visionframework import CLIPExtractor
+from PIL import Image
+
+# 初始化 CLIP 提取器
+clip = CLIPExtractor({
+    "device": "cuda",
+    "use_fp16": True  # 在 GPU 上使用 FP16 加速
+})
+clip.initialize()
+
+# 加载图像
+image = Image.open("image.jpg")
+
+# 零样本分类
+labels = ["a cat", "a dog", "a person"]
+scores = clip.zero_shot_classify(image, labels)
+
+# 输出概率分数
+for label, score in zip(labels, scores):
+    print(f"{label}: {score:.4f}")
+
+# 也可以获取单独的图像或文本嵌入
+image_embedding = clip.encode_image(image)          # shape: (1, 512)
+text_embeddings = clip.encode_text(labels)          # shape: (3, 512)
+
+# 计算图像-文本相似度矩阵
+similarity = clip.image_text_similarity(image, labels)  # shape: (1, 3)
+```
+
+### 跟踪评估工具
+
+```python
+from visionframework import TrackingEvaluator
+
+# 初始化评估器（IoU 阈值 0.5）
+evaluator = TrackingEvaluator(iou_threshold=0.5)
+
+# 准备预测和真值轨迹数据
+# 格式: List[List[{track_id, bbox}]] 其中每个内层列表代表一帧
+pred_tracks = [
+    [{"track_id": 1, "bbox": {"x1": 10, "y1": 10, "x2": 50, "y2": 50}}],
+    [{"track_id": 1, "bbox": {"x1": 15, "y1": 15, "x2": 55, "y2": 55}}]
+]
+gt_tracks = [
+    [{"track_id": 1, "bbox": {"x1": 10, "y1": 10, "x2": 50, "y2": 50}}],
+    [{"track_id": 1, "bbox": {"x1": 15, "y1": 15, "x2": 55, "y2": 55}}]
+]
+
+# 一次性计算所有指标
+results = evaluator.evaluate(pred_tracks, gt_tracks)
+print(f"MOTA: {results['MOTA']:.4f}")  # Multiple Object Tracking Accuracy
+print(f"MOTP: {results['MOTP']:.4f}")  # Multiple Object Tracking Precision (pixels)
+print(f"IDF1: {results['IDF1']:.4f}")  # ID F1 Score
+print(f"Precision: {results['precision']:.4f}")
+print(f"Recall: {results['recall']:.4f}")
+
+# 或分别计算各项指标
+mota_result = evaluator.calculate_mota(pred_tracks, gt_tracks)
+motp_result = evaluator.calculate_motp(pred_tracks, gt_tracks)
+idf1_result = evaluator.calculate_idf1(pred_tracks, gt_tracks)
 ```
 
 ## API 文档

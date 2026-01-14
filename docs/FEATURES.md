@@ -2,7 +2,86 @@
 
 本文档介绍框架的高级功能模块。
 
-## 0. 检测模型支持
+## 0. CLIP 零样本分类
+
+### 什么是 CLIP？
+
+CLIP (Contrastive Language-Image Pre-training) 是 OpenAI 开发的视觉-语言预训练模型，能够进行零样本分类，无需训练新的分类器即可识别任意类别。
+
+### 使用方法
+
+```python
+from visionframework import CLIPExtractor
+from PIL import Image
+
+# 初始化 CLIP 模型
+clip = CLIPExtractor({
+    "device": "cuda",          # 使用 GPU
+    "use_fp16": True,          # 启用 FP16 加速（需要 GPU）
+    "model_name": "openai/clip-vit-base-patch32"  # 或其他 CLIP 模型
+})
+clip.initialize()
+
+# 加载图像
+image = Image.open("cat.jpg")
+
+# 零样本分类
+candidates = ["a cat", "a dog", "a bird"]
+scores = clip.zero_shot_classify(image, candidates)
+
+for label, score in zip(candidates, scores):
+    print(f"{label}: {score:.4f}")
+```
+
+### 高级用法
+
+```python
+# 获取单个图像的嵌入
+image_emb = clip.encode_image(image)  # shape: (1, embedding_dim)
+
+# 获取多个文本的嵌入
+text_embs = clip.encode_text(candidates)  # shape: (num_texts, embedding_dim)
+
+# 计算相似度矩阵
+similarity = clip.image_text_similarity(image, candidates)  # shape: (1, num_texts)
+
+# 批量处理多个图像
+images = [Image.open(f"img_{i}.jpg") for i in range(3)]
+batch_embeddings = clip.encode_image(images)  # shape: (3, embedding_dim)
+```
+
+### 集成到检测流程
+
+```python
+from visionframework import Detector, CLIPExtractor
+
+detector = Detector({"model_path": "yolov8n.pt"})
+detector.initialize()
+
+clip = CLIPExtractor({"device": "cuda"})
+clip.initialize()
+
+# 检测对象
+detections = detector.detect(image)
+
+# 对每个检测到的对象进行 CLIP 分类
+for detection in detections:
+    bbox = detection.bbox
+    x1, y1, x2, y2 = bbox.x1, bbox.y1, bbox.x2, bbox.y2
+    
+    # 裁剪对象区域
+    obj_img = Image.fromarray(image[y1:y2, x1:x2])
+    
+    # CLIP 分类
+    candidates = ["person", "car", "dog", "cat"]
+    scores = clip.zero_shot_classify(obj_img, candidates)
+    
+    # 输出结果
+    best_label = candidates[scores.index(max(scores))]
+    print(f"Detection: {best_label}")
+```
+
+## 1. 检测模型支持
 
 ### YOLO 实例分割
 
@@ -153,7 +232,80 @@ pipeline = VisionPipeline({
 })
 ```
 
-## 1. 结果导出功能 (ResultExporter)
+## 1. 跟踪性能评估 (TrackingEvaluator)
+
+### 功能概述
+
+`TrackingEvaluator` 提供标准的 MOT (Multiple Object Tracking) 评估指标，用于定量评估跟踪算法性能。
+
+### 支持的指标
+
+- **MOTA** (Multiple Object Tracking Accuracy) - 跟踪准确度
+  - 公式：`MOTA = 1 - (FN + FP + ID_switches) / GT_total`
+  - 综合考虑漏检、误检和 ID 切换
+
+- **MOTP** (Multiple Object Tracking Precision) - 跟踪精度
+  - 平均位置误差（像素），仅计算匹配检测的距离
+  - 越小越好
+
+- **IDF1** (ID F1 Score) - ID 保持一致性评分
+  - 公式：`IDF1 = 2*IDTP / (2*IDTP + IDFP + IDFN)`
+  - 评估跟踪 ID 的保持稳定性（1.0 为完美）
+
+### 使用方法
+
+```python
+from visionframework import TrackingEvaluator
+
+# 初始化评估器
+evaluator = TrackingEvaluator(iou_threshold=0.5)
+
+# 准备数据：每一帧的预测和真值轨迹
+# 格式：List[List[{track_id, bbox}]]
+pred_tracks = [
+    # Frame 0
+    [
+        {"track_id": 1, "bbox": {"x1": 10, "y1": 10, "x2": 50, "y2": 50}},
+        {"track_id": 2, "bbox": {"x1": 100, "y1": 100, "x2": 150, "y2": 150}},
+    ],
+    # Frame 1
+    [
+        {"track_id": 1, "bbox": {"x1": 15, "y1": 15, "x2": 55, "y2": 55}},
+        {"track_id": 2, "bbox": {"x1": 105, "y1": 105, "x2": 155, "y2": 155}},
+    ]
+]
+
+gt_tracks = [...]  # 相同格式的真值数据
+
+# 计算所有指标
+results = evaluator.evaluate(pred_tracks, gt_tracks)
+print(f"MOTA: {results['MOTA']:.4f}")
+print(f"MOTP: {results['MOTP']:.4f} pixels")
+print(f"IDF1: {results['IDF1']:.4f}")
+print(f"Precision: {results['precision']:.4f}")
+print(f"Recall: {results['recall']:.4f}")
+
+# 或分别计算各项指标
+mota = evaluator.calculate_mota(pred_tracks, gt_tracks)
+motp = evaluator.calculate_motp(pred_tracks, gt_tracks)
+idf1 = evaluator.calculate_idf1(pred_tracks, gt_tracks)
+```
+
+### 配置参数
+
+- `iou_threshold` (float): IoU 阈值用于匹配检测框。默认 0.5。
+
+### 返回值说明
+
+`evaluate()` 方法返回包含以下键值的字典：
+- `MOTA`: 跟踪准确度 (0-1 或更低)
+- `MOTP`: 跟踪精度 (像素距离，越小越好)
+- `IDF1`: ID F1 分数 (0-1)
+- `precision`: 精准度 (0-1)
+- `recall`: 召回率 (0-1)
+- `details`: 各项指标的详细信息
+
+## 2. 结果导出功能 (ResultExporter)
 
 ### 功能概述
 将检测和跟踪结果导出为多种格式：JSON、CSV、COCO格式。

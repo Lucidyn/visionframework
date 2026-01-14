@@ -1,5 +1,50 @@
 # 更新日志
 
+## v0.2.7 - CLIP 集成、性能优化和评估工具
+
+### 新功能
+
+#### 1. CLIP 零样本分类集成
+- ✅ 新增 `CLIPExtractor` 类，支持图像-文本匹配和零样本分类
+- ✅ 支持可选的 FP16 推理和自定义模型选择
+- ✅ 完整的示例代码 (`clip_example.py`) 和单元测试
+- ✅ 集成到主包导出，可直接 `from visionframework import CLIPExtractor` 导入
+
+#### 2. 性能优化与批量推理
+- ✅ YOLO/DETR/RF-DETR 检测器支持批量推理 (`batch_inference=True`)
+- ✅ 所有检测器支持 FP16 推理 (`use_fp16=True`)
+- ✅ 使用 `torch.no_grad()` 和 `torch.cuda.amp.autocast()` 优化推理
+- ✅ 完整的批量和 FP16 单元测试
+
+#### 3. ReID 跟踪器增强
+- ✅ 参数化配置：`track_history_length`, `embedding_dim`, `matching_strategy`
+- ✅ 支持 Hungarian 和 Greedy 匹配策略
+- ✅ 可配置 ID 激活阈值和匹配成本阈值
+- ✅ 改进的 scipy 回退实现（无需强制依赖）
+
+#### 4. 完整的跟踪评估工具
+- ✅ `TrackingEvaluator` 实现标准 MOT 指标：
+  - **MOTA** (Multiple Object Tracking Accuracy)
+  - **MOTP** (Multiple Object Tracking Precision)
+  - **IDF1** (ID F1 Score)
+- ✅ 基于 IoU 的检测匹配（Hungarian 算法）
+- ✅ ID 切换检测和精准度/召回率计算
+- ✅ 完整示例代码和 5 个单元测试
+
+### 依赖管理优化
+
+- ✅ 将 `transformers`, `rfdetr`, `supervision` 移至 `extras_require`
+- ✅ 定义功能组：`clip`, `detr`, `rfdetr`, `dev`, `all`
+- ✅ 用户可选择性安装：`pip install -e ".[clip]"` 或 `pip install -e ".[all]"`
+- ✅ 更新 requirements.txt 和 setup.py
+
+### 文档与示例
+
+- ✅ 新增 `tracking_evaluation_example.py` 展示评估工具使用
+- ✅ 新增 `clip_example.py` 展示 CLIP 零样本分类
+- ✅ 更新 README.md 记录新功能和安装选项
+- ✅ 更新 QUICKSTART.md 展示 CLIP 和性能配置使用
+
 ## v0.2.6 - ReID 和实例分割支持
 
 ### 新功能

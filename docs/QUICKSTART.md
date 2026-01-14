@@ -139,6 +139,89 @@ result = visualizer.draw_results(image, results["detections"], results["tracks"]
 cv2.imwrite("output_seg.jpg", result)
 ```
 
+### 5. CLIP 零样本分类
+
+```python
+from visionframework import CLIPExtractor
+from PIL import Image
+
+# 初始化 CLIP
+clip = CLIPExtractor({
+    "device": "cpu",     # 或 "cuda" 获得更快速度
+    "use_fp16": False    # 在 GPU 上设置为 True 以加速
+})
+clip.initialize()
+
+# 分类
+image = Image.open("image.jpg")
+labels = ["a cat", "a dog", "a person"]
+scores = clip.zero_shot_classify(image, labels)
+
+for label, score in zip(labels, scores):
+    print(f"{label}: {score:.4f}")
+```
+
+### 6. 跟踪性能评估
+
+```python
+from visionframework import TrackingEvaluator
+
+# 初始化评估器
+evaluator = TrackingEvaluator(iou_threshold=0.5)
+
+# 准备数据（预测和真值轨迹）
+pred_tracks = [
+    [{"track_id": 1, "bbox": {"x1": 10, "y1": 10, "x2": 50, "y2": 50}}],
+    [{"track_id": 1, "bbox": {"x1": 15, "y1": 15, "x2": 55, "y2": 55}}]
+]
+gt_tracks = [
+    [{"track_id": 1, "bbox": {"x1": 10, "y1": 10, "x2": 50, "y2": 50}}],
+    [{"track_id": 1, "bbox": {"x1": 15, "y1": 15, "x2": 55, "y2": 55}}]
+]
+
+# 评估
+results = evaluator.evaluate(pred_tracks, gt_tracks)
+print(f"MOTA: {results['MOTA']:.4f}")
+print(f"MOTP: {results['MOTP']:.4f}")
+print(f"IDF1: {results['IDF1']:.4f}")
+```
+
+## 性能优化
+
+### 批量推理和 FP16
+
+```python
+from visionframework import Detector
+
+detector = Detector({
+    "model_type": "yolo",
+    "device": "cuda",
+    "performance": {
+        "batch_inference": True,  # 启用批量推理
+        "use_fp16": True          # 启用 FP16 推理（需要 GPU）
+    }
+})
+detector.initialize()
+
+# 单张图像
+detections = detector.detect(image)
+
+# 批量处理多张图像
+batch_results = detector.detect([img1, img2, img3])
+```
+
+### 可选功能安装
+
+```bash
+# 仅安装基础依赖
+pip install -e .
+
+# 为特定功能安装依赖
+pip install -e ".[clip]"   # CLIP 支持
+pip install -e ".[rfdetr]" # RF-DETR 支持
+pip install -e ".[all]"    # 安装所有功能
+```
+
 ## 配置选项
 
 ### 检测器配置
