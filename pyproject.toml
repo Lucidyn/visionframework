@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visionframework"
-version = "0.2.5"
+version = "0.2.8"
 description = "A comprehensive vision framework for detection, tracking, and more"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -34,9 +34,7 @@ dependencies = [
     "ultralytics>=8.0.0",
     "scipy>=1.10.0",
     "Pillow>=10.0.0",
-    "transformers>=4.30.0",
-    "rfdetr>=0.1.0",
-    "supervision>=0.18.0",
+    # Optional heavy dependencies moved to [project.optional-dependencies]
 ]
 
 [project.optional-dependencies]
@@ -46,6 +44,16 @@ dev = [
     "black>=23.0.0",
     "flake8>=6.0.0",
     "mypy>=1.0.0",
+]
+
+# Feature groups for optional heavy dependencies
+clip = [
+    "transformers>=4.30.0"
+]
+
+rfdetr = [
+    "rfdetr>=0.1.0",
+    "supervision>=0.18.0"
 ]
 
 [tool.setuptools]
