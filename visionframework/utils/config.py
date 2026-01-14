@@ -140,7 +140,13 @@ class Config:
             "max_age": 30,
             "min_hits": 3,
             "iou_threshold": 0.3,
-            "use_kalman": False
+            "use_kalman": False,
+            # Tracker additional params
+            "track_history_length": 30,
+            "new_track_activation_conf": 0.6,
+            "embedding_dim": 2048,
+            "matching_strategy": "hungarian",  # or 'greedy'
+            "matching_cost_threshold": 0.7
         }
     
     @staticmethod
@@ -149,7 +155,13 @@ class Config:
         return {
             "enable_tracking": True,
             "detector_config": Config.get_default_detector_config(),
-            "tracker_config": Config.get_default_tracker_config()
+            "tracker_config": Config.get_default_tracker_config(),
+            # Performance options
+            "performance": {
+                "batch_inference": False,
+                "use_fp16": False,
+                "video_async_read": False
+            }
         }
     
     @staticmethod

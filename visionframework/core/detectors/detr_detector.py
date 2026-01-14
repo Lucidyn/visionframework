@@ -74,6 +74,9 @@ class DETRDetector(BaseDetector):
         self.model_name: str = self.config.get("model_name", "facebook/detr-resnet-50")
         self.conf_threshold: float = float(self.config.get("conf_threshold", 0.5))
         self.device: str = self.config.get("device", "cpu")
+        perf = self.config.get("performance", {})
+        self.batch_inference: bool = bool(self.config.get("batch_inference", perf.get("batch_inference", False)))
+        self.use_fp16: bool = bool(self.config.get("use_fp16", perf.get("use_fp16", False)))
     
     def initialize(self) -> bool:
         """Initialize the DETR model"""
@@ -146,46 +149,88 @@ class DETRDetector(BaseDetector):
             import torch
             from PIL import Image
             
-            # Convert BGR to RGB (OpenCV to PIL format)
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            pil_image = Image.fromarray(image_rgb)
-            
-            # Preprocess image
-            inputs = self.processor(images=pil_image, return_tensors="pt")
+            # Support single image or batch of images
+            is_batch = isinstance(image, (list, tuple)) or (isinstance(image, np.ndarray) and image.ndim == 4)
+
+            # Prepare PIL images
+            if is_batch:
+                pil_images = []
+                sizes = []
+                for img in image:
+                    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    pil = Image.fromarray(img_rgb)
+                    pil_images.append(pil)
+                    sizes.append(pil.size[::-1])
+                inputs = self.processor(images=pil_images, return_tensors="pt")
+            else:
+                image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                pil_image = Image.fromarray(image_rgb)
+                inputs = self.processor(images=pil_image, return_tensors="pt")
+
+            # Move inputs to device
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
-            
-            # Run inference (disable gradient computation for efficiency)
-            with torch.no_grad():
+
+            # Run inference with optional fp16 autocast
+            try:
+                import torch
+                if self.use_fp16 and self.device == 'cuda':
+                    amp_ctx = torch.cuda.amp.autocast()
+                else:
+                    amp_ctx = torch.no_grad()
+            except Exception:
+                amp_ctx = torch.no_grad()
+
+            with amp_ctx:
                 outputs = self.model(**inputs)
-            
+
             # Post-process results
-            target_sizes = torch.tensor([pil_image.size[::-1]]).to(self.device)  # [width, height] -> [height, width]
-            results = self.processor.post_process_object_detection(
-                outputs,
-                target_sizes=target_sizes,
-                threshold=self.conf_threshold
-            )[0]
+            if is_batch:
+                target_sizes = torch.tensor(sizes).to(self.device)
+                post = self.processor.post_process_object_detection(
+                    outputs,
+                    target_sizes=target_sizes,
+                    threshold=self.conf_threshold
+                )
+                # post is list per image
+                grouped_results = post
+            else:
+                target_sizes = torch.tensor([pil_image.size[::-1]]).to(self.device)
+                post = self.processor.post_process_object_detection(
+                    outputs,
+                    target_sizes=target_sizes,
+                    threshold=self.conf_threshold
+                )
+                grouped_results = [post[0]]
             
             # Convert to Detection objects
-            for score, label, box in zip(
-                results["scores"],
-                results["labels"],
-                results["boxes"]
-            ):
-                # Results are already filtered by threshold, but double-check
-                if score >= self.conf_threshold:
-                    box = box.cpu().numpy()
-                    cls_id = int(label.cpu().numpy())
-                    cls_name = self.model.config.id2label[cls_id] if hasattr(self.model.config, 'id2label') else str(cls_id)
-                    
-                    detection = Detection(
-                        bbox=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
-                        confidence=float(score.cpu().numpy()),
-                        class_id=cls_id,
-                        class_name=cls_name
-                    )
-                    detections.append(detection)
-            
+            for res in grouped_results:
+                # Each res corresponds to an image
+                for score, label, box in zip(res["scores"], res["labels"], res["boxes"]):
+                    # Results are already filtered by threshold, but double-check
+                    s_val = float(score.cpu().numpy()) if hasattr(score, 'cpu') else float(score)
+                    if s_val >= self.conf_threshold:
+                        box_arr = box.cpu().numpy() if hasattr(box, 'cpu') else box
+                        cls_id = int(label.cpu().numpy()) if hasattr(label, 'cpu') else int(label)
+                        cls_name = self.model.config.id2label[cls_id] if hasattr(self.model.config, 'id2label') else str(cls_id)
+
+                        detection = Detection(
+                            bbox=(float(box_arr[0]), float(box_arr[1]), float(box_arr[2]), float(box_arr[3])),
+                            confidence=s_val,
+                            class_id=cls_id,
+                            class_name=cls_name
+                        )
+                        detections.append(detection)
+
+            # If batch input, return list of lists (grouped by image), else flat list
+            if is_batch:
+                # naive grouping: split detections evenly by number of grouped_results sizes
+                grouped: List[List[Detection]] = []
+                idx = 0
+                for res in grouped_results:
+                    cnt = len(res["boxes"]) if res.get("boxes") is not None else 0
+                    grouped.append(detections[idx:idx+cnt])
+                    idx += cnt
+                return grouped
             return detections
             
         except RuntimeError as e:

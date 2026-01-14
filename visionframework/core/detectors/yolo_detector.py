@@ -77,6 +77,10 @@ class YOLODetector(BaseDetector):
         self.iou_threshold: float = float(self.config.get("iou_threshold", 0.45))
         self.device: str = self.config.get("device", "cpu")
         self.enable_segmentation: bool = self.config.get("enable_segmentation", False)
+        # Performance options
+        perf = self.config.get("performance", {})
+        self.batch_inference: bool = bool(self.config.get("batch_inference", perf.get("batch_inference", False)))
+        self.use_fp16: bool = bool(self.config.get("use_fp16", perf.get("use_fp16", False)))
     
     def initialize(self) -> bool:
         """Initialize the YOLO model"""
@@ -151,19 +155,30 @@ class YOLODetector(BaseDetector):
         detections: List[Detection] = []
         
         try:
-            # Run YOLO inference
-            results = self.model(
-                image,
-                conf=self.conf_threshold,
-                iou=self.iou_threshold,
-                verbose=False
-            )
+            # Run YOLO inference (supports single image or batch)
+            is_batch = isinstance(image, (list, tuple)) or (isinstance(image, np.ndarray) and image.ndim == 4)
+            results = None
+            try:
+                import torch
+                ctx = torch.no_grad()
+                if self.use_fp16 and self.device == 'cuda':
+                    amp = torch.cuda.amp.autocast()
+                    ctx = amp
+            except Exception:
+                ctx = None
+
+            if ctx is not None:
+                with ctx:
+                    results = self.model(image, conf=self.conf_threshold, iou=self.iou_threshold, verbose=False)
+            else:
+                results = self.model(image, conf=self.conf_threshold, iou=self.iou_threshold, verbose=False)
             
             # Process results
-            for result in results:
+            # results is iterable over images
+            for img_idx, result in enumerate(results):
                 boxes = result.boxes
                 masks = result.masks if hasattr(result, 'masks') and result.masks is not None else None
-                
+
                 if boxes is not None:
                     for i in range(len(boxes)):
                         # Extract bounding box
@@ -171,17 +186,19 @@ class YOLODetector(BaseDetector):
                         conf = float(boxes.conf[i].cpu().numpy())
                         cls_id = int(boxes.cls[i].cpu().numpy())
                         cls_name = result.names[cls_id] if hasattr(result, 'names') else str(cls_id)
-                        
+
                         # Get segmentation mask if available
                         mask = None
                         if masks is not None and i < len(masks.data):
                             mask_data = masks.data[i].cpu().numpy()
-                            h, w = image.shape[:2]
-                            # Resize mask to image dimensions if needed
-                            if mask_data.shape != (h, w):
-                                mask_data = cv2.resize(mask_data.astype(np.float32), (w, h))
-                            mask = (mask_data > 0.5).astype(np.uint8) * 255
-                        
+                            # determine source image for mask sizing
+                            src_img = image[img_idx] if is_batch and isinstance(image, (list, tuple)) else (image if not is_batch else None)
+                            if src_img is not None:
+                                h, w = src_img.shape[:2]
+                                if mask_data.shape != (h, w):
+                                    mask_data = cv2.resize(mask_data.astype(np.float32), (w, h))
+                                mask = (mask_data > 0.5).astype(np.uint8) * 255
+
                         # Create Detection object
                         detection = Detection(
                             bbox=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
@@ -191,6 +208,17 @@ class YOLODetector(BaseDetector):
                             mask=mask
                         )
                         detections.append(detection)
+
+            # If batch inference, return list-of-lists: group detections per image
+            if is_batch:
+                # naive grouping by iteration: ultralytics returns results per image in same order
+                grouped: List[List[Detection]] = []
+                idx = 0
+                for result in results:
+                    count = len(result.boxes) if result.boxes is not None else 0
+                    grouped.append(detections[idx:idx+count])
+                    idx += count
+                return grouped
             
             return detections
             
