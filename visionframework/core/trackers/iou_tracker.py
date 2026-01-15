@@ -150,14 +150,19 @@ class IOUTracker(BaseTracker):
             self.tracks.append(new_track)
             self.next_id += 1
         
-        # Remove old tracks
-        self.tracks = [
-            track for track in self.tracks
-            if track.time_since_update < self.max_age and
-               (track.age >= self.min_hits or track.time_since_update == 0)
-        ]
+        # Remove old tracks (in-place removal to preserve track ages)
+        # Keep tracks that either:
+        # 1. Were just updated/matched (time_since_update == 0)
+        # 2. Haven't exceeded max_age
+        i = 0
+        while i < len(self.tracks):
+            track = self.tracks[i]
+            if track.time_since_update > self.max_age:
+                self.tracks.pop(i)
+            else:
+                i += 1
         
-        # Return confirmed tracks
+        # Return confirmed tracks (those with sufficient hits)
         return [track for track in self.tracks if track.age >= self.min_hits]
     
     def reset(self):

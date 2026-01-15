@@ -176,7 +176,14 @@ class Tracker(BaseModule):
             else:
                 raise ValueError(f"Unsupported tracker_type: {self.tracker_type}. Supported: 'iou', 'bytetrack', 'reid'")
             
-            return self.tracker_impl.initialize()
+            # Initialize tracker_impl
+            init_result = self.tracker_impl.initialize()
+            
+            # Set is_initialized only if tracker_impl initialization succeeded
+            if init_result:
+                self.is_initialized = True
+            
+            return init_result
         except ValueError as e:
             logger.error(f"Invalid tracker configuration: {e}", exc_info=True)
             return False

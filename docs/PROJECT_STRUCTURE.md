@@ -71,8 +71,6 @@ visionframework/
 │   ├── yolo_pose_example.py # YOLO 姿态估计示例
 │   ├── clip_example.py      # CLIP 零样本分类示例
 │   └── tracking_evaluation_example.py # 跟踪评估示例
-│   ├── yolo_pose_example.py # YOLO Pose 姿态估计示例
-│   └── batch_processing.py  # 批量图像处理示例
 │
 ├── tests/                   # 测试文件目录
 │   ├── __init__.py
