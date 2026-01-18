@@ -6,7 +6,7 @@ All detectors must inherit from BaseDetector and implement the detect() method.
 """
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional, Union
 import numpy as np
 from ...data.detection import Detection
 from ..base import BaseModule
@@ -34,16 +34,18 @@ class BaseDetector(BaseModule, ABC):
     """
     
     @abstractmethod
-    def detect(self, image: np.ndarray) -> List[Detection]:
+    def detect(self, image: np.ndarray, categories: Optional[Union[list, tuple]] = None) -> List[Detection]:
         """
         Detect objects in image
         
         This method must be implemented by subclasses to perform object detection
         on the input image.
         
-        Args:
-            image: Input image in BGR format (OpenCV standard), numpy array with shape (H, W, 3).
-                   Data type should be uint8 with values in range [0, 255].
+         Args:
+             image: Input image in BGR format (OpenCV standard), numpy array with shape (H, W, 3).
+                 Data type should be uint8 with values in range [0, 255].
+             categories: Optional list/tuple of class ids or class names to keep.
+                   If None, all detected classes are returned.
         
         Returns:
             List[Detection]: List of Detection objects, each containing:
@@ -65,7 +67,7 @@ class BaseDetector(BaseModule, ABC):
         """
         pass
     
-    def process(self, image: np.ndarray) -> List[Detection]:
+    def process(self, image: np.ndarray, categories: Optional[Union[list, tuple]] = None) -> List[Detection]:
         """
         Alias for detect method
         
@@ -78,5 +80,5 @@ class BaseDetector(BaseModule, ABC):
         Returns:
             List[Detection]: List of detected objects
         """
-        return self.detect(image)
+        return self.detect(image, categories=categories)
 

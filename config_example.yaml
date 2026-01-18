@@ -8,6 +8,11 @@ detector:
   conf_threshold: 0.25      # Confidence threshold (0.0-1.0)
   iou_threshold: 0.45       # IoU threshold for NMS (0.0-1.0)
   device: "cpu"             # Device: 'cpu', 'cuda', or 'mps'
+  # Optional: restrict detections to specific classes. Can be list of
+  # class names (strings) or class ids (integers). Examples:
+  #   categories: ['person', 'car']
+  #   categories: [0, 2]
+  categories: null
 
 # Tracker configuration
 tracker:
@@ -22,6 +27,8 @@ pipeline:
   detector_config:          # Detector config (can reference detector section)
     model_path: "yolov8n.pt"
     conf_threshold: 0.25
+    # Optional categories can also be specified per-pipeline detector config
+    # categories: ['person', 'car']
   tracker_config:           # Tracker config (can reference tracker section)
     max_age: 30
     min_hits: 3

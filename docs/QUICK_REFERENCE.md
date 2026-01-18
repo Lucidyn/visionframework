@@ -46,7 +46,9 @@ from visionframework import DetectorInitializationError, VisionFrameworkError
 
 try:
     detector = YOLODetector(config)
-    detections = detector.detect(image)
+    # 可选参数: categories 可用于按类别名称或类别 id 过滤检测结果
+    # 示例: categories=["person", "car"] 或 categories=[0, 2]
+    detections = detector.detect(image, categories=None)
 except DetectorInitializationError as e:
     print(f"检测器初始化失败: {e}")
 except VisionFrameworkError as e:

@@ -127,6 +127,33 @@ detector.initialize()
 detections = detector.detect(image)
 ```
 
+### 按类别过滤检测结果（`categories`）
+
+框架新增 `categories` 参数，可在调用 `detect()` 时传入，也可在配置文件中设置，用于只返回指定类别的检测结果。
+
+- 参数类型: 列表，元素为类别名称（字符串）或类别 id（整数）。
+- 行为: 如果为 `None`（默认），返回所有检测；如果为列表，则只返回匹配的检测。
+
+示例：按名称或 id 过滤
+
+```python
+# 只保留 person 和 car
+detections = detector.detect(image, categories=["person", "car"])
+
+# 按 id 过滤（例如 COCO 类别 id）
+detections = detector.detect(image, categories=[0, 2])
+```
+
+示例：在配置中指定（见 config_example.yaml）
+
+```yaml
+detector:
+    model_type: "yolo"
+    model_path: "yolov8n.pt"
+    conf_threshold: 0.25
+    categories: ['person', 'car']
+```
+
 **依赖安装:**
 ```bash
 pip install transformers torch

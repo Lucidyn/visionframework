@@ -272,6 +272,32 @@ idf1_result = evaluator.calculate_idf1(pred_tracks, gt_tracks)
 - `enable_segmentation`: 是否开启实例分割 (默认: False)
 - `device`: 设备 ("cpu", "cuda", "mps") (默认: "cpu")
 
+新增: `categories` 参数
+
+- `categories`: 可选参数，用于限制返回的检测类别。可以在配置中设置，也可以在调用时传入给 `detect()`。
+    - 类型: 列表，元素为类别名称（字符串）或类别 id（整数）。
+    - 行为: 若为 `None` 则返回所有检测结果；若为列表，则只返回匹配类别的检测。
+
+示例：在调用中按名称或 id 过滤
+
+```python
+# 按名称过滤（只返回 person 和 car）
+detections = detector.detect(image, categories=["person", "car"])
+
+# 按 id 过滤（只返回 class_id 为 0 或 2 的检测）
+detections = detector.detect(image, categories=[0, 2])
+```
+
+示例：在配置文件中设置（见 `config_example.yaml`）
+
+```yaml
+detector:
+    model_type: "yolo"
+    model_path: "yolov8n.pt"
+    conf_threshold: 0.25
+    categories: ['person', 'car']  # 可选：在配置中指定需保留的类别
+```
+
 性能选项（可通过 `performance` 子配置控制）:
 
 - `batch_inference` (bool): 是否启用批量推理接口（对于支持的后端）；当为 True 时，`Detector.detect()` 可接受图像列表并返回按图像分组的检测结果。默认: False。

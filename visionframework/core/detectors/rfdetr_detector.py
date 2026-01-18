@@ -4,7 +4,7 @@ RF-DETR detector implementation
 
 import cv2
 import numpy as np
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from .base_detector import BaseDetector
 from ...data.detection import Detection
 from ...utils.logger import get_logger
@@ -107,7 +107,7 @@ class RFDETRDetector(BaseDetector):
             logger.error(f"Unexpected error initializing RF-DETR detector: {e}", exc_info=True)
             return False
     
-    def detect(self, image: np.ndarray) -> List[Detection]:
+    def detect(self, image: np.ndarray, categories: Optional[Union[list, tuple]] = None) -> List[Detection]:
         """
         Detect objects using RF-DETR
         
@@ -236,13 +236,26 @@ class RFDETRDetector(BaseDetector):
                         else:
                             cls_name = f"class_{cls_id}"
 
-                        detection = Detection(
-                            bbox=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
-                            confidence=conf,
-                            class_id=cls_id,
-                            class_name=cls_name
-                        )
-                        detections.append(detection)
+                        # Category filtering: support int ids or string names
+                        keep = True
+                        if categories is not None:
+                            keep = False
+                            for c in categories:
+                                if isinstance(c, int) and c == cls_id:
+                                    keep = True
+                                    break
+                                if isinstance(c, str) and c == cls_name:
+                                    keep = True
+                                    break
+
+                        if keep:
+                            detection = Detection(
+                                bbox=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
+                                confidence=conf,
+                                class_id=cls_id,
+                                class_name=cls_name
+                            )
+                            detections.append(detection)
 
             return detections
 

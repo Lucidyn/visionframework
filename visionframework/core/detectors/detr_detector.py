@@ -4,7 +4,7 @@ DETR detector implementation
 
 import cv2
 import numpy as np
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from .base_detector import BaseDetector
 from ...data.detection import Detection
 from ...utils.logger import get_logger
@@ -102,7 +102,7 @@ class DETRDetector(BaseDetector):
             logger.error(f"Unexpected error initializing DETR detector: {e}", exc_info=True)
             return False
     
-    def detect(self, image: np.ndarray) -> List[Detection]:
+    def detect(self, image: np.ndarray, categories: Optional[Union[list, tuple]] = None) -> List[Detection]:
         """
         Detect objects using DETR
         
@@ -213,13 +213,26 @@ class DETRDetector(BaseDetector):
                         cls_id = int(label.cpu().numpy()) if hasattr(label, 'cpu') else int(label)
                         cls_name = self.model.config.id2label[cls_id] if hasattr(self.model.config, 'id2label') else str(cls_id)
 
-                        detection = Detection(
-                            bbox=(float(box_arr[0]), float(box_arr[1]), float(box_arr[2]), float(box_arr[3])),
-                            confidence=s_val,
-                            class_id=cls_id,
-                            class_name=cls_name
-                        )
-                        detections.append(detection)
+                        # Category filtering support
+                        keep = True
+                        if categories is not None:
+                            keep = False
+                            for c in categories:
+                                if isinstance(c, int) and c == cls_id:
+                                    keep = True
+                                    break
+                                if isinstance(c, str) and c == cls_name:
+                                    keep = True
+                                    break
+
+                        if keep:
+                            detection = Detection(
+                                bbox=(float(box_arr[0]), float(box_arr[1]), float(box_arr[2]), float(box_arr[3])),
+                                confidence=s_val,
+                                class_id=cls_id,
+                                class_name=cls_name
+                            )
+                            detections.append(detection)
 
             # If batch input, return list of lists (grouped by image), else flat list
             if is_batch:

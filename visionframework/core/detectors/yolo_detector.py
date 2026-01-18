@@ -4,7 +4,7 @@ YOLO detector implementation
 
 import cv2
 import numpy as np
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from .base_detector import BaseDetector
 from ...data.detection import Detection
 from ...utils.logger import get_logger
@@ -115,7 +115,7 @@ class YOLODetector(BaseDetector):
             logger.error(f"Unexpected error initializing YOLO detector: {e}", exc_info=True)
             return False
     
-    def detect(self, image: np.ndarray) -> List[Detection]:
+    def detect(self, image: np.ndarray, categories: Optional[Union[list, tuple]] = None) -> List[Detection]:
         """
         Detect objects using YOLO
         
@@ -200,14 +200,27 @@ class YOLODetector(BaseDetector):
                                 mask = (mask_data > 0.5).astype(np.uint8) * 255
 
                         # Create Detection object
-                        detection = Detection(
-                            bbox=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
-                            confidence=conf,
-                            class_id=cls_id,
-                            class_name=cls_name,
-                            mask=mask
-                        )
-                        detections.append(detection)
+                            # Category filtering support: accept int ids or string names
+                            keep = True
+                            if categories is not None:
+                                keep = False
+                                for c in categories:
+                                    if isinstance(c, (int,)) and c == cls_id:
+                                        keep = True
+                                        break
+                                    if isinstance(c, str) and c == cls_name:
+                                        keep = True
+                                        break
+
+                            if keep:
+                                detection = Detection(
+                                    bbox=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
+                                    confidence=conf,
+                                    class_id=cls_id,
+                                    class_name=cls_name,
+                                    mask=mask
+                                )
+                                detections.append(detection)
 
             # If batch inference, return list-of-lists: group detections per image
             if is_batch:

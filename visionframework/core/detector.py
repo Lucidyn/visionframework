@@ -187,7 +187,7 @@ class Detector(BaseModule):
             logger.error(f"Unexpected error initializing detector: {e}", exc_info=True)
             return False
     
-    def process(self, image: np.ndarray) -> List[Detection]:
+    def process(self, image: np.ndarray, categories: Optional[list] = None) -> List[Detection]:
         """
         Detect objects in image
         
@@ -235,12 +235,12 @@ class Detector(BaseModule):
             return []
         
         try:
-            return self.detector_impl.detect(image)
+            return self.detector_impl.detect(image, categories=categories)
         except Exception as e:
             logger.error(f"Error during detection: {e}", exc_info=True)
             return []
     
-    def detect(self, image: np.ndarray) -> List[Detection]:
+    def detect(self, image: np.ndarray, categories: Optional[list] = None) -> List[Detection]:
         """
         Alias for process method
         
@@ -253,7 +253,7 @@ class Detector(BaseModule):
         Returns:
             List[Detection]: List of detected objects
         """
-        return self.process(image)
+        return self.process(image, categories=categories)
     
     def get_model_info(self) -> Dict[str, Any]:
         """

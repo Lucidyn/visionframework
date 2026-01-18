@@ -73,7 +73,9 @@ def example_load_from_yaml():
                 print("  使用测试图像继续演示...")
         
         # 步骤 5: 运行检测
-        detections = detector.detect(image)
+        # 从配置读取 categories（可为 None、class name 列表或 id 列表）
+        cfg_categories = detector_config.get('categories') if isinstance(detector_config, dict) else None
+        detections = detector.detect(image, categories=cfg_categories)
         print(f"✓ 检测完成，发现 {len(detections)} 个对象")
         
         # 步骤 6: 使用配置文件中的可视化器配置
