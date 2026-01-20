@@ -7,6 +7,10 @@ Provides CLIP-based image/text embedding and zero-shot classification.
 from typing import List, Optional, Any, Union
 import numpy as np
 from .feature_extractor import FeatureExtractor
+from ...utils.config import ModelCache, DeviceManager
+from ...utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class CLIPExtractor(FeatureExtractor):
@@ -34,17 +38,38 @@ class CLIPExtractor(FeatureExtractor):
         self.use_fp16 = use_fp16
         self.model = None
         self.processor = None
+        self._cached_model_key: Optional[str] = None
+        self._cached_processor_key: Optional[str] = None
     
     def initialize(self) -> None:
         """Initialize CLIP model and processor."""
         try:
             import torch
             from transformers import CLIPProcessor, CLIPModel
-            
-            self.processor = CLIPProcessor.from_pretrained(self.model_name)
-            self.model = CLIPModel.from_pretrained(self.model_name)
-            self.model.to(self.device)
-            self.model.eval()
+            # Use cache for model and processor
+            proc_key = f"clip_proc:{self.model_name}"
+            mdl_key = f"clip_model:{self.model_name}"
+
+            self.processor = ModelCache.get_model(proc_key, lambda: CLIPProcessor.from_pretrained(self.model_name))
+            self._cached_processor_key = proc_key
+            self.model = ModelCache.get_model(mdl_key, lambda: CLIPModel.from_pretrained(self.model_name))
+            self._cached_model_key = mdl_key
+
+            # Normalize device and move model if supported
+            device = DeviceManager.normalize_device(self.device)
+            if device != self.device:
+                logger.info(f"Requested device '{self.device}' not available, using '{device}' instead")
+            self.device = device
+            try:
+                if hasattr(self.model, 'to'):
+                    self.model.to(self.device)
+            except Exception:
+                logger.debug("Model.to(device) not supported or failed; continuing")
+            try:
+                if hasattr(self.model, 'eval'):
+                    self.model.eval()
+            except Exception:
+                pass
             self._initialized = True
         except ImportError as e:
             raise ImportError(f"CLIP dependencies not installed: {e}. "
@@ -177,4 +202,54 @@ class CLIPExtractor(FeatureExtractor):
     def _move_to_device(self, device: str) -> None:
         """Move model to device."""
         if self.model is not None:
-            self.model.to(device)
+            try:
+                self.model.to(device)
+            except Exception:
+                logger.debug("CLIP model move to device failed")
+
+    def cleanup(self) -> None:
+        """Release or release-reference cached CLIP model and processor."""
+        try:
+            if self._cached_model_key:
+                try:
+                    ModelCache.release_model(self._cached_model_key)
+                except Exception as e:
+                    logger.warning(f"Error releasing cached CLIP model '{self._cached_model_key}': {e}")
+                self._cached_model_key = None
+                self.model = None
+            else:
+                if self.model is not None:
+                    try:
+                        if hasattr(self.model, 'to'):
+                            self.model.to('cpu')
+                    except Exception:
+                        pass
+                    try:
+                        del self.model
+                    except Exception:
+                        self.model = None
+                    self.model = None
+
+            if self._cached_processor_key:
+                try:
+                    ModelCache.release_model(self._cached_processor_key)
+                except Exception as e:
+                    logger.warning(f"Error releasing cached CLIP processor '{self._cached_processor_key}': {e}")
+                self._cached_processor_key = None
+                self.processor = None
+            else:
+                if self.processor is not None:
+                    try:
+                        del self.processor
+                    except Exception:
+                        self.processor = None
+                    self.processor = None
+
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+        finally:
+            self._initialized = False

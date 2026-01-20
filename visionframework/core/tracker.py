@@ -12,9 +12,6 @@ from .base import BaseModule
 from ..data.detection import Detection
 from ..data.track import Track
 from ..utils.logger import get_logger
-from .trackers.iou_tracker import IOUTracker
-from .trackers.byte_tracker import ByteTracker
-from .trackers.reid_tracker import ReIDTracker
 
 logger = get_logger(__name__)
 
@@ -167,11 +164,15 @@ class Tracker(BaseModule):
         Initialize the tracker
         """
         try:
+            # Lazy import tracker implementations to avoid importing heavy libraries at module load time
             if self.tracker_type == "iou":
+                from .trackers.iou_tracker import IOUTracker
                 self.tracker_impl = IOUTracker(self.config)
             elif self.tracker_type == "bytetrack":
+                from .trackers.byte_tracker import ByteTracker
                 self.tracker_impl = ByteTracker(self.config)
             elif self.tracker_type == "reid":
+                from .trackers.reid_tracker import ReIDTracker
                 self.tracker_impl = ReIDTracker(self.config)
             else:
                 raise ValueError(f"Unsupported tracker_type: {self.tracker_type}. Supported: 'iou', 'bytetrack', 'reid'")
@@ -280,8 +281,80 @@ class Tracker(BaseModule):
         Returns:
             List[Track]: List of tracked objects
         """
-        return self.process(detections, image=image)
+        return self.process(detections, image=image)    
+    def process_batch(self, 
+                     detections_list: List[List[Detection]], 
+                     images: Optional[List[np.ndarray]] = None) -> List[List[Track]]:
+        """
+        Process multiple frames of detections through tracker sequentially.
+        
+        This method updates the tracker state with detections from multiple frames
+        and returns the active tracks for each frame. Unlike detectors, trackers
+        maintain state across frames, so batch processing means processing frames
+        sequentially while maintaining temporal coherence.
+        
+        Args:
+            detections_list: List of detection lists, one per frame
+            images: Optional list of frame images (needed for some trackers like ReID tracker)
+        
+        Returns:
+            List[List[Track]]: List of track lists, one per frame
+        
+        Example:
+            ```python
+            tracker = Tracker()
+            tracker.initialize()
+            
+            # Process detections from multiple frames sequentially
+            detections_frames = [dets_frame1, dets_frame2, dets_frame3]
+            images_frames = [frame1, frame2, frame3]
+            
+            tracks_frames = tracker.process_batch(detections_frames, images_frames)
+            
+            for frame_idx, tracks in enumerate(tracks_frames):
+                print(f"Frame {frame_idx}: {len(tracks)} active tracks")
+            ```
+        """
+        if not self.is_initialized:
+            if not self.initialize():
+                logger.error("Tracker not initialized and auto-initialization failed")
+                return [[] for _ in detections_list]
+        
+        if self.tracker_impl is None:
+            logger.warning("tracker_impl is None, returning empty lists")
+            return [[] for _ in detections_list]
+        
+        batch_tracks: List[List[Track]] = []
+        
+        try:
+            # Process each frame sequentially to maintain temporal coherence
+            for frame_idx, detections in enumerate(detections_list):
+                image = images[frame_idx] if images and frame_idx < len(images) else None
+                tracks = self.process(detections, image)
+                batch_tracks.append(tracks)
+            
+            return batch_tracks
+        except Exception as e:
+            logger.error(f"Error during batch tracking: {e}", exc_info=True)
+            return [[] for _ in detections_list]
     
+    def update_batch(self, 
+                    detections_list: List[List[Detection]], 
+                    images: Optional[List[np.ndarray]] = None) -> List[List[Track]]:
+        """
+        Alias for process_batch method
+        
+        This method is provided for convenience and clarity. It is functionally
+        equivalent to process_batch().
+        
+        Args:
+            detections_list: List of detection lists, one per frame
+            images: Optional list of frame images
+        
+        Returns:
+            List[List[Track]]: List of track lists, one per frame
+        """
+        return self.process_batch(detections_list, images)    
     def reset(self) -> None:
         """
         Reset tracker state
@@ -377,3 +450,15 @@ class Tracker(BaseModule):
                 return None
         
         return None
+
+    def cleanup(self) -> None:
+        """Cleanup resources held by tracker and underlying implementation."""
+        try:
+            if self.tracker_impl and hasattr(self.tracker_impl, 'cleanup'):
+                try:
+                    self.tracker_impl.cleanup()
+                except Exception as e:
+                    logger.warning(f"Error during tracker_impl.cleanup(): {e}")
+        finally:
+            self.tracker_impl = None
+            self.is_initialized = False

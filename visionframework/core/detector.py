@@ -11,9 +11,6 @@ import numpy as np
 from .base import BaseModule
 from ..data.detection import Detection
 from ..utils.logger import get_logger
-from .detectors.yolo_detector import YOLODetector
-from .detectors.detr_detector import DETRDetector
-from .detectors.rfdetr_detector import RFDETRDetector
 
 logger = get_logger(__name__)
 
@@ -163,13 +160,17 @@ class Detector(BaseModule):
             ```
         """
         try:
+            # Lazy import detector implementations to avoid importing heavy libraries at module load time
             if self.model_type == "yolo":
+                from .detectors.yolo_detector import YOLODetector
                 self.detector_impl = YOLODetector(self.config)
             elif self.model_type == "detr":
+                from .detectors.detr_detector import DETRDetector
                 detr_config = self.config.copy()
                 detr_config["model_name"] = self.config.get("detr_model_name", "facebook/detr-resnet-50")
                 self.detector_impl = DETRDetector(detr_config)
             elif self.model_type == "rfdetr":
+                from .detectors.rfdetr_detector import RFDETRDetector
                 rfdetr_config = self.config.copy()
                 rfdetr_config["model_name"] = self.config.get("rfdetr_model_name", None)
                 self.detector_impl = RFDETRDetector(rfdetr_config)
@@ -255,6 +256,81 @@ class Detector(BaseModule):
         """
         return self.process(image, categories=categories)
     
+    def process_batch(self, images: List[np.ndarray], categories: Optional[list] = None) -> List[List[Detection]]:
+        """
+        Process multiple images in batch mode
+        
+        This method processes multiple images efficiently by utilizing batch inference
+        when the underlying detector supports it (e.g., YOLO with batch_inference enabled).
+        For detectors without batch support, images are processed sequentially.
+        
+        Args:
+            images: List of input images in BGR format (numpy arrays, shape: (H, W, 3))
+            categories: Optional list of category names for filtering detections
+        
+        Returns:
+            List[List[Detection]]: List of detection lists, one list per image.
+                                  Each inner list contains Detection objects for that image.
+        
+        Raises:
+            RuntimeError: If detector is not initialized or batch processing fails
+        
+        Example:
+            ```python
+            detector = Detector({
+                "model_type": "yolo",
+                "batch_inference": True  # Enable batch inference for better throughput
+            })
+            detector.initialize()
+            
+            images = [frame1, frame2, frame3]
+            batch_results = detector.process_batch(images)
+            
+            for frame_dets in batch_results:
+                print(f"Detected {len(frame_dets)} objects")
+            ```
+        """
+        if not self.is_initialized:
+            if not self.initialize():
+                logger.error("Detector not initialized and auto-initialization failed")
+                return [[] for _ in images]
+        
+        if self.detector_impl is None:
+            logger.warning("detector_impl is None, returning empty detections for all images")
+            return [[] for _ in images]
+        
+        try:
+            # Check if detector has batch detect method
+            if hasattr(self.detector_impl, 'detect_batch'):
+                return self.detector_impl.detect_batch(images, categories=categories)
+            else:
+                # Fallback: process images individually
+                logger.debug("Detector does not support batch detection, processing individually")
+                results = []
+                for image in images:
+                    dets = self.detector_impl.detect(image, categories=categories)
+                    results.append(dets)
+                return results
+        except Exception as e:
+            logger.error(f"Error during batch detection: {e}", exc_info=True)
+            return [[] for _ in images]
+    
+    def detect_batch(self, images: List[np.ndarray], categories: Optional[list] = None) -> List[List[Detection]]:
+        """
+        Alias for process_batch method
+        
+        This method is provided for convenience and clarity. It is functionally
+        equivalent to process_batch().
+        
+        Args:
+            images: List of input images in BGR format
+            categories: Optional list of category names
+        
+        Returns:
+            List[List[Detection]]: List of detection lists for each image
+        """
+        return self.process_batch(images, categories=categories)
+    
     def get_model_info(self) -> Dict[str, Any]:
         """
         Get information about the loaded model
@@ -304,3 +380,15 @@ class Detector(BaseModule):
             info["rfdetr_model_name"] = self.config.get("rfdetr_model_name", None)
         
         return info
+
+    def cleanup(self) -> None:
+        """Cleanup resources held by detector and underlying implementation."""
+        try:
+            if self.detector_impl and hasattr(self.detector_impl, 'cleanup'):
+                try:
+                    self.detector_impl.cleanup()
+                except Exception as e:
+                    logger.warning(f"Error during detector_impl.cleanup(): {e}")
+        finally:
+            self.detector_impl = None
+            self.is_initialized = False

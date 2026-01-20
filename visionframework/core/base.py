@@ -40,9 +40,8 @@ class BaseModule(ABC):
         if hasattr(self, 'validate_config'):
             is_valid, error_msg = self.validate_config(self.config)
             if not is_valid:
-                from ..utils.logger import get_logger
-                logger = get_logger(__name__)
-                logger.warning(f"Invalid configuration: {error_msg}")
+                from ..exceptions import ConfigurationError
+                raise ConfigurationError(error_msg)
     
     @abstractmethod
     def initialize(self) -> bool:

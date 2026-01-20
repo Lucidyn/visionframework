@@ -6,6 +6,9 @@ import cv2
 import numpy as np
 from typing import Tuple, Optional
 from pathlib import Path
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class ImageUtils:
@@ -15,12 +18,12 @@ class ImageUtils:
     def load_image(image_path: str) -> Optional[np.ndarray]:
         """Load image from file"""
         if not Path(image_path).exists():
-            print(f"Image not found: {image_path}")
+            logger.warning(f"Image not found: {image_path}")
             return None
         
         image = cv2.imread(image_path)
         if image is None:
-            print(f"Failed to load image: {image_path}")
+            logger.error(f"Failed to load image: {image_path}")
             return None
         
         return image
@@ -32,7 +35,7 @@ class ImageUtils:
             cv2.imwrite(output_path, image)
             return True
         except Exception as e:
-            print(f"Failed to save image: {e}")
+            logger.error(f"Failed to save image: {e}")
             return False
     
     @staticmethod

@@ -1,5 +1,5 @@
 """
-Core modules for vision framework
+Core modules for vision framework with lazy loading for heavy dependencies
 """
 
 from .base import BaseModule
@@ -9,17 +9,47 @@ from .pipeline import VisionPipeline
 from .roi_detector import ROIDetector
 from .counter import Counter
 
-# Feature processors
-from .processors import PoseEstimator, CLIPExtractor, ReIDExtractor, FeatureExtractor
+# Feature processors (lazy load processors that import heavy libs)
+from .processors import FeatureExtractor
 
 # Data structures
 from ..data import Detection, Track, STrack, Pose, KeyPoint, ROI
 
-# Detector implementations
-from .detectors import YOLODetector, DETRDetector
 
-# Tracker implementations
-from .trackers import IOUTracker, ByteTracker
+def __getattr__(name):
+    """Lazy load detector, tracker and processor implementations to avoid heavy imports at module load time"""
+    # Lazy load detectors
+    if name == "YOLODetector":
+        from .detectors import YOLODetector
+        return YOLODetector
+    elif name == "DETRDetector":
+        from .detectors import DETRDetector
+        return DETRDetector
+    elif name == "RFDETRDetector":
+        from .detectors import RFDETRDetector
+        return RFDETRDetector
+    # Lazy load trackers
+    elif name == "IOUTracker":
+        from .trackers import IOUTracker
+        return IOUTracker
+    elif name == "ByteTracker":
+        from .trackers import ByteTracker
+        return ByteTracker
+    elif name == "ReIDTracker":
+        from .trackers import ReIDTracker
+        return ReIDTracker
+    # Lazy load heavy processors
+    elif name == "PoseEstimator":
+        from .processors import PoseEstimator
+        return PoseEstimator
+    elif name == "CLIPExtractor":
+        from .processors import CLIPExtractor
+        return CLIPExtractor
+    elif name == "ReIDExtractor":
+        from .processors import ReIDExtractor
+        return ReIDExtractor
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "BaseModule",
@@ -43,6 +73,7 @@ __all__ = [
     # Implementations
     "YOLODetector",
     "DETRDetector",
+    "RFDETRDetector",
     "IOUTracker",
     "ByteTracker",
 ]

@@ -17,7 +17,7 @@ except ImportError:
 
 from .feature_extractor import FeatureExtractor
 from ...utils.logger import get_logger
-from ...utils.config import Config
+from ...utils.config import Config, ModelCache
 
 logger = get_logger(__name__)
 
@@ -48,6 +48,7 @@ class ReIDExtractor(FeatureExtractor):
         self.input_size = input_size
         self.model_path = model_path
         self.use_pretrained = use_pretrained
+        self._cached_model_key: Optional[str] = None
         
         self.transform = T.Compose([
             T.ToPILImage(),
@@ -64,20 +65,37 @@ class ReIDExtractor(FeatureExtractor):
                             "Install with: pip install 'visionframework[reid]'")
         
         try:
-            if self.model_path:
-                logger.info(f"Loading custom ReID model from {self.model_path}")
-                base_model = resnet50(weights=None)
-                state_dict = torch.load(self.model_path, map_location=self.device)
-                base_model.load_state_dict(state_dict)
-            else:
-                logger.info("Loading ReID feature extractor (ResNet50)")
-                weights = ResNet50_Weights.IMAGENET1K_V1 if self.use_pretrained else None
-                base_model = resnet50(weights=weights)
-            
-            # Remove classification head, keep feature extraction layers
-            self.model = torch.nn.Sequential(*list(base_model.children())[:-1])
-            self.model.to(self.device)
-            self.model.eval()
+            # Build cache key based on model_name, pretrained flag and model_path
+            key = f"reid:{self.model_name}:pretrained={self.use_pretrained}:path={self.model_path or 'none'}"
+
+            def loader():
+                # loader should create model on CPU to allow moving to target device per-extractor
+                if self.model_path:
+                    logger.info(f"Loading custom ReID model from {self.model_path}")
+                    base_model = resnet50(weights=None)
+                    state_dict = torch.load(self.model_path, map_location='cpu')
+                    base_model.load_state_dict(state_dict)
+                else:
+                    logger.info("Loading ReID feature extractor (ResNet50)")
+                    weights = ResNet50_Weights.IMAGENET1K_V1 if self.use_pretrained else None
+                    base_model = resnet50(weights=weights)
+
+                feat_model = torch.nn.Sequential(*list(base_model.children())[:-1])
+                feat_model.to('cpu')
+                feat_model.eval()
+                return feat_model
+
+            # Obtain (or load) cached feature model
+            self.model = ModelCache.get_model(key, loader)
+            self._cached_model_key = key
+
+            # Move to desired device for this extractor instance
+            try:
+                if hasattr(self.model, 'to'):
+                    self.model.to(self.device)
+            except Exception:
+                logger.debug("Failed to move ReID model to device; continuing")
+
             self._initialized = True
             logger.info("ReID extractor initialized")
         except Exception as e:
@@ -152,7 +170,84 @@ class ReIDExtractor(FeatureExtractor):
         
         return features.cpu().numpy()
     
+    def process_batch(self, images: List[np.ndarray], 
+                     bboxes_list: List[List[Tuple[float, float, float, float]]]) -> List[np.ndarray]:
+        """
+        Extract features for multiple images with bounding boxes (batch processing).
+        
+        This method efficiently processes multiple images at once, which is more efficient
+        than processing them individually, especially when the number of bounding boxes varies.
+        
+        Args:
+            images: List of full frame images (BGR)
+            bboxes_list: List of bounding box lists, one list per image.
+                        Each list contains (x1, y1, x2, y2) tuples.
+        
+        Returns:
+            List[np.ndarray]: List of feature matrices, one per image.
+                            Each matrix has shape (N, 2048) where N is the number of boxes in that image.
+        
+        Example:
+            ```python
+            reid = ReIDExtractor()
+            reid.initialize()
+            
+            images = [frame1, frame2, frame3]
+            bboxes_list = [
+                [(10, 20, 100, 200), (150, 50, 250, 300)],  # 2 boxes in frame1
+                [(5, 10, 95, 180)],                          # 1 box in frame2
+                [(20, 30, 120, 210), (200, 100, 300, 400)]  # 2 boxes in frame3
+            ]
+            features = reid.process_batch(images, bboxes_list)
+            # features[0].shape = (2, 2048)
+            # features[1].shape = (1, 2048)
+            # features[2].shape = (2, 2048)
+            ```
+        """
+        if not self.is_initialized():
+            self.initialize()
+        
+        batch_features = []
+        
+        # Process each image individually
+        for image, bboxes in zip(images, bboxes_list):
+            if not bboxes:
+                batch_features.append(np.empty((0, 2048)))
+            else:
+                features = self.process(image, bboxes)
+                batch_features.append(features)
+        
+        return batch_features
+    
     def _move_to_device(self, device: str) -> None:
         """Move model to device."""
         if self.model is not None:
-            self.model.to(device)
+            try:
+                self.model.to(device)
+            except Exception:
+                logger.debug("ReID model move to device failed")
+
+    def cleanup(self) -> None:
+        """Release or release-reference cached model."""
+        try:
+            if self._cached_model_key:
+                try:
+                    ModelCache.release_model(self._cached_model_key)
+                except Exception as e:
+                    logger.warning(f"Error releasing cached ReID model '{self._cached_model_key}': {e}")
+                self._cached_model_key = None
+                self.model = None
+            else:
+                if self.model is not None:
+                    try:
+                        if hasattr(self.model, 'to'):
+                            self.model.to('cpu')
+                    except Exception:
+                        pass
+                    try:
+                        del self.model
+                    except Exception:
+                        self.model = None
+                    self.model = None
+        finally:
+            self._initialized = False

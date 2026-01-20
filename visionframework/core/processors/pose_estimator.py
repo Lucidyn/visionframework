@@ -152,6 +152,101 @@ class PoseEstimator(FeatureExtractor):
         """Alias for process method."""
         return self.process(image)
     
+    def extract_batch(self, images: List[np.ndarray]) -> List[List[Pose]]:
+        """
+        Extract poses from multiple images (batch processing).
+        
+        Args:
+            images: List of input images (BGR)
+        
+        Returns:
+            List of pose lists, one per image
+        """
+        return self.process_batch(images)
+    
+    def process_batch(self, images: List[np.ndarray]) -> List[List[Pose]]:
+        """
+        Estimate poses in multiple images using batch processing.
+        
+        This method is more efficient than processing images individually
+        when using a GPU, as it batches the inference.
+        
+        Args:
+            images: List of input images in BGR format (H, W, 3)
+        
+        Returns:
+            List[List[Pose]]: Detected poses for each image
+        
+        Example:
+            ```python
+            estimator = PoseEstimator()
+            estimator.initialize()
+            
+            images = [frame1, frame2, frame3]
+            poses_list = estimator.process_batch(images)
+            
+            for idx, poses in enumerate(poses_list):
+                print(f"Frame {idx}: {len(poses)} detected poses")
+            ```
+        """
+        if not self.is_initialized():
+            self.initialize()
+        
+        batch_poses: List[List[Pose]] = []
+        
+        try:
+            # Run YOLO Pose inference on batch
+            results = self.model(
+                images,
+                conf=self.conf_threshold,
+                verbose=False
+            )
+            
+            # Process results for each image
+            for result in results:
+                poses: List[Pose] = []
+                
+                if result.keypoints is not None:
+                    boxes = result.boxes
+                    keypoints_data = result.keypoints
+                    
+                    for i in range(len(boxes)):
+                        # Extract bounding box
+                        box = boxes.xyxy[i].cpu().numpy()
+                        conf = float(boxes.conf[i].cpu().numpy())
+                        
+                        # Extract keypoints [num_keypoints, 3] = (x, y, confidence)
+                        keypoints = keypoints_data.data[i].cpu().numpy()
+                        
+                        keypoint_list: List[KeyPoint] = []
+                        for j, kp in enumerate(keypoints):
+                            if len(kp) >= 3 and kp[2] >= self.keypoint_threshold:
+                                kp_name = (self.keypoint_names[j] 
+                                          if j < len(self.keypoint_names) 
+                                          else f"keypoint_{j}")
+                                keypoint = KeyPoint(
+                                    x=float(kp[0]),
+                                    y=float(kp[1]),
+                                    confidence=float(kp[2]),
+                                    name=kp_name
+                                )
+                                keypoint_list.append(keypoint)
+                        
+                        # Create Pose object
+                        pose = Pose(
+                            bbox=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
+                            confidence=conf,
+                            keypoints=keypoint_list
+                        )
+                        poses.append(pose)
+                
+                batch_poses.append(poses)
+            
+            return batch_poses
+        except Exception as e:
+            logger.error(f"Error during pose batch processing: {e}", exc_info=True)
+            return [[] for _ in images]
+    
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the loaded model."""
         if not self.is_initialized():

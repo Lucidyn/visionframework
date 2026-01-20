@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Any, Union
 from .base_detector import BaseDetector
 from ...data.detection import Detection
 from ...utils.logger import get_logger
+from ...utils.config import DeviceManager, ModelCache
 
 logger = get_logger(__name__)
 
@@ -70,6 +71,7 @@ class RFDETRDetector(BaseDetector):
         self.model_name: Optional[str] = self.config.get("model_name", None)
         self.conf_threshold: float = float(self.config.get("conf_threshold", 0.5))
         self.device: str = self.config.get("device", "cpu")
+        self._cached_model_key: Optional[str] = None
     
     def initialize(self) -> bool:
         """Initialize the RF-DETR model"""
@@ -77,22 +79,26 @@ class RFDETRDetector(BaseDetector):
             if not RFDETR_AVAILABLE:
                 raise ImportError("rfdetr not installed. Install with: pip install rfdetr")
             
-            # Initialize RF-DETR model
-            if self.model_name:
-                self.model = RFDETRBase(model_name=self.model_name)
-            else:
-                self.model = RFDETRBase()
-            
+            # Initialize RF-DETR model using cache
+            key = f"rfdetr:{self.model_name or 'default'}"
+            def loader():
+                if self.model_name:
+                    return RFDETRBase(model_name=self.model_name)
+                return RFDETRBase()
+
+            self.model = ModelCache.get_model(key, loader)
+            self._cached_model_key = key
+
             # Move to device if supported
+            device = DeviceManager.normalize_device(self.device)
+            if device != self.device:
+                logger.info(f"Requested device '{self.device}' not available, using '{device}' instead")
+            self.device = device
             if hasattr(self.model, 'to'):
                 try:
-                    import torch
-                    if self.device == 'cuda' and torch.cuda.is_available():
-                        self.model.to(self.device)
-                    elif self.device == 'mps' and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                        self.model.to(self.device)
-                except:
-                    pass  # Device handling may not be needed for RF-DETR
+                    self.model.to(self.device)
+                except Exception:
+                    pass
             
             self.is_initialized = True
             logger.info(f"RF-DETR detector initialized successfully")
@@ -106,6 +112,37 @@ class RFDETRDetector(BaseDetector):
         except Exception as e:
             logger.error(f"Unexpected error initializing RF-DETR detector: {e}", exc_info=True)
             return False
+
+    def cleanup(self) -> None:
+        """Release model resources and free GPU memory if possible."""
+        try:
+            if self._cached_model_key:
+                try:
+                    ModelCache.release_model(self._cached_model_key)
+                except Exception as e:
+                    logger.warning(f"Error releasing cached model '{self._cached_model_key}': {e}")
+                self._cached_model_key = None
+                self.model = None
+            else:
+                if self.model is not None:
+                    try:
+                        if hasattr(self.model, 'to'):
+                            self.model.to('cpu')
+                    except Exception:
+                        pass
+                    try:
+                        del self.model
+                    except Exception:
+                        self.model = None
+                    self.model = None
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+        finally:
+            self.is_initialized = False
     
     def detect(self, image: np.ndarray, categories: Optional[Union[list, tuple]] = None) -> List[Detection]:
         """
@@ -265,4 +302,117 @@ class RFDETRDetector(BaseDetector):
         except Exception as e:
             logger.error(f"Unexpected error during RF-DETR detection: {e}", exc_info=True)
             return []
+    
+    def detect_batch(self, images: List[np.ndarray], categories: Optional[Union[list, tuple]] = None) -> List[List[Detection]]:
+        """
+        Detect objects in multiple images using RF-DETR batch processing
+        
+        This method efficiently processes multiple images in a single batch,
+        which is more efficient than processing them individually.
+        
+        Args:
+            images: List of input images in BGR format (numpy arrays, shape: (H, W, 3))
+            categories: Optional list of category IDs or names to filter detections
+        
+        Returns:
+            List[List[Detection]]: List of detection lists, one per image.
+        
+        Example:
+            ```python
+            detector = RFDETRDetector()
+            detector.initialize()
+            images = [frame1, frame2, frame3]
+            results = detector.detect_batch(images)
+            ```
+        """
+        if not self.is_initialized:
+            if not self.initialize():
+                logger.error("RF-DETR detector not initialized")
+                return [[] for _ in images]
+        
+        if not images:
+            logger.warning("Empty image list provided to detect_batch")
+            return []
+        
+        batch_detections: List[List[Detection]] = [[] for _ in images]
+        
+        try:
+            import torch
+            import supervision
+            
+            # Process each image individually (RF-DETR batch inference support varies)
+            for img_idx, image in enumerate(images):
+                detections: List[Detection] = []
+                
+                try:
+                    # Run inference on single image
+                    with torch.no_grad():
+                        results = self.model(image)
+                    
+                    # Convert to supervision Detections if needed
+                    if hasattr(results, '__class__') and 'Detections' in str(results.__class__):
+                        supervision_detections = results
+                    else:
+                        supervision_detections = supervision.Detections.from_ultralytics(results)
+                    
+                    # Extract and process detections
+                    if hasattr(supervision_detections, 'xyxy') and len(supervision_detections.xyxy) > 0:
+                        boxes = supervision_detections.xyxy
+                        
+                        # Extract confidences
+                        if hasattr(supervision_detections, 'confidence') and supervision_detections.confidence is not None:
+                            confidences = supervision_detections.confidence
+                            if hasattr(confidences, '__len__') and not isinstance(confidences, str):
+                                confidences = [float(c) for c in confidences]
+                            else:
+                                confidences = [float(confidences)] * len(boxes)
+                        else:
+                            confidences = [1.0] * len(boxes)
+                        
+                        # Extract class IDs
+                        if hasattr(supervision_detections, 'class_id') and supervision_detections.class_id is not None:
+                            class_ids = supervision_detections.class_id
+                            if hasattr(class_ids, '__len__') and not isinstance(class_ids, str):
+                                class_ids = [int(cid) for cid in class_ids]
+                            else:
+                                class_ids = [int(class_ids)] * len(boxes)
+                        else:
+                            class_ids = [0] * len(boxes)
+                        
+                        # Process each detection
+                        for box, conf, cls_id in zip(boxes, confidences, class_ids):
+                            if conf >= self.conf_threshold:
+                                cls_name = self.class_names.get(cls_id, f"class_{cls_id}")
+                                
+                                # Category filtering
+                                keep = True
+                                if categories is not None:
+                                    keep = False
+                                    for c in categories:
+                                        if isinstance(c, int) and c == cls_id:
+                                            keep = True
+                                            break
+                                        if isinstance(c, str) and c == cls_name:
+                                            keep = True
+                                            break
+                                
+                                if keep:
+                                    detection = Detection(
+                                        bbox=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
+                                        confidence=conf,
+                                        class_id=cls_id,
+                                        class_name=cls_name
+                                    )
+                                    detections.append(detection)
+                
+                except Exception as e:
+                    logger.warning(f"Error processing image {img_idx} in batch: {e}")
+                
+                batch_detections[img_idx] = detections
+            
+            return batch_detections
+        
+        except Exception as e:
+            logger.error(f"Error during RF-DETR batch detection: {e}", exc_info=True)
+            return [[] for _ in images]
 

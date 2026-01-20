@@ -12,6 +12,22 @@ not available the module will fail on `initialize()` with a clear message.
 from typing import List, Optional, Any
 import numpy as np
 
+# Try relative import first (normal package import), then fallback for direct file imports
+try:
+    from ..utils.config import ModelCache, DeviceManager
+    from ..utils.logger import get_logger
+except ImportError:
+    # Fallback for direct file imports or edge cases
+    import sys
+    import os
+    parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+    from visionframework.utils.config import ModelCache, DeviceManager
+    from visionframework.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class CLIPExtractor:
     """Wrapper around a CLIP model (HuggingFace transformers API)
@@ -38,15 +54,49 @@ class CLIPExtractor:
         try:
             import torch
             from transformers import CLIPProcessor, CLIPModel
+            proc_key = f"clip_proc:{self.model_name}"
+            mdl_key = f"clip_model:{self.model_name}"
 
-            self.processor = CLIPProcessor.from_pretrained(self.model_name)
-            self.model = CLIPModel.from_pretrained(self.model_name)
-            self.model.to(self.device)
-            self.model.eval()
+            self.processor = ModelCache.get_model(proc_key, lambda: CLIPProcessor.from_pretrained(self.model_name))
+            self.model = ModelCache.get_model(mdl_key, lambda: CLIPModel.from_pretrained(self.model_name))
+
+            device = DeviceManager.normalize_device(self.device)
+            if device != self.device:
+                logger.info(f"Requested device '{self.device}' not available, using '{device}' instead")
+            self.device = device
+            try:
+                if hasattr(self.model, 'to'):
+                    self.model.to(self.device)
+            except Exception:
+                logger.debug("Model.to(device) not supported or failed; continuing")
+            try:
+                if hasattr(self.model, 'eval'):
+                    self.model.eval()
+            except Exception:
+                pass
             self.is_initialized = True
             return True
         except Exception as e:
             raise RuntimeError(f"Failed to initialize CLIP model: {e}")
+
+    def cleanup(self) -> None:
+        try:
+            # Release cached resources if present
+            # ModelCache keys used when initialized
+            proc_key = f"clip_proc:{self.model_name}"
+            mdl_key = f"clip_model:{self.model_name}"
+            try:
+                ModelCache.release_model(mdl_key)
+            except Exception:
+                pass
+            try:
+                ModelCache.release_model(proc_key)
+            except Exception:
+                pass
+            self.model = None
+            self.processor = None
+        finally:
+            self.is_initialized = False
 
     def encode_image(self, image: Any) -> np.ndarray:
         """Encode a single image (numpy array BGR or RGB) or a list of images.

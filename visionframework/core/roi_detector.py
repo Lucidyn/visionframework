@@ -209,6 +209,39 @@ class ROIDetector(BaseModule):
         
         return self.filter_detections_by_roi(detections, roi_name)
     
+    def process_batch(
+        self,
+        detections_list: List[List[Detection]],
+        roi_name: Optional[str] = None
+    ) -> List[List[Detection]]:
+        """
+        Filter multiple detection lists by ROI.
+        
+        Args:
+            detections_list: List of detection lists (one per frame/image)
+            roi_name: Specific ROI name to filter (None for all)
+        
+        Returns:
+            List of filtered detection lists
+        
+        Example:
+            ```python
+            roi_detector = ROIDetector()
+            roi_detector.initialize()
+            
+            # Process detections from multiple frames
+            detections_batch = [detections_frame1, detections_frame2, detections_frame3]
+            filtered_batch = roi_detector.process_batch(detections_batch)
+            ```
+        """
+        if not self.is_initialized:
+            self.initialize()
+        
+        return [
+            self.filter_detections_by_roi(detections, roi_name)
+            for detections in detections_list
+        ]
+    
     def get_rois(self) -> List[ROI]:
         """Get all ROIs"""
         return self.rois.copy()

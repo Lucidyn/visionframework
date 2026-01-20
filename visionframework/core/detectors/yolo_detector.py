@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Any, Union
 from .base_detector import BaseDetector
 from ...data.detection import Detection
 from ...utils.logger import get_logger
+from ...utils.config import DeviceManager, ModelCache
 
 logger = get_logger(__name__)
 
@@ -81,6 +82,7 @@ class YOLODetector(BaseDetector):
         perf = self.config.get("performance", {})
         self.batch_inference: bool = bool(self.config.get("batch_inference", perf.get("batch_inference", False)))
         self.use_fp16: bool = bool(self.config.get("use_fp16", perf.get("use_fp16", False)))
+        self._cached_model_key: Optional[str] = None
     
     def initialize(self) -> bool:
         """Initialize the YOLO model"""
@@ -88,20 +90,33 @@ class YOLODetector(BaseDetector):
             if not YOLO_AVAILABLE:
                 raise ImportError("ultralytics not installed. Install with: pip install ultralytics")
             
-            # Load segmentation model if enabled
+            # Load segmentation model if enabled (use cache)
             if self.enable_segmentation and "seg" not in self.model_path.lower():
                 seg_path = self.model_path.replace(".pt", "-seg.pt")
                 try:
-                    self.model = YOLO(seg_path)
-                    logger.debug(f"Loaded segmentation model: {seg_path}")
+                    self.model = ModelCache.get_model(seg_path, lambda: YOLO(seg_path))
+                    self._cached_model_key = seg_path
+                    logger.debug(f"Loaded segmentation model from cache or disk: {seg_path}")
                 except (FileNotFoundError, RuntimeError) as e:
                     # Fallback to regular model
                     logger.warning(f"Failed to load segmentation model, falling back to regular model: {e}")
-                    self.model = YOLO(self.model_path)
+                    self.model = ModelCache.get_model(self.model_path, lambda: YOLO(self.model_path))
+                    self._cached_model_key = self.model_path
             else:
-                self.model = YOLO(self.model_path)
+                self.model = ModelCache.get_model(self.model_path, lambda: YOLO(self.model_path))
+                self._cached_model_key = self.model_path
             
-            self.model.to(self.device)
+            # Normalize and validate device choice
+            device = DeviceManager.normalize_device(self.device)
+            if device != self.device:
+                logger.info(f"Requested device '{self.device}' not available, using '{device}' instead")
+            self.device = device
+            # Try moving model to device if supported by model wrapper
+            try:
+                if hasattr(self.model, 'to'):
+                    self.model.to(self.device)
+            except Exception:
+                logger.debug("Model.to(device) not supported or failed; continuing")
             self.is_initialized = True
             logger.info(f"YOLO detector initialized successfully with model: {self.model_path}")
             return True
@@ -241,4 +256,150 @@ class YOLODetector(BaseDetector):
         except Exception as e:
             logger.error(f"Unexpected error during YOLO detection: {e}", exc_info=True)
             return []
+
+    def detect_batch(self, images: List[np.ndarray], categories: Optional[list] = None) -> List[List[Detection]]:
+        """
+        Process multiple images in batch mode using YOLO
+        
+        This method efficiently processes multiple images in a single batch when possible,
+        which is more efficient than processing them individually. The batch is passed to YOLO
+        which returns results for all images at once.
+        
+        Args:
+            images: List of input images in BGR format (numpy arrays, shape: (H, W, 3))
+            categories: Optional list of category IDs or names to filter detections
+        
+        Returns:
+            List[List[Detection]]: List of detection lists, one per image.
+                                  Each inner list contains Detection objects for that image.
+        
+        Example:
+            ```python
+            detector = YOLODetector({
+                "model_path": "yolov8n.pt",
+                "batch_inference": True,
+                "conf_threshold": 0.5
+            })
+            detector.initialize()
+            
+            images = [frame1, frame2, frame3]
+            batch_results = detector.detect_batch(images)
+            
+            for idx, detections in enumerate(batch_results):
+                print(f"Frame {idx}: {len(detections)} detections")
+            ```
+        """
+        if not self.is_initialized:
+            if not self.initialize():
+                logger.error("YOLO detector not initialized")
+                return [[] for _ in images]
+        
+        if not images:
+            logger.warning("Empty image list provided to detect_batch")
+            return []
+        
+        batch_detections: List[List[Detection]] = [[] for _ in images]
+        
+        try:
+            # Prepare context for inference
+            try:
+                import torch
+                ctx = torch.no_grad()
+                if self.use_fp16 and self.device == 'cuda':
+                    amp = torch.cuda.amp.autocast()
+                    ctx = amp
+            except Exception:
+                ctx = None
+            
+            # Run YOLO inference on batch
+            if ctx is not None:
+                with ctx:
+                    results = self.model(images, conf=self.conf_threshold, iou=self.iou_threshold, verbose=False)
+            else:
+                results = self.model(images, conf=self.conf_threshold, iou=self.iou_threshold, verbose=False)
+            
+            # Process results for each image in the batch
+            for img_idx, result in enumerate(results):
+                detections: List[Detection] = []
+                boxes = result.boxes
+                masks = result.masks if hasattr(result, 'masks') and result.masks is not None else None
+                
+                if boxes is not None:
+                    for i in range(len(boxes)):
+                        # Extract bounding box
+                        box = boxes.xyxy[i].cpu().numpy()
+                        conf = float(boxes.conf[i].cpu().numpy())
+                        cls_id = int(boxes.cls[i].cpu().numpy())
+                        cls_name = result.names[cls_id] if hasattr(result, 'names') else str(cls_id)
+                        
+                        # Get segmentation mask if available
+                        mask = None
+                        if masks is not None and i < len(masks.data):
+                            mask_data = masks.data[i].cpu().numpy()
+                            # Resize mask to match source image dimensions
+                            if img_idx < len(images):
+                                h, w = images[img_idx].shape[:2]
+                                if mask_data.shape != (h, w):
+                                    mask_data = cv2.resize(mask_data.astype(np.float32), (w, h))
+                                mask = (mask_data > 0.5).astype(np.uint8) * 255
+                        
+                        # Category filtering support
+                        keep = True
+                        if categories is not None:
+                            keep = False
+                            for c in categories:
+                                if isinstance(c, int) and c == cls_id:
+                                    keep = True
+                                    break
+                                if isinstance(c, str) and c == cls_name:
+                                    keep = True
+                                    break
+                        
+                        if keep:
+                            detection = Detection(
+                                bbox=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
+                                confidence=conf,
+                                class_id=cls_id,
+                                class_name=cls_name,
+                                mask=mask
+                            )
+                            detections.append(detection)
+                
+                batch_detections[img_idx] = detections
+            
+            return batch_detections
+        except Exception as e:
+            logger.error(f"Error during batch detection: {e}", exc_info=True)
+            return [[] for _ in images]
+    
+    def cleanup(self) -> None:
+        """Release model resources and free GPU memory if possible."""
+        try:
+            if self._cached_model_key:
+                try:
+                    ModelCache.release_model(self._cached_model_key)
+                except Exception as e:
+                    logger.warning(f"Error releasing cached model '{self._cached_model_key}': {e}")
+                self._cached_model_key = None
+                self.model = None
+            else:
+                if self.model is not None:
+                    try:
+                        if hasattr(self.model, 'to'):
+                            self.model.to('cpu')
+                    except Exception:
+                        pass
+                    try:
+                        del self.model
+                    except Exception:
+                        self.model = None
+                    self.model = None
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+        finally:
+            self.is_initialized = False
 

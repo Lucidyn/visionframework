@@ -263,6 +263,110 @@ class VisionPipeline(BaseModule):
             logger.error(f"Error during pipeline processing: {e}", exc_info=True)
             return {"detections": [], "tracks": []}
     
+    def process_batch(self, images: List[np.ndarray]) -> List[Dict[str, Any]]:
+        """
+        Process multiple images in a batch through detection and tracking pipeline
+        
+        This method processes multiple images efficiently by batching them through
+        the detector when possible (if the detector supports batch inference).
+        For tracking, each frame is processed sequentially to maintain temporal coherence.
+        
+        Args:
+            images: List of input images in BGR format (OpenCV standard).
+                   Each image should be numpy array with shape (H, W, 3) and uint8 data type.
+        
+        Returns:
+            List[Dict[str, Any]]: List of result dictionaries, one per image.
+                Each dictionary contains:
+                - "detections": List[Detection] - Detected objects in that frame
+                - "tracks": List[Track] - Tracked objects in that frame (if tracking enabled)
+                - "frame_idx": int - Index of the frame in the input list
+        
+        Example:
+            ```python
+            pipeline = VisionPipeline({
+                "enable_tracking": True,
+                "detector_config": {
+                    "model_path": "yolov8n.pt",
+                    "batch_inference": True  # Enable batch inference for better throughput
+                }
+            })
+            pipeline.initialize()
+            
+            # Process multiple frames at once
+            frames = [frame1, frame2, frame3, ...]
+            results = pipeline.process_batch(frames)
+            
+            for idx, result in enumerate(results):
+                print(f"Frame {idx}: {len(result['detections'])} detections, {len(result['tracks'])} tracks")
+            ```
+        """
+        if not self.is_initialized:
+            if not self.initialize():
+                logger.error("Pipeline not initialized and auto-initialization failed")
+                return [{"detections": [], "tracks": [], "frame_idx": i} for i in range(len(images))]
+        
+        if self.detector is None:
+            logger.error("Detector is None, cannot process")
+            return [{"detections": [], "tracks": [], "frame_idx": i} for i in range(len(images))]
+        
+        if not images:
+            logger.warning("Empty image list provided to process_batch")
+            return []
+        
+        results: List[Dict[str, Any]] = []
+        
+        try:
+            # Check if detector supports batch processing via batch_inference flag
+            detector_impl = self.detector.detector_impl
+            use_batch = getattr(detector_impl, 'batch_inference', False) if detector_impl else False
+            
+            if use_batch and len(images) > 1:
+                # Use batch inference if supported and multiple images
+                logger.debug(f"Using batch inference for {len(images)} images")
+                all_detections = self.detector.process(images)
+                
+                # If detector returns detections for all images
+                if isinstance(all_detections, list) and len(all_detections) > 0:
+                    # Check if first element is a list (batch) or Detection object
+                    if isinstance(all_detections[0], list):
+                        # Batch results - one list per image
+                        detections_per_image = all_detections
+                    else:
+                        # Single image result or flat list - wrap in list
+                        detections_per_image = [[det] if not isinstance(det, list) else det 
+                                               for det in all_detections[:len(images)]]
+                else:
+                    detections_per_image = [[] for _ in range(len(images))]
+            else:
+                # Process each image individually
+                logger.debug(f"Processing {len(images)} images individually")
+                detections_per_image = []
+                for image in images:
+                    dets = self.detector.process(image)
+                    detections_per_image.append(dets)
+            
+            # Process tracking for each frame
+            for frame_idx, detections in enumerate(detections_per_image):
+                frame_result: Dict[str, Any] = {
+                    "detections": detections,
+                    "frame_idx": frame_idx
+                }
+                
+                # Run tracking if enabled
+                if self.enable_tracking and self.tracker is not None:
+                    tracks = self.tracker.process(detections, image=images[frame_idx])
+                    frame_result["tracks"] = tracks
+                else:
+                    frame_result["tracks"] = []
+                
+                results.append(frame_result)
+            
+            return results
+        except Exception as e:
+            logger.error(f"Error during batch pipeline processing: {e}", exc_info=True)
+            return [{"detections": [], "tracks": [], "frame_idx": i} for i in range(len(images))]
+    
     def process_frame(self, image: np.ndarray) -> Dict[str, Any]:
         """
         Alias for process method

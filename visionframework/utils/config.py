@@ -175,3 +175,121 @@ class Config:
             "font_scale": 0.5
         }
 
+
+class DeviceManager:
+    """Utility to validate and normalize device strings.
+
+    Provides a centralized way to interpret device strings like 'cpu', 'cuda',
+    and 'mps'. It will fall back to 'cpu' if the requested accelerator is
+    unavailable.
+    """
+
+    @staticmethod
+    def is_cuda_available() -> bool:
+        try:
+            import torch
+            return torch.cuda.is_available()
+        except Exception:
+            return False
+
+    @staticmethod
+    def is_mps_available() -> bool:
+        try:
+            import torch
+            return hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+        except Exception:
+            return False
+
+    @staticmethod
+    def normalize_device(device: Optional[str]) -> str:
+        """Normalize device string to one of 'cpu', 'cuda', 'mps'.
+
+        If the requested device is unavailable, falls back to 'cpu'.
+        """
+        if not device:
+            return "cpu"
+
+        d = device.lower()
+        if d.startswith("cuda") or d == "cuda":
+            return "cuda" if DeviceManager.is_cuda_available() else "cpu"
+        if d == "mps":
+            return "mps" if DeviceManager.is_mps_available() else "cpu"
+        return "cpu" if d == "cpu" else d
+
+class ModelCache:
+    """Simple in-memory model cache with reference counting.
+
+    Stores loaded model instances keyed by a string (typically model path).
+    Use `get_model(key, loader)` to obtain a cached model (loader called on first load),
+    and `release_model(key)` to decrement reference count and free the model when unused.
+    """
+
+    _cache = {}
+    _lock = None
+
+    try:
+        import threading
+        _lock = threading.Lock()
+    except Exception:
+        _lock = None
+
+    @classmethod
+    def get_model(cls, key: str, loader):
+        """Return cached model for `key`. `loader` is a callable to create the model if missing."""
+        if cls._lock:
+            cls._lock.acquire()
+        try:
+            entry = cls._cache.get(key)
+            if entry is not None:
+                model, ref = entry
+                cls._cache[key] = (model, ref + 1)
+                return model
+
+            # load model
+            model = loader()
+            cls._cache[key] = (model, 1)
+            return model
+        finally:
+            if cls._lock:
+                cls._lock.release()
+
+    @classmethod
+    def release_model(cls, key: str):
+        """Release a reference to the cached model and free if refcount reaches zero."""
+        if cls._lock:
+            cls._lock.acquire()
+        try:
+            entry = cls._cache.get(key)
+            if not entry:
+                return
+            model, ref = entry
+            ref -= 1
+            if ref <= 0:
+                # Attempt graceful cleanup
+                try:
+                    if hasattr(model, 'to'):
+                        try:
+                            model.to('cpu')
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    del model
+                except Exception:
+                    pass
+                cls._cache.pop(key, None)
+                # Try to free CUDA cache
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except Exception:
+                    pass
+            else:
+                cls._cache[key] = (model, ref)
+        finally:
+            if cls._lock:
+                cls._lock.release()
+
+

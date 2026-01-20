@@ -1,8 +1,7 @@
 """
-Utility modules for vision framework
+Utility modules for vision framework with lazy loading for heavy dependencies
 """
 
-from .visualization import Visualizer
 from .config import Config
 from .image_utils import ImageUtils
 from .export import ResultExporter
@@ -10,7 +9,21 @@ from .performance import PerformanceMonitor, Timer
 from .video_utils import VideoProcessor, VideoWriter, process_video
 from .logger import setup_logger, get_logger
 from .trajectory_analyzer import TrajectoryAnalyzer
-from .evaluation import DetectionEvaluator, TrackingEvaluator
+
+
+def __getattr__(name):
+    """Lazy load visualization and evaluation modules to avoid heavy imports at module load time"""
+    if name == "Visualizer":
+        from .visualization import Visualizer
+        return Visualizer
+    elif name == "DetectionEvaluator":
+        from .evaluation import DetectionEvaluator
+        return DetectionEvaluator
+    elif name == "TrackingEvaluator":
+        from .evaluation import TrackingEvaluator
+        return TrackingEvaluator
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "Visualizer",

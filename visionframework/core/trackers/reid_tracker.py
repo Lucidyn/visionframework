@@ -286,3 +286,14 @@ class ReIDTracker(BaseTracker):
         self.lost_tracks = [t for t in self.lost_tracks if self.frame_id - t.frame_id < self.max_age]
         
         return self.tracked_tracks
+
+    def cleanup(self) -> None:
+        """Cleanup tracker resources, including ReID extractor."""
+        try:
+            if self.reid_extractor is not None and hasattr(self.reid_extractor, 'cleanup'):
+                try:
+                    self.reid_extractor.cleanup()
+                except Exception as e:
+                    logger.warning(f"Error cleaning up ReID extractor: {e}")
+        finally:
+            self.is_initialized = False

@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Any, Union
 from .base_detector import BaseDetector
 from ...data.detection import Detection
 from ...utils.logger import get_logger
+from ...utils.config import DeviceManager, ModelCache
 
 logger = get_logger(__name__)
 
@@ -77,6 +78,8 @@ class DETRDetector(BaseDetector):
         perf = self.config.get("performance", {})
         self.batch_inference: bool = bool(self.config.get("batch_inference", perf.get("batch_inference", False)))
         self.use_fp16: bool = bool(self.config.get("use_fp16", perf.get("use_fp16", False)))
+        self._cached_model_key: Optional[str] = None
+        self._cached_processor_key: Optional[str] = None
     
     def initialize(self) -> bool:
         """Initialize the DETR model"""
@@ -85,10 +88,29 @@ class DETRDetector(BaseDetector):
                 raise ImportError("transformers and torch not installed. Install with: pip install transformers torch")
             
             import torch
-            self.processor = DetrImageProcessor.from_pretrained(self.model_name)
-            self.model = DetrForObjectDetection.from_pretrained(self.model_name)
-            self.model.to(self.device)
-            self.model.eval()
+            # Use cache for processor and model
+            proc_key = f"detr_proc:{self.model_name}"
+            mdl_key = f"detr_model:{self.model_name}"
+            self.processor = ModelCache.get_model(proc_key, lambda: DetrImageProcessor.from_pretrained(self.model_name))
+            self._cached_processor_key = proc_key
+            self.model = ModelCache.get_model(mdl_key, lambda: DetrForObjectDetection.from_pretrained(self.model_name))
+            self._cached_model_key = mdl_key
+
+            # Normalize device and move model if supported
+            device = DeviceManager.normalize_device(self.device)
+            if device != self.device:
+                logger.info(f"Requested device '{self.device}' not available, using '{device}' instead")
+            self.device = device
+            try:
+                if hasattr(self.model, 'to'):
+                    self.model.to(self.device)
+            except Exception:
+                logger.debug("Model.to(device) not supported or failed; continuing")
+            try:
+                if hasattr(self.model, 'eval'):
+                    self.model.eval()
+            except Exception:
+                pass
             self.is_initialized = True
             logger.info(f"DETR detector initialized successfully with model: {self.model_name}")
             return True
@@ -101,6 +123,53 @@ class DETRDetector(BaseDetector):
         except Exception as e:
             logger.error(f"Unexpected error initializing DETR detector: {e}", exc_info=True)
             return False
+
+    def cleanup(self) -> None:
+        """Release model and processor resources and free GPU memory if possible."""
+        try:
+            if self._cached_model_key:
+                try:
+                    ModelCache.release_model(self._cached_model_key)
+                except Exception as e:
+                    logger.warning(f"Error releasing cached model '{self._cached_model_key}': {e}")
+                self._cached_model_key = None
+                self.model = None
+            else:
+                if self.model is not None:
+                    try:
+                        if hasattr(self.model, 'to'):
+                            self.model.to('cpu')
+                    except Exception:
+                        pass
+                    try:
+                        del self.model
+                    except Exception:
+                        self.model = None
+                    self.model = None
+
+            if self._cached_processor_key:
+                try:
+                    ModelCache.release_model(self._cached_processor_key)
+                except Exception as e:
+                    logger.warning(f"Error releasing cached processor '{self._cached_processor_key}': {e}")
+                self._cached_processor_key = None
+                self.processor = None
+            else:
+                if self.processor is not None:
+                    try:
+                        del self.processor
+                    except Exception:
+                        self.processor = None
+                    self.processor = None
+
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+        finally:
+            self.is_initialized = False
     
     def detect(self, image: np.ndarray, categories: Optional[Union[list, tuple]] = None) -> List[Detection]:
         """
@@ -252,4 +321,114 @@ class DETRDetector(BaseDetector):
         except Exception as e:
             logger.error(f"Unexpected error during DETR detection: {e}", exc_info=True)
             return []
+    
+    def detect_batch(self, images: List[np.ndarray], categories: Optional[Union[list, tuple]] = None) -> List[List[Detection]]:
+        """
+        Detect objects in multiple images using DETR batch processing
+        
+        This method efficiently processes multiple images in a single batch,
+        which is more efficient than processing them individually.
+        
+        Args:
+            images: List of input images in BGR format (numpy arrays, shape: (H, W, 3))
+            categories: Optional list of category IDs or names to filter detections
+        
+        Returns:
+            List[List[Detection]]: List of detection lists, one per image.
+        
+        Example:
+            ```python
+            detector = DETRDetector()
+            detector.initialize()
+            images = [frame1, frame2, frame3]
+            results = detector.detect_batch(images)
+            ```
+        """
+        if not self.is_initialized:
+            if not self.initialize():
+                logger.error("DETR detector not initialized")
+                return [[] for _ in images]
+        
+        if not images:
+            logger.warning("Empty image list provided to detect_batch")
+            return []
+        
+        batch_detections: List[List[Detection]] = [[] for _ in images]
+        
+        try:
+            import torch
+            from PIL import Image
+            
+            # Prepare PIL images and convert
+            pil_images = []
+            for img in images:
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                pil = Image.fromarray(img_rgb)
+                pil_images.append(pil)
+            
+            # Process batch through model
+            inputs = self.processor(images=pil_images, return_tensors="pt")
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            
+            # Run inference
+            try:
+                import torch
+                if self.use_fp16 and self.device == 'cuda':
+                    amp_ctx = torch.cuda.amp.autocast()
+                else:
+                    amp_ctx = torch.no_grad()
+            except Exception:
+                amp_ctx = torch.no_grad()
+            
+            with amp_ctx:
+                outputs = self.model(**inputs)
+            
+            # Process results for each image
+            target_sizes = torch.tensor([[img.shape[0], img.shape[1]] for img in images])
+            results = self.processor.post_process_object_detection(
+                outputs, target_sizes=target_sizes, threshold=self.conf_threshold
+            )
+            
+            # Extract detections for each image
+            for img_idx, result in enumerate(results):
+                detections: List[Detection] = []
+                
+                if "scores" in result and len(result["scores"]) > 0:
+                    scores = result["scores"].cpu().numpy()
+                    labels = result["labels"].cpu().numpy()
+                    boxes = result["boxes"].cpu().numpy()
+                    
+                    for box, label, score in zip(boxes, labels, scores):
+                        if score >= self.conf_threshold:
+                            cls_id = int(label)
+                            cls_name = self.model.config.id2label.get(cls_id, f"class_{cls_id}")
+                            
+                            # Category filtering
+                            keep = True
+                            if categories is not None:
+                                keep = False
+                                for c in categories:
+                                    if isinstance(c, int) and c == cls_id:
+                                        keep = True
+                                        break
+                                    if isinstance(c, str) and c == cls_name:
+                                        keep = True
+                                        break
+                            
+                            if keep:
+                                detection = Detection(
+                                    bbox=(float(box[0]), float(box[1]), float(box[2]), float(box[3])),
+                                    confidence=float(score),
+                                    class_id=cls_id,
+                                    class_name=cls_name
+                                )
+                                detections.append(detection)
+                
+                batch_detections[img_idx] = detections
+            
+            return batch_detections
+        
+        except Exception as e:
+            logger.error(f"Error during DETR batch detection: {e}", exc_info=True)
+            return [[] for _ in images]
 
