@@ -81,4 +81,53 @@ class BaseDetector(BaseModule, ABC):
             List[Detection]: List of detected objects
         """
         return self.detect(image, categories=categories)
+    
+    def detect_batch(self, images: List[np.ndarray], categories: Optional[Union[list, tuple]] = None) -> List[List[Detection]]:
+        """
+        Detect objects in multiple images in batch mode
+        
+        This method processes multiple images in a batch, which is more efficient
+        than processing them individually. Subclasses can override this method
+        to implement optimized batch processing.
+        
+        Args:
+            images: List of input images in BGR format (numpy arrays, shape: (H, W, 3))
+            categories: Optional list/tuple of class ids or class names to keep.
+                   If None, all detected classes are returned.
+        
+        Returns:
+            List[List[Detection]]: List of detection lists, one per image.
+                                  Each inner list contains Detection objects for that image.
+        
+        Raises:
+            RuntimeError: If detector is not initialized
+            ValueError: If images are invalid (wrong format, shape, or data type)
+        """
+        if not images:
+            return []
+        
+        # Default implementation: process each image individually
+        results = []
+        for image in images:
+            detections = self.detect(image, categories=categories)
+            results.append(detections)
+        return results
+    
+    def process_batch(self, images: List[np.ndarray], categories: Optional[Union[list, tuple]] = None) -> List[List[Detection]]:
+        """
+        Alias for detect_batch method
+        
+        This method provides an alternative name for detect_batch() to maintain
+        consistency with the BaseModule interface.
+        
+        Args:
+            images: List of input images in BGR format (numpy arrays, shape: (H, W, 3))
+            categories: Optional list/tuple of class ids or class names to keep.
+                   If None, all detected classes are returned.
+        
+        Returns:
+            List[List[Detection]]: List of detection lists, one per image.
+                                  Each inner list contains Detection objects for that image.
+        """
+        return self.detect_batch(images, categories=categories)
 

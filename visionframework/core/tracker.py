@@ -161,7 +161,30 @@ class Tracker(BaseModule):
     
     def initialize(self) -> bool:
         """
-        Initialize the tracker
+        Initialize the tracker algorithm
+
+        This method initializes the underlying tracker implementation based on
+        the configured tracker_type. It performs algorithm-specific setup steps
+        and prepares the tracker for tracking objects.
+
+        Returns:
+            bool: True if initialization successful, False otherwise.
+                  On failure, errors are logged with detailed information.
+
+        Note:
+            Initialization may involve:
+            - Loading model files (for ReID tracker)
+            - Setting up algorithm-specific parameters
+            - Initializing internal state variables
+
+        Example:
+            ```python
+            tracker = Tracker({"tracker_type": "iou"})
+            if tracker.initialize():
+                print("Tracker initialized successfully")
+            else:
+                print("Initialization failed, check logs for details")
+            ```
         """
         try:
             # Lazy import tracker implementations to avoid importing heavy libraries at module load time

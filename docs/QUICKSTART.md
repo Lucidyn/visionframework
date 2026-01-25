@@ -1,77 +1,122 @@
-# 快速开始
-
-本页提供最短路径让你在本地运行一次检测示例。
+# 快速开始指南
 
 ## 安装
 
-推荐使用虚拟环境：
+1. **克隆仓库**:
+   ```bash
+   git clone https://github.com/yourusername/visionframework.git
+   cd visionframework
+   ```
 
-```bash
-python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-pip install -e .
-```
+2. **安装依赖**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-根据需要安装可选功能，例如 DETR、RF-DETR、CLIP：
+3. **安装包**:
+   ```bash
+   pip install -e .
+   ```
 
-```bash
-pip install -e "[detr]"   # 可选：DETR 后端
-pip install -e "[clip]"   # 可选：CLIP 零样本支持
-```
+## 基本使用
 
-## 最小示例（单张检测）
-
-```python
-from visionframework import Detector
-import cv2
-
-det = Detector({"model_path": "yolov8n.pt", "conf_threshold": 0.25})
-det.initialize()
-img = cv2.imread("path/to/image.jpg")
-detections = det.detect(img)
-print(f"Found {len(detections)} detections")
-```
-
-## 批处理示例（**推荐用于视频**）
+### 示例 1: 基本目标检测
 
 ```python
-from visionframework import VisionPipeline
+from visionframework.core.pipeline import VisionPipeline
 import cv2
 
-# 初始化带批处理的管道
+# 使用配置字典初始化管道
 pipeline = VisionPipeline({
-    "detector_config": {"model_type": "yolo", "batch_inference": True},
-    "enable_tracking": True
+    "detector_config": {"model_path": "yolov8n.pt"}
 })
-pipeline.initialize()
 
-# 批量处理多帧 - 性能提升 4 倍！
-frames = [cv2.imread(f"frame_{i}.jpg") for i in range(4)]
-results = pipeline.process_batch(frames)
+# 加载图像
+image = cv2.imread("test.jpg")
 
-for i, result in enumerate(results):
-    print(f"Frame {i}: {len(result['detections'])} detections, {len(result['tracks'])} tracks")
+# 处理图像
+results = pipeline.process(image)
+
+# 手动绘制边界框（VisionPipeline 没有内置的 visualize 方法）
+for detection in results["detections"]:
+    x1, y1, x2, y2 = detection["bbox"]
+    cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+    cv2.putText(image, detection["class_name"], (int(x1), int(y1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+# 显示结果
+cv2.imshow("检测结果", image)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
 ```
 
-注意：首次运行若缺模型会自动下载（需联网）。
+### 示例 2: 简化 API
 
-## 运行示例脚本
+```python
+from visionframework.core.pipeline import VisionPipeline
+import cv2
+import numpy as np
 
-仓库中的 `examples/` 包含按功能组织的示例，推荐从 `examples/README.md` 查看说明。
+# 加载图像
+image = cv2.imread("test.jpg")
+
+# 使用静态方法快速处理，带配置字典
+results = VisionPipeline.process_image(image, {
+    "detector_config": {"model_path": "yolov8n.pt"}
+})
+
+# 绘制边界框
+for detection in results["detections"]:
+    x1, y1, x2, y2 = detection["bbox"]
+    cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+    cv2.putText(image, detection["class_name"], (int(x1), int(y1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+# 显示结果
+cv2.imshow("结果", image)
+cv2.waitKey(0)
+```
+
+### 示例 3: 视频处理
+
+```python
+from visionframework.core.pipeline import VisionPipeline
+
+# 使用配置字典处理视频文件
+pipeline = VisionPipeline({
+    "detector_config": {"model_path": "yolov8n.pt"}
+})
+pipeline.process_video("input.mp4", "output.mp4")
+
+# 或者使用静态方法，带配置字典
+VisionPipeline.run_video("input.mp4", "output.mp4", model_path="yolov8n.pt")
+```
+
+### 示例 4: 视频流处理
+
+```python
+from visionframework.core.pipeline import VisionPipeline
+
+# 使用配置字典处理 RTSP 流
+pipeline = VisionPipeline({
+    "detector_config": {"model_path": "yolov8n.pt"}
+})
+pipeline.process_video("rtsp://example.com/stream", "output.mp4")
+
+# 或者使用静态方法
+VisionPipeline.run_video("rtsp://example.com/stream", "output.mp4", model_path="yolov8n.pt")
+```
+
+## 验证
+
+要验证安装是否成功，运行其中一个示例脚本：
 
 ```bash
-# 运行检测示例
-python examples/detect_basic.py
-
-# 运行视频追踪示例（自动使用批处理）
-python examples/video_tracking.py
+python examples/00_basic_detection.py
 ```
 
-## 性能提示
+你应该会看到一个窗口显示示例图像上的目标检测结果。
 
-- 💡 **视频处理**：使用 `pipeline.process_batch()` 而不是逐帧 `process()`，性能提升 **4 倍**
-- 💡 **GPU 加速**：设置 `device: "cuda"` 以充分利用 GPU 批处理能力
-- 💡 **FP16 加速**：在 GPU 上启用 `use_fp16: true` 以进一步加速
+## 下一步
 
-更多 API 细节请参阅 `docs/QUICK_REFERENCE.md` 和 `BATCH_PROCESSING_GUIDE.md`。
+- 在 `examples/` 目录中探索更多示例
+- 查看 `FEATURES.md` 了解所有可用功能
+- 参考 `API_REFERENCE.md` 获取详细的 API 文档

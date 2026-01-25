@@ -1,0 +1,90 @@
+{
+    "detector": {
+        "model_path": "yolov8n.pt",
+        "model_type": "yolo",
+        "conf_threshold": 0.3,
+        "category_thresholds": {
+            "person": 0.7,
+            "car": 0.5
+        },
+        "iou_threshold": 0.45,
+        "device": "auto",
+        "enable_segmentation": false,
+        "batch_inference": false,
+        "dynamic_batch_size": true,
+        "max_batch_size": 8,
+        "min_batch_size": 1,
+        "use_fp16": false,
+        "detr_model_name": "facebook/detr-resnet-50",
+        "rfdetr_model_name": null
+    },
+    "tracker": {
+        "max_age": 30,
+        "min_hits": 3,
+        "iou_threshold": 0.3,
+        "use_kalman": false,
+        "track_history_length": 30,
+        "new_track_activation_conf": 0.6,
+        "embedding_dim": 2048,
+        "matching_strategy": "hungarian",
+        "matching_cost_threshold": 0.7
+    },
+    "pipeline": {
+        "enable_tracking": true,
+        "detector_config": {
+            "model_path": "yolov8n.pt",
+            "model_type": "yolo",
+            "conf_threshold": 0.25,
+            "category_thresholds": null,
+            "iou_threshold": 0.45,
+            "device": "cpu",
+            "enable_segmentation": false,
+            "batch_inference": false,
+            "dynamic_batch_size": false,
+            "max_batch_size": 8,
+            "min_batch_size": 1,
+            "use_fp16": false,
+            "detr_model_name": "facebook/detr-resnet-50",
+            "rfdetr_model_name": null
+        },
+        "tracker_config": {
+            "max_age": 30,
+            "min_hits": 3,
+            "iou_threshold": 0.3,
+            "use_kalman": false,
+            "track_history_length": 30,
+            "new_track_activation_conf": 0.6,
+            "embedding_dim": 2048,
+            "matching_strategy": "hungarian",
+            "matching_cost_threshold": 0.7
+        },
+        "performance": {
+            "batch_inference": false,
+            "use_fp16": false,
+            "video_async_read": false
+        }
+    },
+    "visualizer": {
+        "show_labels": true,
+        "show_confidences": true,
+        "show_track_ids": true,
+        "line_thickness": 2,
+        "font_scale": 0.5
+    },
+    "rois": [
+        {
+            "name": "zone1",
+            "type": "rectangle",
+            "points": [
+                [
+                    100,
+                    100
+                ],
+                [
+                    400,
+                    300
+                ]
+            ]
+        }
+    ]
+}

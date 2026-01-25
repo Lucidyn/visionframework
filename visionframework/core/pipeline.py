@@ -7,7 +7,7 @@ object detection and tracking in a single, easy-to-use interface.
 
 import cv2
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Callable
 from .base import BaseModule
 from .detector import Detector
 from .tracker import Tracker
@@ -52,7 +52,7 @@ class VisionPipeline(BaseModule):
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
-        Initialize vision pipeline
+        Initialize vision pipeline with default configuration if none provided
         
         Args:
             config: Configuration dictionary with keys:
@@ -64,17 +64,224 @@ class VisionPipeline(BaseModule):
                                  Only used if enable_tracking is True.
                 - enable_tracking: Boolean flag to enable/disable tracking (default: True).
                                  If False, only detection is performed.
+                - enable_performance_monitoring: Boolean flag to enable/disable performance monitoring (default: False).
+                - performance_metrics: List of performance metrics to monitor (default: ["fps"]).
         
         Note:
             Configuration validation is performed automatically for both detector
             and tracker configurations if their validate_config() methods are implemented.
+            
+        Example:
+            # Simplest usage - uses default YOLOv8n model
+            pipeline = VisionPipeline()
+            results = pipeline.process(frame)  # Auto-initializes if needed
+            
+            # With custom configuration
+            pipeline = VisionPipeline({
+                "detector_config": {"model_path": "yolov8s.pt", "conf_threshold": 0.3}
+            })
         """
-        super().__init__(config)
+        # Default configuration
+        default_config = {
+            "enable_tracking": False,
+            "detector_config": {
+                "model_path": "yolov8n.pt",
+                "conf_threshold": 0.25
+            },
+            "tracker_config": {
+                "tracker_type": "bytetrack",
+                "max_age": 30
+            }
+        }
+        
+        # Merge user config with default config
+        if config is None:
+            config = {}
+        
+        # Deep merge detector and tracker configs
+        merged_config = default_config.copy()
+        merged_config.update(config)
+        
+        if "detector_config" in config:
+            merged_config["detector_config"] = default_config["detector_config"].copy()
+            merged_config["detector_config"].update(config["detector_config"])
+        
+        if "tracker_config" in config:
+            merged_config["tracker_config"] = default_config["tracker_config"].copy()
+            merged_config["tracker_config"].update(config["tracker_config"])
+        
+        super().__init__(merged_config)
         self.detector: Optional[Detector] = None
         self.tracker: Optional[Tracker] = None
-        self.enable_tracking: bool = self.config.get("enable_tracking", True)
+        self.enable_tracking: bool = self.config.get("enable_tracking", False)
         self.detector_config: Dict[str, Any] = self.config.get("detector_config", {})
         self.tracker_config: Dict[str, Any] = self.config.get("tracker_config", {})
+        
+        # Performance monitoring
+        self.enable_performance_monitoring: bool = self.config.get("enable_performance_monitoring", False)
+        self.performance_metrics: List[str] = self.config.get("performance_metrics", ["fps"])
+        self.performance_monitor: Optional[PerformanceMonitor] = None
+        
+        # Post-processing hooks
+        self.post_detection_hooks: List[Callable[[List[Detection], np.ndarray], List[Detection]]] = []
+        self.post_tracking_hooks: List[Callable[[List[Track], np.ndarray], List[Track]]] = []
+        
+    @classmethod
+    def with_tracking(cls, config: Optional[Dict[str, Any]] = None):
+        """
+        Create a VisionPipeline with tracking enabled by default
+        
+        Args:
+            config: Optional configuration dictionary
+            
+        Returns:
+            VisionPipeline: Pipeline instance with tracking enabled
+            
+        Example:
+            pipeline = VisionPipeline.with_tracking()
+            results = pipeline.process(frame)  # Returns both detections and tracks
+        """
+        if config is None:
+            config = {}
+        config["enable_tracking"] = True
+        return cls(config)
+    
+    @classmethod
+    def from_model(cls, model_path: str, enable_tracking: bool = False, conf_threshold: float = 0.25):
+        """
+        Create a VisionPipeline from a specific model path
+        
+        Args:
+            model_path: Path to the detection model
+            enable_tracking: Whether to enable tracking (default: False)
+            conf_threshold: Confidence threshold for detections (default: 0.25)
+            
+        Returns:
+            VisionPipeline: Pipeline instance configured with the specified model
+            
+        Example:
+            pipeline = VisionPipeline.from_model("yolov8m.pt", enable_tracking=True)
+        """
+        config = {
+            "enable_tracking": enable_tracking,
+            "detector_config": {
+                "model_path": model_path,
+                "conf_threshold": conf_threshold
+            }
+        }
+        return cls(config)
+    
+    @staticmethod
+    def process_image(image: np.ndarray, model_path: str = "yolov8n.pt", enable_tracking: bool = False, conf_threshold: float = 0.25) -> Dict[str, Any]:
+        """
+        Process a single image with minimal configuration
+        
+        This static method provides a convenient way to process a single image without manually
+        creating and initializing a VisionPipeline instance.
+        
+        Args:
+            image: Input image in BGR format (numpy array)
+            model_path: Path to the detection model (default: "yolov8n.pt")
+            enable_tracking: Whether to enable tracking (default: False)
+            conf_threshold: Confidence threshold for detections (default: 0.25)
+            
+        Returns:
+            Dict[str, Any]: Processing results containing detections and optionally tracks
+            
+        Example:
+            ```python
+            import cv2
+            from visionframework import VisionPipeline
+            
+            # Load image
+            image = cv2.imread("input.jpg")
+            
+            # Process with default model
+            results = VisionPipeline.process_image(image)
+            detections = results["detections"]
+            
+            # Process with custom model and tracking
+            results = VisionPipeline.process_image(
+                image, 
+                model_path="yolov8m.pt",
+                enable_tracking=True,
+                conf_threshold=0.3
+            )
+            ```
+        """
+        pipeline = VisionPipeline.from_model(model_path, enable_tracking, conf_threshold)
+        pipeline.initialize()
+        return pipeline.process(image)
+    
+    @staticmethod
+    def run_video(
+        input_source: str or int,
+        output_path: Optional[str] = None,
+        model_path: str = "yolov8n.pt",
+        enable_tracking: bool = False,
+        conf_threshold: float = 0.25,
+        batch_size: int = 0,
+        **kwargs
+    ) -> bool:
+        """
+        Run video processing with minimal configuration
+        
+        This static method provides a convenient way to process videos, camera streams, or network streams
+        with just one line of code.
+        
+        Args:
+            input_source: Path to video file, video stream URL, or camera index
+            output_path: Optional path to save processed video
+            model_path: Path to the detection model (default: "yolov8n.pt")
+            enable_tracking: Whether to enable tracking (default: False)
+            conf_threshold: Confidence threshold for detections (default: 0.25)
+            batch_size: Batch size for processing (0 for non-batch processing, default: 0)
+            **kwargs: Additional arguments passed to process_video or process_video_batch
+            
+        Returns:
+            bool: True if processing completed successfully, False otherwise
+            
+        Example:
+            ```python
+            from visionframework import VisionPipeline
+            
+            # Process video file with default settings
+            VisionPipeline.run_video(
+                input_source="input.mp4",
+                output_path="output.mp4"
+            )
+            
+            # Process RTSP stream with custom settings
+            VisionPipeline.run_video(
+                input_source="rtsp://example.com/stream",
+                output_path="output_stream.mp4",
+                model_path="yolov8s.pt",
+                enable_tracking=True,
+                conf_threshold=0.3,
+                batch_size=16
+            )
+            ```
+        """
+        pipeline = VisionPipeline.from_model(model_path, enable_tracking, conf_threshold)
+        pipeline.initialize()
+        
+        # Enable batch inference if batch_size > 0
+        if batch_size > 0 and hasattr(pipeline.detector, 'detector_impl'):
+            pipeline.detector.detector_impl.batch_inference = True
+        
+        if batch_size > 0:
+            return pipeline.process_video_batch(
+                input_source=input_source,
+                output_path=output_path,
+                batch_size=batch_size,
+                **kwargs
+            )
+        else:
+            return pipeline.process_video(
+                input_source=input_source,
+                output_path=output_path,
+                **kwargs
+            )
     
     def validate_config(self, config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         """
@@ -92,6 +299,8 @@ class VisionPipeline(BaseModule):
             - enable_tracking is a boolean
             - detector_config is a dictionary (if provided)
             - tracker_config is a dictionary (if provided)
+            - enable_performance_monitoring is a boolean (if provided)
+            - performance_metrics is a list (if provided)
         """
         # Validate enable_tracking
         if "enable_tracking" in config:
@@ -111,11 +320,22 @@ class VisionPipeline(BaseModule):
             if not isinstance(tracker_config, dict):
                 return False, f"tracker_config must be a dictionary, got {type(tracker_config).__name__}"
         
+        # Validate performance monitoring settings
+        if "enable_performance_monitoring" in config:
+            enable_perf = config["enable_performance_monitoring"]
+            if not isinstance(enable_perf, bool):
+                return False, f"enable_performance_monitoring must be a boolean, got {type(enable_perf).__name__}"
+        
+        if "performance_metrics" in config:
+            perf_metrics = config["performance_metrics"]
+            if not isinstance(perf_metrics, list):
+                return False, f"performance_metrics must be a list, got {type(perf_metrics).__name__}"
+        
         return True, None
     
     def initialize(self) -> bool:
         """
-        Initialize detector and tracker
+        Initialize detector, tracker, and performance monitor
         
         This method initializes both the detector and tracker (if enabled) components
         of the pipeline. It performs all necessary setup steps for end-to-end processing.
@@ -133,7 +353,8 @@ class VisionPipeline(BaseModule):
             Initialization sequence:
             1. Initialize detector (required)
             2. Initialize tracker (if enable_tracking is True)
-            3. Set is_initialized flag if all components initialized successfully
+            3. Initialize performance monitor (if enable_performance_monitoring is True)
+            4. Set is_initialized flag if all components initialized successfully
         
             If any component fails to initialize, the entire pipeline initialization
             fails and is_initialized remains False.
@@ -153,6 +374,7 @@ class VisionPipeline(BaseModule):
         """
         try:
             # Initialize detector
+            logger.info("Initializing detector...")
             self.detector = Detector(self.detector_config)
             if not self.detector.initialize():
                 logger.error("Failed to initialize detector in pipeline")
@@ -160,10 +382,16 @@ class VisionPipeline(BaseModule):
             
             # Initialize tracker if enabled
             if self.enable_tracking:
+                logger.info("Initializing tracker...")
                 self.tracker = Tracker(self.tracker_config)
                 if not self.tracker.initialize():
                     logger.error("Failed to initialize tracker in pipeline")
                     return False
+            
+            # Initialize performance monitor if enabled
+            if self.enable_performance_monitoring:
+                logger.info("Initializing performance monitor...")
+                self.performance_monitor = PerformanceMonitor(metrics=self.performance_metrics)
             
             self.is_initialized = True
             logger.info("Pipeline initialized successfully")
@@ -367,6 +595,171 @@ class VisionPipeline(BaseModule):
             logger.error(f"Error during batch pipeline processing: {e}", exc_info=True)
             return [{"detections": [], "tracks": [], "frame_idx": i} for i in range(len(images))]
     
+    def process_video_batch(
+        self, 
+        input_source: str or int, 
+        output_path: Optional[str] = None, 
+        start_frame: int = 0, 
+        end_frame: Optional[int] = None, 
+        batch_size: int = 8,
+        skip_frames: int = 0,
+        frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None,
+        progress_callback: Optional[Callable[[float, int, int], None]] = None
+    ) -> bool:
+        """
+        Process video file, camera stream, or video stream with batch processing for improved performance
+        
+        This method processes video frames in batches through the detector when supported,
+        providing significant performance improvements for compatible detectors.
+        
+        Args:
+            input_source: Path to video file, video stream URL, or camera index (0 for default webcam)
+                          Supported stream formats: RTSP, HTTP, etc.
+            output_path: Optional path to save processed video. If None, video is not saved.
+            start_frame: Start frame number (default: 0)
+            end_frame: End frame number (None for all frames, useful for video files only)
+            batch_size: Number of frames to process in each batch (default: 8)
+            skip_frames: Number of frames to skip between processing (default: 0)
+            frame_callback: Optional callback function(frame, frame_number, results) -> processed_frame
+                           Called after each frame is processed, can be used for visualization
+            progress_callback: Optional callback function(progress, current_frame, total_frames) -> None
+                              Called periodically with processing progress
+        
+        Returns:
+            bool: True if processing completed successfully, False otherwise
+        
+        Example:
+            ```python
+            # Process video with batch processing
+            pipeline = VisionPipeline.with_tracking({
+                "detector_config": {
+                    "model_path": "yolov8n.pt",
+                    "batch_inference": True  # Enable batch inference for better performance
+                }
+            })
+            pipeline.initialize()
+            
+            # Process RTSP stream with batch processing
+            success = pipeline.process_video_batch(
+                input_source="rtsp://example.com/stream",
+                output_path="output_stream.mp4",
+                batch_size=16,  # Process 16 frames in each batch
+                progress_callback=lambda p, c, t: print(f"Progress: {p:.1%}")
+            )
+            ```
+        """
+        from ..utils.video_utils import VideoProcessor, VideoWriter
+        
+        # Initialize video processor
+        processor = VideoProcessor(input_source)
+        if not processor.open():
+            logger.error(f"Failed to open video source: {input_source}")
+            return False
+        
+        # Get video info
+        video_info = processor.get_info()
+        total_frames = video_info["total_frames"]
+        if end_frame is not None:
+            total_frames = min(total_frames, end_frame)
+        
+        # Initialize video writer if output path is provided
+        writer = None
+        if output_path:
+            writer = VideoWriter(
+                output_path,
+                fps=video_info["fps"],
+                frame_size=(video_info["width"], video_info["height"])
+            )
+            if not writer.open():
+                logger.error(f"Failed to open video writer: {output_path}")
+                return False
+        
+        try:
+            frame_count = 0
+            processed_count = 0
+            batch_frames = []
+            batch_frame_nums = []
+            
+            while True:
+                ret, frame = processor.read_frame()
+                if not ret:
+                    # Process remaining frames in batch
+                    if batch_frames:
+                        # Process batch
+                        batch_results = self.process_batch(batch_frames)
+                        
+                        # Handle each frame in batch
+                        for batch_idx, (frame_to_process, frame_num, result) in enumerate(zip(batch_frames, batch_frame_nums, batch_results)):
+                            # Apply frame callback if provided
+                            processed_frame = frame_to_process.copy()
+                            if frame_callback:
+                                processed_frame = frame_callback(processed_frame, frame_num, result)
+                            
+                            # Write frame to output video if writer is available
+                            if writer:
+                                writer.write(processed_frame)
+                        
+                        batch_frames.clear()
+                        batch_frame_nums.clear()
+                    break
+                
+                current_frame = processor.current_frame_num
+                
+                # Check if we've reached the end frame
+                if end_frame is not None and current_frame > end_frame:
+                    break
+                
+                # Skip frames before start_frame
+                if current_frame < start_frame:
+                    continue
+                
+                # Skip frames based on skip_frames parameter
+                if (current_frame - start_frame) % (skip_frames + 1) != 0:
+                    continue
+                
+                # Add frame to batch
+                batch_frames.append(frame)
+                batch_frame_nums.append(current_frame)
+                
+                # Process batch when it reaches batch_size
+                if len(batch_frames) >= batch_size:
+                    # Process batch
+                    batch_results = self.process_batch(batch_frames)
+                    
+                    # Handle each frame in batch
+                    for batch_idx, (frame_to_process, frame_num, result) in enumerate(zip(batch_frames, batch_frame_nums, batch_results)):
+                        # Apply frame callback if provided
+                        processed_frame = frame_to_process.copy()
+                        if frame_callback:
+                            processed_frame = frame_callback(processed_frame, frame_num, result)
+                        
+                        # Write frame to output video if writer is available
+                        if writer:
+                            writer.write(processed_frame)
+                    
+                    processed_count += len(batch_frames)
+                    frame_count += len(batch_frames)
+                    
+                    # Update progress if callback is provided
+                    if progress_callback and total_frames > 0:
+                        progress = min(1.0, (current_frame - start_frame) / (total_frames - start_frame))
+                        progress_callback(progress, current_frame, total_frames)
+                    
+                    # Clear batch for next iteration
+                    batch_frames.clear()
+                    batch_frame_nums.clear()
+            
+            logger.info(f"Video processing completed. Processed {processed_count} frames out of {frame_count} total frames.")
+            return True
+        except Exception as e:
+            logger.error(f"Error during batch video processing: {e}", exc_info=True)
+            return False
+        finally:
+            # Cleanup resources
+            processor.close()
+            if writer:
+                writer.close()
+    
     def process_frame(self, image: np.ndarray) -> Dict[str, Any]:
         """
         Alias for process method
@@ -429,11 +822,11 @@ class VisionPipeline(BaseModule):
         tracker methods and properties if needed.
         
         Returns:
-            Optional[Tracker]: Tracker instance if initialized and tracking is enabled, None otherwise.
+            Optional[Tracker]: Tracker instance if initialized, None otherwise.
         
         Example:
             ```python
-            pipeline = VisionPipeline({"enable_tracking": True})
+            pipeline = VisionPipeline()
             pipeline.initialize()
             
             tracker = pipeline.get_tracker()
@@ -443,4 +836,150 @@ class VisionPipeline(BaseModule):
             ```
         """
         return self.tracker
+    
+    def process_video(
+        self, 
+        input_source: str or int, 
+        output_path: Optional[str] = None, 
+        start_frame: int = 0, 
+        end_frame: Optional[int] = None, 
+        skip_frames: int = 0,
+        frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None,
+        progress_callback: Optional[Callable[[float, int, int], None]] = None
+    ) -> bool:
+        """
+        Process video file, camera stream, or video stream (RTSP/HTTP) through the vision pipeline
+        
+        This method provides a convenient way to process entire video files, camera streams, or network streams
+        without manually writing frame loops. It handles video reading, processing, and writing
+        in a single method call.
+        
+        Args:
+            input_source: Path to video file, video stream URL, or camera index (0 for default webcam)
+                          Supported stream formats: RTSP, HTTP, etc.
+            output_path: Optional path to save processed video. If None, video is not saved.
+            start_frame: Start frame number (default: 0)
+            end_frame: End frame number (None for all frames, useful for video files only)
+            skip_frames: Number of frames to skip between processing (default: 0)
+            frame_callback: Optional callback function(frame, frame_number, results) -> processed_frame
+                           Called after each frame is processed, can be used for visualization
+            progress_callback: Optional callback function(progress, current_frame, total_frames) -> None
+                              Called periodically with processing progress
+        
+        Returns:
+            bool: True if processing completed successfully, False otherwise
+        
+        Example:
+            ```python
+            # Process video file and save results
+            pipeline = VisionPipeline.with_tracking()
+            pipeline.initialize()
+            
+            # Process video with progress callback
+            def progress(progress_val, current, total):
+                print(f"Progress: {progress_val:.1%} ({current}/{total})")
+            
+            # Process video file
+            success = pipeline.process_video(
+                input_source="input_video.mp4",
+                output_path="output_video.mp4",
+                start_frame=0,
+                end_frame=1000,
+                skip_frames=0,
+                progress_callback=progress
+            )
+            
+            # Process RTSP stream
+            success = pipeline.process_video(
+                input_source="rtsp://username:password@example.com/stream",
+                output_path="output_stream.mp4",
+                frame_callback=lambda frame, fn, res: frame  # No visualization
+            )
+            
+            # Process camera stream
+            success = pipeline.process_video(
+                input_source=0,  # Default webcam
+                output_path="output_camera.mp4"
+            )
+            ```
+        """
+        from ..utils.video_utils import VideoProcessor, VideoWriter
+        
+        # Initialize video processor
+        processor = VideoProcessor(input_source)
+        if not processor.open():
+            logger.error(f"Failed to open video source: {input_source}")
+            return False
+        
+        # Get video info
+        video_info = processor.get_info()
+        total_frames = video_info["total_frames"]
+        if end_frame is not None:
+            total_frames = min(total_frames, end_frame)
+        
+        # Initialize video writer if output path is provided
+        writer = None
+        if output_path:
+            writer = VideoWriter(
+                output_path,
+                fps=video_info["fps"],
+                frame_size=(video_info["width"], video_info["height"])
+            )
+            if not writer.open():
+                logger.error(f"Failed to open video writer: {output_path}")
+                return False
+        
+        try:
+            frame_count = 0
+            processed_count = 0
+            
+            while True:
+                ret, frame = processor.read_frame()
+                if not ret:
+                    break
+                
+                current_frame = processor.current_frame_num
+                
+                # Check if we've reached the end frame
+                if end_frame is not None and current_frame > end_frame:
+                    break
+                
+                # Skip frames before start_frame
+                if current_frame < start_frame:
+                    continue
+                
+                # Skip frames based on skip_frames parameter
+                if (current_frame - start_frame) % (skip_frames + 1) != 0:
+                    continue
+                
+                # Process frame using the pipeline
+                results = self.process_frame(frame)
+                
+                # Apply frame callback if provided
+                processed_frame = frame.copy()
+                if frame_callback:
+                    processed_frame = frame_callback(processed_frame, current_frame, results)
+                
+                # Write frame to output video if writer is available
+                if writer:
+                    writer.write(processed_frame)
+                
+                processed_count += 1
+                frame_count += 1
+                
+                # Update progress if callback is provided
+                if progress_callback and total_frames > 0:
+                    progress = min(1.0, (current_frame - start_frame) / (total_frames - start_frame))
+                    progress_callback(progress, current_frame, total_frames)
+            
+            logger.info(f"Video processing completed. Processed {processed_count} frames out of {frame_count} total frames.")
+            return True
+        except Exception as e:
+            logger.error(f"Error during video processing: {e}", exc_info=True)
+            return False
+        finally:
+            # Cleanup resources
+            processor.close()
+            if writer:
+                writer.close()
 

@@ -121,35 +121,42 @@ class Detector(BaseModule):
         # Validate device
         if "device" in config:
             device = config["device"]
-            if device not in ["cpu", "cuda", "mps"]:
-                return False, f"Invalid device: {device}. Supported: 'cpu', 'cuda', 'mps'"
+            if device not in ["cpu", "cuda", "mps", "auto"]:
+                return False, f"Invalid device: {device}. Supported: 'cpu', 'cuda', 'mps', 'auto'"
+        
+        # Validate category_thresholds
+        if "category_thresholds" in config:
+            category_thresholds = config["category_thresholds"]
+            if not isinstance(category_thresholds, dict):
+                return False, f"category_thresholds must be a dictionary, got {type(category_thresholds).__name__}"
+            # Validate each threshold in category_thresholds
+            for category, threshold in category_thresholds.items():
+                if not isinstance(threshold, (int, float)):
+                    return False, f"Threshold for category '{category}' must be a number, got {type(threshold).__name__}"
+                if not 0.0 <= threshold <= 1.0:
+                    return False, f"Threshold for category '{category}' must be between 0.0 and 1.0, got {threshold}"
         
         return True, None
     
     def initialize(self) -> bool:
         """
         Initialize the detector model
-        
+
         This method initializes the underlying detector implementation based on
         the configured model_type. It performs model loading, device configuration,
         and any necessary setup steps.
-        
+
         Returns:
             bool: True if initialization successful, False otherwise.
                   On failure, errors are logged with detailed information.
-        
-        Raises:
-            ValueError: If model_type is invalid or configuration is incorrect
-            ImportError: If required dependencies are missing (e.g., ultralytics, transformers)
-            RuntimeError: If model loading or initialization fails
-        
+
         Note:
             Initialization may involve:
             - Downloading model files (first use)
             - Loading model weights into memory
             - Moving model to specified device (CPU/GPU)
             - Setting model to evaluation mode
-        
+
         Example:
             ```python
             detector = Detector({"model_type": "yolo", "model_path": "yolov8n.pt"})
@@ -175,9 +182,13 @@ class Detector(BaseModule):
                 rfdetr_config["model_name"] = self.config.get("rfdetr_model_name", None)
                 self.detector_impl = RFDETRDetector(rfdetr_config)
             else:
-                raise ValueError(f"Unsupported model_type: {self.model_type}. Supported: 'yolo', 'detr', 'rfdetr'")
+                logger.error(f"Unsupported model_type: {self.model_type}. Supported: 'yolo', 'detr', 'rfdetr'")
+                return False
             
-            return self.detector_impl.initialize()
+            result = self.detector_impl.initialize()
+            if result:
+                self.is_initialized = True
+            return result
         except ValueError as e:
             logger.error(f"Invalid detector configuration: {e}", exc_info=True)
             return False

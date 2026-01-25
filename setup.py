@@ -7,8 +7,8 @@ long_description = readme_file.read_text(encoding="utf-8") if readme_file.exists
 
 setup(
     name="visionframework",
-    version="0.2.8",
-    description="A comprehensive vision framework for detection, tracking, and more",
+    version="0.2.10",
+    description="A comprehensive vision framework for detection, tracking, and more with configuration management, model management, and device autoselection",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Vision Framework Contributors",
@@ -27,7 +27,7 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
     ],
-    keywords="computer vision, object detection, object tracking, yolo, deep learning",
+    keywords="computer vision, object detection, object tracking, yolo, deep learning, pydantic, configuration management, model management",
     install_requires=[
         "opencv-python>=4.8.0",
         "numpy>=1.24.0,<2.0.0",
@@ -37,6 +37,7 @@ setup(
         "scipy>=1.10.0",
         "Pillow>=10.0.0",
         "pyyaml>=6.0",
+        "pydantic>=2.0.0",
     ],
     python_requires=">=3.8",
     extras_require={

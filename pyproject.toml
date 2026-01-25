@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visionframework"
-version = "0.2.8"
-description = "A comprehensive vision framework for detection, tracking, and more"
+version = "0.2.10"
+description = "A comprehensive vision framework for detection, tracking, and more with configuration management, model management, and device autoselection"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
     {name = "Vision Framework Contributors"}
 ]
-keywords = ["computer vision", "object detection", "object tracking", "yolo", "deep learning"]
+keywords = ["computer vision", "object detection", "object tracking", "yolo", "deep learning", "pydantic", "configuration management", "model management"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -34,6 +34,8 @@ dependencies = [
     "ultralytics>=8.0.0",
     "scipy>=1.10.0",
     "Pillow>=10.0.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
     # Optional heavy dependencies moved to [project.optional-dependencies]
 ]
 

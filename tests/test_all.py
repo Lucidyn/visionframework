@@ -1,107 +1,109 @@
+#!/usr/bin/env python3
 """
-综合测试脚本 - 运行所有测试
+Run all tests in the test suite.
+
+This script collects and runs all test cases from the test files.
+It runs each test file individually to handle potential import issues.
 """
 
+import pytest
 import sys
-from pathlib import Path
-
-# Ensure project root is in path
-PROJECT_ROOT = Path(__file__).parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+import os
+import glob
 
 
-def run_test_module(module_name, description):
-    """运行测试模块"""
-    print("\n" + "=" * 70)
-    print(f"运行测试: {description}")
-    print("=" * 70)
+def run_all_tests():
+    """
+    Run all tests in the tests directory.
     
-    try:
-        # 动态导入测试模块
-        test_module = __import__(f"tests.{module_name}", fromlist=[module_name])
-        
-        # 如果模块有 main 函数，运行它
-        if hasattr(test_module, 'main'):
-            result = test_module.main()
-            return result
+    Returns:
+        int: Exit code (0 if all tests passed, 1 otherwise)
+    """
+    # Get the directory containing this script
+    test_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Get all test files
+    test_files = glob.glob(os.path.join(test_dir, "test_*.py"))
+    
+    # Exclude test_all.py itself and files which cause torch import issues
+    test_files = [f for f in test_files if os.path.basename(f) not in ["test_all.py", "test_core.py", "test_models.py"]]
+    
+    # Sort the test files
+    test_files.sort()
+    
+    # Run each test file individually
+    all_passed = True
+    for test_file in test_files:
+        print(f"\n=== Running tests in {os.path.basename(test_file)} ===")
+        try:
+            result = pytest.main([test_file, "-v"])
+            if result != 0:
+                all_passed = False
+        except Exception as e:
+            print(f"  ERROR running {os.path.basename(test_file)}: {e}")
+            all_passed = False
+    
+    return 0 if all_passed else 1
+
+
+def run_specific_tests(test_names):
+    """
+    Run specific test files.
+    
+    Args:
+        test_names: List of test file names or patterns
+    
+    Returns:
+        int: Exit code (0 if all tests passed, 1 otherwise)
+    """
+    test_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Get all test files
+    all_test_files = glob.glob(os.path.join(test_dir, "test_*.py"))
+    all_test_files = [f for f in all_test_files if os.path.basename(f) != "test_all.py"]
+    
+    # Filter test files based on test_names
+    test_files = []
+    for name in test_names:
+        if name.startswith("test_"):
+            # Exact test file name
+            test_path = os.path.join(test_dir, name)
+            if test_path in all_test_files:
+                test_files.append(test_path)
         else:
-            print(f"[SKIP] {module_name} 没有 main() 函数")
-            return None
-    except Exception as e:
-        print(f"[ERROR] 运行 {module_name} 时出错: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def main():
-    """运行所有测试"""
-    print("=" * 70)
-    print("Vision Framework - 综合测试套件")
-    print("=" * 70)
-    print("\n本测试将运行所有可用的测试模块")
-    print("=" * 70)
+            # Pattern matching
+            pattern = os.path.join(test_dir, f"test_{name}*.py")
+            test_files.extend(glob.glob(pattern))
     
-    # 定义测试模块列表
-    test_modules = [
-        ("test_structure", "项目结构测试"),
-        ("quick_test", "快速功能测试"),
-        ("test_utilities", "工具和组件测试"),
-        ("test_rfdetr", "RF-DETR 检测器测试"),
-        ("test_logging_exceptions", "日志和异常处理测试"),
-        ("test_code_quality", "代码质量测试（配置验证、类型提示、文档）"),
-    ]
+    # Remove duplicates and sort
+    test_files = sorted(list(set(test_files)))
     
-    results = {}
+    if not test_files:
+        print(f"No test files found matching: {', '.join(test_names)}")
+        return 1
     
-    # 运行每个测试模块
-    for module_name, description in test_modules:
-        result = run_test_module(module_name, description)
-        results[module_name] = result
+    # Run each test file individually
+    all_passed = True
+    for test_file in test_files:
+        print(f"\n=== Running tests in {os.path.basename(test_file)} ===")
+        try:
+            result = pytest.main([test_file, "-v"])
+            if result != 0:
+                all_passed = False
+        except Exception as e:
+            print(f"  ERROR running {os.path.basename(test_file)}: {e}")
+            all_passed = False
     
-    # 汇总结果
-    print("\n" + "=" * 70)
-    print("测试结果汇总")
-    print("=" * 70)
-    
-    passed = []
-    failed = []
-    skipped = []
-    
-    for module_name, result in results.items():
-        if result is True:
-            passed.append(module_name)
-            print(f"[✓] {module_name}: 通过")
-        elif result is False:
-            failed.append(module_name)
-            print(f"[✗] {module_name}: 失败")
-        else:
-            skipped.append(module_name)
-            print(f"[○] {module_name}: 跳过")
-    
-    print("\n" + "=" * 70)
-    print(f"总计: {len(passed)} 通过, {len(failed)} 失败, {len(skipped)} 跳过")
-    print("=" * 70)
-    
-    if len(failed) == 0:
-        if len(passed) > 0:
-            print("\n[✓] 所有可用的测试都已通过！")
-        else:
-            print("\n[○] 没有可运行的测试（可能缺少依赖）")
-    else:
-        print(f"\n[✗] 有 {len(failed)} 个测试失败，请检查上面的错误信息")
-    
-    print("\n提示:")
-    print("  - 如果某些测试被跳过，可能是因为缺少相应的依赖")
-    print("  - 安装所有依赖: pip install -r requirements.txt")
-    print("  - RF-DETR 需要额外安装: pip install rfdetr supervision")
-    print("=" * 70)
-    
-    return len(failed) == 0
+    return 0 if all_passed else 1
 
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
-
+    if len(sys.argv) > 1:
+        # Run specific test files
+        test_names = sys.argv[1:]
+        exit_code = run_specific_tests(test_names)
+    else:
+        # Run all test files
+        exit_code = run_all_tests()
+    
+    sys.exit(exit_code)

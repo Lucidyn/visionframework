@@ -23,6 +23,16 @@ class Detection:
         self.class_name = class_name
         self.mask = mask  # Binary mask for instance segmentation
     
+    @property
+    def score(self) -> float:
+        """Alias for confidence property, for compatibility with tracking algorithms"""
+        return self.confidence
+    
+    @score.setter
+    def score(self, value: float) -> None:
+        """Set score value, which also updates confidence"""
+        self.confidence = value
+    
     def __repr__(self):
         return f"Detection(class={self.class_name}, conf={self.confidence:.2f}, bbox={self.bbox})"
     

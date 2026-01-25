@@ -6,13 +6,22 @@ detector:
   model_path: "yolov8n.pt"  # Model file path (will auto-download if not exists)
   model_type: "yolo"        # Model type: 'yolo' or 'custom'
   conf_threshold: 0.25      # Confidence threshold (0.0-1.0)
+  category_thresholds:      # Category-specific confidence thresholds
+    person: 0.7             # Higher threshold for person detection
+    car: 0.5               # Lower threshold for car detection
   iou_threshold: 0.45       # IoU threshold for NMS (0.0-1.0)
-  device: "cpu"             # Device: 'cpu', 'cuda', or 'mps'
+  device: "auto"            # Device: 'auto' (autoselect), 'cpu', 'cuda', or 'mps'
   # Optional: restrict detections to specific classes. Can be list of
   # class names (strings) or class ids (integers). Examples:
   #   categories: ['person', 'car']
   #   categories: [0, 2]
   categories: null
+  # Batch inference configuration
+  batch_inference: true     # Enable batch inference for better performance
+  dynamic_batch_size: true  # Enable dynamic batch size adjustment
+  max_batch_size: 8         # Maximum batch size for dynamic batching
+  min_batch_size: 1         # Minimum batch size for dynamic batching
+  enable_segmentation: false # Enable instance segmentation (if model supports)
 
 # Tracker configuration
 tracker:

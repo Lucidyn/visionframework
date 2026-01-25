@@ -3,7 +3,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-轻量、模块化的计算机视觉框架，支持目标检测、跟踪、实例分割、姿态估计与结果导出。该仓库提供统一的高层 API，便于在工程中快速集成多种视觉能力。**新增：批处理推理，性能提升 4 倍！**
+轻量、模块化的计算机视觉框架，支持目标检测、跟踪、实例分割、姿态估计与结果导出。该仓库提供统一的高层 API，便于在工程中快速集成多种视觉能力。**新增：配置系统优化、模型管理增强、设备自动选择！**
 
 主要目标：易用、模块化、可扩展。核心接口示例与快速上手指南见下文与 `docs/`。
 
@@ -16,10 +16,10 @@ pip install -e .
 ```
 
 ```python
-from visionframework import Detector
+from visionframework.core.detectors.yolo_detector import YOLODetector
 import cv2
 
-det = Detector({"model_path": "yolov8n.pt", "conf_threshold": 0.25})
+det = YOLODetector({"model_path": "yolov8n.pt", "conf_threshold": 0.25})
 det.initialize()
 img = cv2.imread("your_image.jpg")
 print(len(det.detect(img)))  # 50 FPS
@@ -28,10 +28,10 @@ print(len(det.detect(img)))  # 50 FPS
 **批量处理（推荐）**：
 
 ```python
-from visionframework import VisionPipeline
+from visionframework.core.pipeline import VisionPipeline
 
 pipeline = VisionPipeline({
-    "detector_config": {"model_type": "yolo", "batch_inference": True},
+    "detector_config": {"model_path": "yolov8n.pt", "batch_inference": True},
     "enable_tracking": True
 })
 pipeline.initialize()
@@ -68,6 +68,13 @@ results = pipeline.process_batch(frames)  # 200 FPS！
 
 ## 关键更新
 
+**v0.2.10 - 配置与模型管理优化**:
+- ✨ **配置系统优化**：整合 `Config` 类与 Pydantic 模型，消除重复默认值定义，添加 `load_as_model` 和 `save_model` 方法
+- ✨ **模型管理增强**：增强 `ModelCache` 类，添加 `load_model` 方法，支持直接加载模型实例，改进模型下载和加载流程
+- ✨ **设备管理改进**：添加设备自动选择功能，提供更详细的设备信息，支持 `auto_select_device`、`get_available_devices` 等方法
+- ✨ **YOLODetector 简化**：简化模型加载逻辑，利用 `ModelManager` 和 `ModelCache` 来加载模型，改进设备选择和初始化流程
+- ✨ **统一异常处理**：在所有模块中使用一致的异常类型，提供更详细的异常上下文信息
+
 **v0.2.9 - 批处理优化**:
 - ✨ **所有检测器支持批处理**：`detect_batch()` 方法，性能提升 4 倍
 - ✨ **追踪器支持多帧处理**：`process_batch()` 方法，保持轨迹状态一致性
@@ -86,32 +93,58 @@ results = pipeline.process_batch(frames)  # 200 FPS！
 
 ## API 示例
 
+### 配置管理
+
 ```python
-from visionframework import Config
+from visionframework.utils.config import Config
+from visionframework.utils.config_models import DetectorConfig
 
 # 获取各模块默认配置
 detector_config = Config.get_default_detector_config()
 tracker_config = Config.get_default_tracker_config()
 pipeline_config = Config.get_default_pipeline_config()
+
+# 直接从文件加载为 Pydantic 模型
+model_config = Config.load_as_model("config.yaml", DetectorConfig)
+print(model_config.model_path)  # yolov8n.pt
 ```
 
-## 示例代码
+### 模型管理
 
-查看 `examples/` 目录获取更多使用示例：
+```python
+from visionframework.models import get_model_manager
 
-### 基础示例
-- `basic_usage.py`: 基本使用示例（详细注释）
-- `video_tracking.py`: 视频跟踪示例（详细注释）
-- **`config_example.py`**: 使用配置文件示例（推荐，支持 YAML/JSON）
+# 获取模型管理器实例
+model_manager = get_model_manager()
 
-### 检测器示例
-- `rfdetr_example.py`: RF-DETR 检测器示例
-- `rfdetr_tracking.py`: RF-DETR 检测 + 跟踪示例
-- `yolo_pose_example.py`: YOLO Pose 姿态估计示例
+# 注册自定义模型
+model_manager.register_model(
+    name="custom_yolo",
+    source="yolo",
+    config={"file_path": "path/to/your/custom_model.pt"}
+)
 
-### 高级功能示例
-- `advanced_features.py`: 高级功能示例（ROI、计数、性能监控等，详细注释）
-- `batch_processing.py`: 批量图像处理示例
+# 直接加载模型实例
+model = model_manager.load_model("custom_yolo")
+```
+
+### 设备管理
+
+```python
+from visionframework.utils.device import DeviceManager
+
+# 自动选择最佳可用设备
+device = DeviceManager.auto_select_device()
+print(f"Selected device: {device}")
+
+# 获取所有可用设备
+available_devices = DeviceManager.get_available_devices()
+print(f"Available devices: {available_devices}")
+
+# 获取设备详细信息
+device_info = DeviceManager.get_device_info(device)
+print(f"Device info: {device_info}")
+```
 
 ## 示例代码
 
@@ -119,16 +152,12 @@ pipeline_config = Config.get_default_pipeline_config()
 
 | 示例 | 说明 |
 |------|------|
-| `basic_usage.py` | 基本使用示例 |
-| `config_example.py` | 配置文件用法（推荐） |
-| `video_tracking.py` | 视频跟踪示例 |
-| `advanced_features.py` | 高级功能（ROI、计数等） |
-| `batch_processing.py` | 批量处理示例 |
-| `yolo_pose_example.py` | 姿态估计示例 |
-| `rfdetr_example.py` | RF-DETR 检测器示例 |
-| `rfdetr_tracking.py` | RF-DETR 跟踪示例 |
-| `clip_example.py` | CLIP 零样本分类示例 |
-| `tracking_evaluation_example.py` | 跟踪评估示例 |
+| `00_basic_detection.py` | 基础目标检测示例 |
+| `01_detection_with_tracking.py` | 带跟踪的目标检测示例 |
+| `02_simplified_api.py` | 简化API使用示例 |
+| `03_video_processing.py` | 视频文件处理示例 |
+| `04_stream_processing.py` | 视频流处理示例 |
+| `05_advanced_features.py` | 高级功能示例（模型管理、批量处理、配置文件、结果导出） |
 
 ## 依赖项
 
@@ -173,8 +202,7 @@ A: 可以，所有模块都是可扩展的，支持继承和定制。
 
 ---
 
-**Vision Framework v0.2.8** | 架构优化版本 | 生产就绪
-- pyyaml >= 6.0 (用于 YAML 配置文件支持)
+**Vision Framework v0.2.10** | 配置与模型管理优化版本 | 生产就绪
 
 ## 许可证
 
