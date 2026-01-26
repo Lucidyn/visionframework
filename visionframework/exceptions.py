@@ -258,3 +258,83 @@ class ExportError(VisionFrameworkError):
             context["output_path"] = output_path
         
         super().__init__(message, context, original_error)
+
+
+class PoseEstimationError(VisionFrameworkError):
+    """Raised when pose estimation fails"""
+    def __init__(self, message: str, model_type: str = None, 
+                 input_shape: tuple = None, device: str = None, 
+                 original_error: Exception = None):
+        context = {}
+        if model_type:
+            context["model_type"] = model_type
+        if input_shape:
+            context["input_shape"] = input_shape
+        if device:
+            context["device"] = device
+        
+        super().__init__(message, context, original_error)
+
+
+class CLIPProcessingError(VisionFrameworkError):
+    """Raised when CLIP extraction or processing fails"""
+    def __init__(self, message: str, operation: str = None, 
+                 model_name: str = None, input_type: str = None, 
+                 original_error: Exception = None):
+        context = {}
+        if operation:
+            context["operation"] = operation
+        if model_name:
+            context["model_name"] = model_name
+        if input_type:
+            context["input_type"] = input_type
+        
+        super().__init__(message, context, original_error)
+
+
+class ReIDError(VisionFrameworkError):
+    """Raised when ReID (re-identification) fails"""
+    def __init__(self, message: str, operation: str = None, 
+                 model_path: str = None, embedding_dim: int = None, 
+                 original_error: Exception = None):
+        context = {}
+        if operation:
+            context["operation"] = operation
+        if model_path:
+            context["model_path"] = model_path
+        if embedding_dim:
+            context["embedding_dim"] = embedding_dim
+        
+        super().__init__(message, context, original_error)
+
+
+class CacheError(VisionFrameworkError):
+    """Raised when model caching operations fail"""
+    def __init__(self, message: str, cache_key: str = None, 
+                 operation: str = None, model_type: str = None, 
+                 original_error: Exception = None):
+        context = {}
+        if cache_key:
+            context["cache_key"] = cache_key
+        if operation:
+            context["operation"] = operation
+        if model_type:
+            context["model_type"] = model_type
+        
+        super().__init__(message, context, original_error)
+
+
+class PipelineIntegrationError(VisionFrameworkError):
+    """Raised when integrating components in the pipeline fails"""
+    def __init__(self, message: str, component_name: str = None, 
+                 component_type: str = None, stage: str = None, 
+                 original_error: Exception = None):
+        context = {}
+        if component_name:
+            context["component_name"] = component_name
+        if component_type:
+            context["component_type"] = component_type
+        if stage:
+            context["stage"] = stage
+        
+        super().__init__(message, context, original_error)

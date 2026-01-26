@@ -58,7 +58,9 @@ class VisionPipeline(BaseModule):
             config: Configuration dictionary with keys:
                 - detector_config: Configuration dictionary for the detector
                 - tracker_config: Configuration dictionary for the tracker
+                - pose_estimator_config: Configuration dictionary for the pose estimator
                 - enable_tracking: Boolean flag to enable/disable tracking (default: False)
+                - enable_pose_estimation: Boolean flag to enable/disable pose estimation (default: False)
         
         Example:
             # Simplest usage - uses default YOLOv8n model
@@ -67,7 +69,9 @@ class VisionPipeline(BaseModule):
             
             # With custom configuration
             pipeline = VisionPipeline({
-                "detector_config": {"model_path": "yolov8s.pt", "conf_threshold": 0.3}
+                "detector_config": {"model_path": "yolov8s.pt", "conf_threshold": 0.3},
+                "enable_tracking": True,
+                "enable_pose_estimation": True
             })
         """
         # Initialize with minimal default config
@@ -75,6 +79,7 @@ class VisionPipeline(BaseModule):
         
         # Set default config values
         self.config.setdefault("enable_tracking", False)
+        self.config.setdefault("enable_pose_estimation", False)
         self.config.setdefault("detector_config", {
             "model_path": "yolov8n.pt",
             "conf_threshold": 0.25
@@ -83,24 +88,34 @@ class VisionPipeline(BaseModule):
             "tracker_type": "bytetrack",
             "max_age": 30
         })
+        self.config.setdefault("pose_estimator_config", {
+            "model_path": "yolov8n-pose.pt",
+            "conf_threshold": 0.25,
+            "keypoint_threshold": 0.5
+        })
         
         # Update with user-provided config
         if config:
             # Update top-level config
             self.config.update(config)
             
-            # Deep merge detector and tracker configs
+            # Deep merge detector, tracker, and pose estimator configs
             if "detector_config" in config:
                 self.config["detector_config"].update(config["detector_config"])
             if "tracker_config" in config:
                 self.config["tracker_config"].update(config["tracker_config"])
+            if "pose_estimator_config" in config:
+                self.config["pose_estimator_config"].update(config["pose_estimator_config"])
         
         # Initialize core attributes
         self.detector: Optional[Detector] = None
         self.tracker: Optional[Tracker] = None
+        self.pose_estimator: Optional[Any] = None
         self.enable_tracking: bool = self.config["enable_tracking"]
+        self.enable_pose_estimation: bool = self.config["enable_pose_estimation"]
         self.detector_config: Dict[str, Any] = self.config["detector_config"]
         self.tracker_config: Dict[str, Any] = self.config["tracker_config"]
+        self.pose_estimator_config: Dict[str, Any] = self.config["pose_estimator_config"]
         
     @classmethod
     def with_tracking(cls, config: Optional[Dict[str, Any]] = None):
@@ -307,6 +322,17 @@ class VisionPipeline(BaseModule):
             if not isinstance(perf_metrics, list):
                 return False, f"performance_metrics must be a list, got {type(perf_metrics).__name__}"
         
+        # Validate pose estimation settings
+        if "enable_pose_estimation" in config:
+            enable_pose = config["enable_pose_estimation"]
+            if not isinstance(enable_pose, bool):
+                return False, f"enable_pose_estimation must be a boolean, got {type(enable_pose).__name__}"
+        
+        if "pose_estimator_config" in config:
+            pose_config = config["pose_estimator_config"]
+            if not isinstance(pose_config, dict):
+                return False, f"pose_estimator_config must be a dictionary, got {type(pose_config).__name__}"
+        
         return True, None
     
     def initialize(self) -> bool:
@@ -362,6 +388,15 @@ class VisionPipeline(BaseModule):
                 self.tracker = Tracker(self.tracker_config)
                 if not self.tracker.initialize():
                     logger.error("Failed to initialize tracker in pipeline")
+                    return False
+            
+            # Initialize pose estimator if enabled
+            if self.enable_pose_estimation:
+                logger.info("Initializing pose estimator...")
+                from .pose_estimator import PoseEstimator
+                self.pose_estimator = PoseEstimator(self.pose_estimator_config)
+                if not self.pose_estimator.initialize():
+                    logger.error("Failed to initialize pose estimator in pipeline")
                     return False
             
             # Initialize performance monitor if enabled
@@ -442,11 +477,11 @@ class VisionPipeline(BaseModule):
         if not self.is_initialized:
             if not self.initialize():
                 logger.error("Pipeline not initialized and auto-initialization failed")
-                return {"detections": [], "tracks": []}
+                return {"detections": [], "tracks": [], "poses": []}
         
         if self.detector is None:
             logger.error("Detector is None, cannot process")
-            return {"detections": [], "tracks": []}
+            return {"detections": [], "tracks": [], "poses": []}
         
         results: Dict[str, Any] = {}
         
@@ -462,10 +497,17 @@ class VisionPipeline(BaseModule):
             else:
                 results["tracks"] = []
             
+            # Run pose estimation if enabled
+            if self.enable_pose_estimation and self.pose_estimator is not None:
+                poses = self.pose_estimator.process(image)
+                results["poses"] = poses
+            else:
+                results["poses"] = []
+            
             return results
         except Exception as e:
             logger.error(f"Error during pipeline processing: {e}", exc_info=True)
-            return {"detections": [], "tracks": []}
+            return {"detections": [], "tracks": [], "poses": []}
     
     def process_batch(self, images: List[np.ndarray]) -> List[Dict[str, Any]]:
         """
@@ -508,11 +550,11 @@ class VisionPipeline(BaseModule):
         if not self.is_initialized:
             if not self.initialize():
                 logger.error("Pipeline not initialized and auto-initialization failed")
-                return [{"detections": [], "tracks": [], "frame_idx": i} for i in range(len(images))]
+                return [{"detections": [], "tracks": [], "poses": [], "frame_idx": i} for i in range(len(images))]
         
         if self.detector is None:
             logger.error("Detector is None, cannot process")
-            return [{"detections": [], "tracks": [], "frame_idx": i} for i in range(len(images))]
+            return [{"detections": [], "tracks": [], "poses": [], "frame_idx": i} for i in range(len(images))]
         
         if not images:
             logger.warning("Empty image list provided to process_batch")
@@ -550,7 +592,7 @@ class VisionPipeline(BaseModule):
                     dets = self.detector.process(image)
                     detections_per_image.append(dets)
             
-            # Process tracking for each frame
+            # Process tracking and pose estimation for each frame
             for frame_idx, detections in enumerate(detections_per_image):
                 frame_result: Dict[str, Any] = {
                     "detections": detections,
@@ -564,12 +606,19 @@ class VisionPipeline(BaseModule):
                 else:
                     frame_result["tracks"] = []
                 
+                # Run pose estimation if enabled
+                if self.enable_pose_estimation and self.pose_estimator is not None:
+                    poses = self.pose_estimator.process(images[frame_idx])
+                    frame_result["poses"] = poses
+                else:
+                    frame_result["poses"] = []
+                
                 results.append(frame_result)
             
             return results
         except Exception as e:
             logger.error(f"Error during batch pipeline processing: {e}", exc_info=True)
-            return [{"detections": [], "tracks": [], "frame_idx": i} for i in range(len(images))]
+            return [{"detections": [], "tracks": [], "poses": [], "frame_idx": i} for i in range(len(images))]
     
     def process_video_batch(
         self, 
@@ -755,8 +804,8 @@ class VisionPipeline(BaseModule):
         """
         Reset pipeline state
         
-        This method resets both the detector and tracker to their initial states,
-        clearing all tracks and resetting internal state. The pipeline remains
+        This method resets all components (detector, tracker, pose estimator) to their initial states,
+        clearing all tracks, poses, and resetting internal state. The pipeline remains
         initialized but will start fresh.
         
         Note:
@@ -766,6 +815,7 @@ class VisionPipeline(BaseModule):
         super().reset()
         if self.tracker is not None:
             self.tracker.reset()
+        # Pose estimator doesn't have a reset method yet, but we can add one if needed in the future
     
     def get_detector(self) -> Optional[Detector]:
         """
@@ -812,6 +862,45 @@ class VisionPipeline(BaseModule):
             ```
         """
         return self.tracker
+    
+    def get_pose_estimator(self) -> Optional[Any]:
+        """
+        Get pose estimator instance
+        
+        Returns the internal pose estimator instance, allowing direct access to
+        pose estimator methods and properties if needed.
+        
+        Returns:
+            Optional[Any]: Pose estimator instance if initialized, None otherwise.
+        
+        Example:
+            ```python
+            pipeline = VisionPipeline()
+            pipeline.initialize()
+            
+            pose_estimator = pipeline.get_pose_estimator()
+            if pose_estimator:
+                info = pose_estimator.get_model_info()
+                print(f"Using pose model: {info['model_path']}")
+            ```
+        """
+        return self.pose_estimator
+    
+    def cleanup(self) -> None:
+        """Cleanup resources held by pipeline components"""
+        try:
+            if self.detector is not None:
+                self.detector.cleanup()
+            if self.tracker is not None:
+                self.tracker.cleanup()
+            if self.pose_estimator is not None:
+                # Pose estimator doesn't have a cleanup method yet, but we can add one if needed in the future
+                pass
+        finally:
+            self.detector = None
+            self.tracker = None
+            self.pose_estimator = None
+            self.is_initialized = False
     
     def process_video(
         self, 

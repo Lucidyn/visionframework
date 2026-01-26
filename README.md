@@ -261,6 +261,8 @@ exporter.export_to_coco_format(detections, 1, image_info, "output/coco_annotatio
 | `03_video_processing.py` | 视频文件处理示例 |
 | `04_stream_processing.py` | 视频流处理示例 |
 | `05_advanced_features.py` | 高级功能示例（模型管理、批量处理、配置文件、结果导出） |
+| `06_tools_usage.py` | 工具类使用示例 |
+| `07_enhanced_features.py` | 增强功能示例（ReID跟踪、轨迹分析、性能监控） |
 
 ## 依赖项
 

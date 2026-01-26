@@ -33,7 +33,8 @@ class ReIDExtractor(FeatureExtractor):
     def __init__(self, model_name: str = "resnet50", device: str = "cpu",
                  input_size: Tuple[int, int] = (128, 256),
                  model_path: Optional[str] = None,
-                 use_pretrained: bool = True):
+                 use_pretrained: bool = True,
+                 use_fp16: bool = False):
         """
         Initialize ReID extractor.
         
@@ -43,11 +44,13 @@ class ReIDExtractor(FeatureExtractor):
             input_size: Input size as (width, height)
             model_path: Path to custom model weights
             use_pretrained: Whether to use pretrained weights
+            use_fp16: Whether to use FP16 precision for inference
         """
         super().__init__(model_name, device)
         self.input_size = input_size
         self.model_path = model_path
         self.use_pretrained = use_pretrained
+        self.use_fp16 = use_fp16
         self._cached_model_key: Optional[str] = None
         
         self.transform = T.Compose([
@@ -65,20 +68,35 @@ class ReIDExtractor(FeatureExtractor):
                             "Install with: pip install 'visionframework[reid]'")
         
         try:
-            # Build cache key based on model_name, pretrained flag and model_path
-            key = f"reid:{self.model_name}:pretrained={self.use_pretrained}:path={self.model_path or 'none'}"
+            # Build cache key based on model_name, pretrained flag, model_path and use_fp16
+            key = f"reid:{self.model_name}:pretrained={self.use_pretrained}:path={self.model_path or 'none'}:fp16={self.use_fp16}"
 
             def loader():
                 # loader should create model on CPU to allow moving to target device per-extractor
+                from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152, \
+                                            ResNet18_Weights, ResNet34_Weights, ResNet50_Weights, \
+                                            ResNet101_Weights, ResNet152_Weights
+                
+                # Map model name to architecture and weights
+                model_map = {
+                    'resnet18': (resnet18, ResNet18_Weights.IMAGENET1K_V1 if self.use_pretrained else None),
+                    'resnet34': (resnet34, ResNet34_Weights.IMAGENET1K_V1 if self.use_pretrained else None),
+                    'resnet50': (resnet50, ResNet50_Weights.IMAGENET1K_V1 if self.use_pretrained else None),
+                    'resnet101': (resnet101, ResNet101_Weights.IMAGENET1K_V1 if self.use_pretrained else None),
+                    'resnet152': (resnet152, ResNet152_Weights.IMAGENET1K_V1 if self.use_pretrained else None),
+                }
+                
+                # Get model architecture and weights
+                model_class, weights = model_map.get(self.model_name, (resnet50, ResNet50_Weights.IMAGENET1K_V1 if self.use_pretrained else None))
+                
                 if self.model_path:
                     logger.info(f"Loading custom ReID model from {self.model_path}")
-                    base_model = resnet50(weights=None)
+                    base_model = model_class(weights=None)
                     state_dict = torch.load(self.model_path, map_location='cpu')
                     base_model.load_state_dict(state_dict)
                 else:
-                    logger.info("Loading ReID feature extractor (ResNet50)")
-                    weights = ResNet50_Weights.IMAGENET1K_V1 if self.use_pretrained else None
-                    base_model = resnet50(weights=weights)
+                    logger.info(f"Loading ReID feature extractor ({self.model_name})")
+                    base_model = model_class(weights=weights)
 
                 feat_model = torch.nn.Sequential(*list(base_model.children())[:-1])
                 feat_model.to('cpu')
@@ -93,6 +111,9 @@ class ReIDExtractor(FeatureExtractor):
             try:
                 if hasattr(self.model, 'to'):
                     self.model.to(self.device)
+                    # Enable FP16 if requested and supported
+                    if self.use_fp16 and torch.cuda.is_available():
+                        self.model = self.model.half()
             except Exception:
                 logger.debug("Failed to move ReID model to device; continuing")
 

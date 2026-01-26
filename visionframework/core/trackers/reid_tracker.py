@@ -96,7 +96,7 @@ class ReIDTracker(BaseTracker):
 
     def _get_cost_matrix(self, tracks: List[STrack], detections: List[Detection], embeddings: np.ndarray) -> np.ndarray:
         """
-        Calculate cost matrix combining IoU and ReID distance
+        Calculate cost matrix combining IoU and ReID distance with enhanced matching strategy
         
         Cost = reid_weight * reid_dist + (1 - reid_weight) * iou_dist
         """
@@ -110,7 +110,7 @@ class ReIDTracker(BaseTracker):
                 iou_matrix[i, j] = 1.0 - self._calculate_iou(track.bbox, det.bbox)
                 
         # ReID distance (Cosine distance)
-        # embeddings shape: (N_dets, 2048)
+        # embeddings shape: (N_dets, embedding_dim)
         # track embeddings
         track_embs = []
         valid_track_indices = []
@@ -120,8 +120,6 @@ class ReIDTracker(BaseTracker):
                 valid_track_indices.append(i)
             else:
                 # Handle tracks without embedding (should happen rarely if initialized correctly)
-                # Maybe fill with zeros or skip ReID for them?
-                # For simplicity, we treat them as having max distance
                 pass
                 
         reid_matrix = np.ones((len(tracks), len(detections))) # Default max distance
@@ -129,16 +127,34 @@ class ReIDTracker(BaseTracker):
         if len(track_embs) > 0 and len(embeddings) > 0:
             track_embs = np.stack(track_embs)
             # cdist returns distance matrix
-            dists = cdist(track_embs, embeddings, metric='cosine')
+            if self.matching_strategy == "greedy" and len(tracks) > len(detections):
+                # For greedy matching with more tracks than detections, use faster metric
+                dists = cdist(track_embs, embeddings, metric='euclidean')
+            else:
+                # For hungarian or balanced matching, use cosine similarity
+                dists = cdist(track_embs, embeddings, metric='cosine')
             # Map back to full matrix
             for k, track_idx in enumerate(valid_track_indices):
                 reid_matrix[track_idx, :] = dists[k, :]
                 
-        # Combine
-        # If tracks have no embedding, they rely purely on IoU (since ReID dist is 1.0)
-        # But we want to avoid matching if IoU is too low regardless of ReID
+        # Enhanced matching: apply thresholds to both IoU and ReID before combining
+        # If IoU is too low (< 0.1), make it impossible to match regardless of ReID
+        iou_matrix[iou_matrix > 0.9] = 1.0  # 1 - IoU < 0.1 means IoU > 0.9, which is good
         
-        cost_matrix = self.reid_weight * reid_matrix + (1 - self.reid_weight) * iou_matrix
+        # If ReID distance is too high (> 0.8), make it harder to match
+        reid_matrix[reid_matrix > 0.8] = 1.0
+        
+        # Combine with adaptive weights based on track age
+        # For new tracks, rely more on IoU; for older tracks, rely more on ReID
+        cost_matrix = np.zeros((len(tracks), len(detections)))
+        for i, track in enumerate(tracks):
+            # Adaptive weight: increase ReID weight as track gets older
+            track_age = self.frame_id - track.start_frame
+            adaptive_reid_weight = min(self.reid_weight + (track_age / 100), 0.9) if track_age > 5 else 0.3
+            
+            for j in range(len(detections)):
+                cost_matrix[i, j] = adaptive_reid_weight * reid_matrix[i, j] + (1 - adaptive_reid_weight) * iou_matrix[i, j]
+        
         return cost_matrix
 
     def update(self, detections: List[Detection], image: Optional[np.ndarray] = None) -> List[STrack]:

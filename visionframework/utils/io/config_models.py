@@ -336,15 +336,29 @@ class Config:
 
 
 class ModelCache:
-    """Simple in-memory model cache with reference counting.
+    """Enhanced in-memory model cache with reference counting, LRU eviction, and multi-model support.
 
     Stores loaded model instances keyed by a string (typically model path).
     Use `get_model(key, loader)` to obtain a cached model (loader called on first load),
     and `release_model(key)` to decrement reference count and free the model when unused.
+    
+    Features:
+    - Reference counting to track model usage
+    - LRU eviction when max cache size is reached
+    - Support for multiple model types (YOLO, CLIP, etc.)
+    - Graceful resource cleanup
+    - CUDA memory management
     """
 
-    _cache = {}
+    _cache = {}  # key: (model, ref_count, last_used_timestamp)
+    _max_cache_size = 10  # Maximum number of models to keep in cache
     _lock = None
+    _model_loaders = {
+        'yolo': lambda path: None,  # Will be implemented with proper YOLO loading when needed
+        'clip': lambda path: None,  # Will be implemented with proper CLIP loading
+        'detr': lambda path: None,  # Will be implemented with proper DETR loading
+        'pose': lambda path: None,  # Will be implemented with proper pose estimation loading
+    }
 
     try:
         import threading
@@ -353,70 +367,190 @@ class ModelCache:
         _lock = None
 
     @classmethod
+    def set_max_cache_size(cls, max_size: int):
+        """Set maximum cache size for model instances."""
+        if cls._lock:
+            cls._lock.acquire()
+        try:
+            cls._max_cache_size = max(1, max_size)
+            # If current cache exceeds new max size, evict least recently used models
+            if len(cls._cache) > cls._max_cache_size:
+                # Sort by last used timestamp
+                sorted_keys = sorted(
+                    cls._cache.keys(), 
+                    key=lambda k: cls._cache[k][2]  # last_used_timestamp
+                )
+                # Evict models until cache size is within limit
+                models_to_evict = len(cls._cache) - cls._max_cache_size
+                for key in sorted_keys[:models_to_evict]:
+                    entry = cls._cache.get(key)
+                    if entry and entry[1] <= 0:  # Only evict unused models
+                        cls._cache.pop(key, None)
+        finally:
+            if cls._lock:
+                cls._lock.release()
+
+    @classmethod
     def get_model(cls, key: str, loader):
         """Return cached model for `key`. `loader` is a callable to create the model if missing."""
+        import time
+        current_time = time.time()
+        
         if cls._lock:
             cls._lock.acquire()
         try:
             entry = cls._cache.get(key)
             if entry is not None:
-                model, ref = entry
-                cls._cache[key] = (model, ref + 1)
+                model, ref, _ = entry
+                cls._cache[key] = (model, ref + 1, current_time)  # Update last used time
                 return model
+
+            # Check if cache is full and evict if needed
+            if len(cls._cache) >= cls._max_cache_size:
+                # Find least recently used model with ref_count <= 0
+                lru_key = None
+                lru_time = float('inf')
+                for k, (_, ref, last_time) in cls._cache.items():
+                    if ref <= 0 and last_time < lru_time:
+                        lru_key = k
+                        lru_time = last_time
+                
+                # Evict LRU model if found
+                if lru_key:
+                    cls._evict_model(lru_key)
 
             # load model
             model = loader()
-            cls._cache[key] = (model, 1)
+            if model is not None:
+                cls._cache[key] = (model, 1, current_time)
             return model
         finally:
             if cls._lock:
                 cls._lock.release()
 
     @classmethod
+    def _evict_model(cls, key: str):
+        """Evict a model from cache with proper cleanup."""
+        try:
+            entry = cls._cache.get(key)
+            if entry:
+                model, _, _ = entry
+                # Attempt graceful cleanup
+                cls._cleanup_model(model)
+                cls._cache.pop(key, None)
+                # Try to free CUDA cache
+                cls._free_cuda_cache()
+        except Exception as e:
+            from ...utils.monitoring.logger import get_logger
+            logger = get_logger(__name__)
+            logger.debug(f"Error evicting model {key}: {e}")
+
+    @classmethod
+    def _cleanup_model(cls, model):
+        """Clean up model resources gracefully."""
+        try:
+            if hasattr(model, 'to'):
+                try:
+                    model.to('cpu')
+                except Exception:
+                    pass
+            if hasattr(model, 'eval'):
+                try:
+                    model.eval()
+                except Exception:
+                    pass
+            if hasattr(model, 'cleanup'):
+                try:
+                    model.cleanup()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            del model
+        except Exception:
+            pass
+
+    @classmethod
+    def _free_cuda_cache(cls):
+        """Free CUDA memory cache if available."""
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+
+    @classmethod
     def release_model(cls, key: str):
         """Release a reference to the cached model and free if refcount reaches zero."""
+        import time
+        current_time = time.time()
+        
         if cls._lock:
             cls._lock.acquire()
         try:
             entry = cls._cache.get(key)
             if not entry:
                 return
-            model, ref = entry
+            model, ref, _ = entry
             ref -= 1
             if ref <= 0:
-                # Attempt graceful cleanup
-                try:
-                    if hasattr(model, 'to'):
-                        try:
-                            model.to('cpu')
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-                try:
-                    del model
-                except Exception:
-                    pass
+                # Cleanup and remove from cache
+                cls._cleanup_model(model)
                 cls._cache.pop(key, None)
-                # Try to free CUDA cache
-                try:
-                    import torch
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                except Exception:
-                    pass
+                cls._free_cuda_cache()
             else:
-                cls._cache[key] = (model, ref)
+                cls._cache[key] = (model, ref, current_time)
         finally:
             if cls._lock:
                 cls._lock.release()
 
     @classmethod
-    def get_from_manager(cls, model_name: str, download: bool = True, verify_hash: bool = True):
+    def clear_cache(cls):
+        """Clear all cached models."""
+        if cls._lock:
+            cls._lock.acquire()
+        try:
+            for key in list(cls._cache.keys()):
+                entry = cls._cache.get(key)
+                if entry:
+                    model, _, _ = entry
+                    cls._cleanup_model(model)
+            cls._cache.clear()
+            cls._free_cuda_cache()
+        finally:
+            if cls._lock:
+                cls._lock.release()
+
+    @classmethod
+    def get_cache_status(cls) -> Dict[str, Any]:
+        """Get current cache status."""
+        if cls._lock:
+            cls._lock.acquire()
+        try:
+            return {
+                'current_size': len(cls._cache),
+                'max_size': cls._max_cache_size,
+                'models': {
+                    key: {
+                        'ref_count': entry[1],
+                        'last_used': entry[2]
+                    } 
+                    for key, entry in cls._cache.items()
+                }
+            }
+        finally:
+            if cls._lock:
+                cls._lock.release()
+
+    @classmethod
+    def get_from_manager(cls, model_name: str, model_type: str = 'yolo', download: bool = True, verify_hash: bool = True):
         """Get model from ModelManager and cache it in memory.
         
         Args:
             model_name: Name of the model to get
+            model_type: Type of model (yolo, clip, detr, pose, etc.)
             download: Whether to download if not cached
             verify_hash: Whether to verify file hash after download
             
@@ -429,12 +563,26 @@ class ModelCache:
             model_manager = get_model_manager()
             model_path = model_manager.get_model_path(model_name, download=download, verify_hash=verify_hash)
             if model_path:
-                # Try to import and load YOLO model
-                try:
-                    from ultralytics import YOLO
-                    return YOLO(str(model_path))
-                except Exception:
-                    pass
+                # Use appropriate loader based on model type
+                loader_func = cls._model_loaders.get(model_type.lower())
+                if loader_func:
+                    try:
+                        return loader_func(model_path)
+                    except Exception as e:
+                        from ...utils.monitoring.logger import get_logger
+                        logger = get_logger(__name__)
+                        logger.debug(f"Error loading {model_type} model {model_name}: {e}")
             return None
         
-        return cls.get_model(model_name, loader)
+        return cls.get_model(f"{model_type}:{model_name}", loader)
+
+    @classmethod
+    def register_model_loader(cls, model_type: str, loader_func):
+        """Register a custom model loader for a specific model type."""
+        if cls._lock:
+            cls._lock.acquire()
+        try:
+            cls._model_loaders[model_type.lower()] = loader_func
+        finally:
+            if cls._lock:
+                cls._lock.release()

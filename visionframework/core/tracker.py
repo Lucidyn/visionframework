@@ -12,6 +12,7 @@ from .base import BaseModule
 from ..data.detection import Detection
 from ..data.track import Track
 from ..utils.monitoring.logger import get_logger
+from ..utils.data.trajectory_analyzer import TrajectoryAnalyzer
 
 logger = get_logger(__name__)
 
@@ -78,6 +79,9 @@ class Tracker(BaseModule):
                   Must be a number between 0.0 and 1.0. Only used for ByteTrack.
                 - reid_weight: ReID weight for ReID Tracker (default: 0.7)
                 - reid_config: ReID configuration dictionary
+                - trajectory_analysis: Enable trajectory analysis (default: False)
+                - fps: Frames per second for trajectory analysis (default: 30)
+                - pixel_to_meter: Conversion factor from pixels to meters (default: None)
         
         Raises:
             ValueError: If configuration is invalid (will be logged as warning)
@@ -85,6 +89,15 @@ class Tracker(BaseModule):
         super().__init__(config)
         self.tracker_impl: Optional[BaseModule] = None
         self.tracker_type: str = self.config.get("tracker_type", "iou")
+        
+        # Initialize trajectory analyzer
+        self.enable_trajectory_analysis: bool = self.config.get("trajectory_analysis", False)
+        self.fps: float = self.config.get("fps", 30.0)
+        self.pixel_to_meter: Optional[float] = self.config.get("pixel_to_meter", None)
+        self.trajectory_analyzer: Optional[TrajectoryAnalyzer] = None
+        
+        if self.enable_trajectory_analysis:
+            self.trajectory_analyzer = TrajectoryAnalyzer(fps=self.fps, pixel_to_meter=self.pixel_to_meter)
     
     def validate_config(self, config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         """
@@ -473,7 +486,129 @@ class Tracker(BaseModule):
                 return None
         
         return None
-
+    
+    def analyze_track(self, track: Track) -> Optional[Dict[str, Any]]:
+        """
+        Analyze a single track's trajectory
+        
+        Args:
+            track: Track object to analyze
+        
+        Returns:
+            Optional[Dict[str, Any]]: Dictionary containing trajectory analysis results
+                                      Returns None if trajectory analysis is disabled.
+        
+        Example:
+            ```python
+            track = tracker.get_track_by_id(5)
+            if track:
+                analysis = tracker.analyze_track(track)
+                if analysis:
+                    print(f"Track {track.track_id} speed: {analysis['speed']['magnitude']:.2f} pixels/frame")
+            ```
+        """
+        if not self.enable_trajectory_analysis or self.trajectory_analyzer is None:
+            return None
+        
+        try:
+            return self.trajectory_analyzer.analyze_track(track)
+        except Exception as e:
+            logger.error(f"Error analyzing track: {e}", exc_info=True)
+            return None
+    
+    def analyze_tracks(self, tracks: Optional[List[Track]] = None) -> List[Dict[str, Any]]:
+        """
+        Analyze trajectories for multiple tracks
+        
+        Args:
+            tracks: List of tracks to analyze. If None, analyze all active tracks.
+        
+        Returns:
+            List[Dict[str, Any]]: List of trajectory analysis results
+        
+        Example:
+            ```python
+            # Analyze all active tracks
+            analysis_results = tracker.analyze_tracks()
+            for result in analysis_results:
+                print(f"Track {result['track_id']}: Speed={result['speed']['magnitude']:.2f}")
+            
+            # Analyze specific tracks
+            specific_tracks = [track1, track2]
+            analysis_results = tracker.analyze_tracks(specific_tracks)
+            ```
+        """
+        if not self.enable_trajectory_analysis or self.trajectory_analyzer is None:
+            return []
+        
+        try:
+            # If no tracks provided, get all active tracks
+            if tracks is None:
+                tracks = self.get_tracks()
+            
+            return self.trajectory_analyzer.analyze_tracks(tracks)
+        except Exception as e:
+            logger.error(f"Error analyzing tracks: {e}", exc_info=True)
+            return []
+    
+    def smooth_track_trajectory(self, track: Track, window_size: int = 5) -> List[Tuple[float, float, float, float]]:
+        """
+        Smooth a track's trajectory using moving average
+        
+        Args:
+            track: Track object to smooth
+            window_size: Size of moving average window
+        
+        Returns:
+            List[Tuple[float, float, float, float]]: List of smoothed bounding boxes
+        
+        Example:
+            ```python
+            track = tracker.get_track_by_id(5)
+            if track:
+                smoothed = tracker.smooth_track_trajectory(track, window_size=3)
+                print(f"Original trajectory length: {len(track.history)}")
+                print(f"Smoothed trajectory length: {len(smoothed)}")
+            ```
+        """
+        if not self.enable_trajectory_analysis or self.trajectory_analyzer is None:
+            return track.history
+        
+        try:
+            return self.trajectory_analyzer.smooth_trajectory(track, window_size)
+        except Exception as e:
+            logger.error(f"Error smoothing track trajectory: {e}", exc_info=True)
+            return track.history
+    
+    def predict_next_position(self, track: Track, frames_ahead: int = 1) -> Tuple[float, float, float, float]:
+        """
+        Predict a track's next position using linear extrapolation
+        
+        Args:
+            track: Track object to predict
+            frames_ahead: Number of frames to predict ahead
+        
+        Returns:
+            Tuple[float, float, float, float]: Predicted bounding box
+        
+        Example:
+            ```python
+            track = tracker.get_track_by_id(5)
+            if track:
+                predicted_bbox = tracker.predict_next_position(track, frames_ahead=2)
+                print(f"Current bbox: {track.bbox}")
+                print(f"Predicted bbox in 2 frames: {predicted_bbox}")
+            ```
+        """
+        if not self.enable_trajectory_analysis or self.trajectory_analyzer is None:
+            return track.bbox
+        
+        try:
+            return self.trajectory_analyzer.predict_next_position(track, frames_ahead)
+        except Exception as e:
+            logger.error(f"Error predicting next position: {e}", exc_info=True)
+            return track.bbox
+    
     def cleanup(self) -> None:
         """Cleanup resources held by tracker and underlying implementation."""
         try:

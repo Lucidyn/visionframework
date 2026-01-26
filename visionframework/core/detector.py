@@ -62,13 +62,19 @@ class Detector(BaseModule):
                     - 'detr': DETR (Detection Transformer) model
                     - 'rfdetr': RF-DETR (Roboflow DETR) model
                 - conf_threshold: Confidence threshold between 0.0 and 1.0 (default: 0.25)
+                - category_thresholds: Dictionary of category-specific confidence thresholds
+                  Example: {"person": 0.7, "car": 0.5}
                 - iou_threshold: IoU threshold for NMS, between 0.0 and 1.0 (default: 0.45)
                   Only used for YOLO models.
-                - device: Device to use, one of 'cpu', 'cuda', 'mps' (default: 'cpu')
+                - device: Device to use, one of 'cpu', 'cuda', 'mps', 'auto' (default: 'cpu')
                 - detr_model_name: DETR model name for HuggingFace (default: 'facebook/detr-resnet-50')
                   Options: 'facebook/detr-resnet-50', 'facebook/detr-resnet-101'
                 - rfdetr_model_name: RF-DETR model name (default: None, uses default model)
                 - enable_segmentation: Enable segmentation for YOLO (default: False)
+                - quantization: Model quantization option, one of: None, 'int8', 'fp16', 'dynamic'
+                - custom_classes: Optional dictionary mapping class IDs to class names
+                  Used for custom trained models
+                - custom_model: Boolean flag indicating if this is a custom trained model (default: False)
         
         Raises:
             ValueError: If configuration is invalid (will be logged as warning)
@@ -95,6 +101,9 @@ class Detector(BaseModule):
             - conf_threshold is between 0.0 and 1.0
             - iou_threshold is between 0.0 and 1.0 (if provided)
             - device is a valid device type
+            - category_thresholds is a dictionary (if provided)
+            - quantization is a valid option (if provided)
+            - custom_classes is a dictionary (if provided)
         """
         # Validate model_type
         if "model_type" in config:
@@ -135,6 +144,30 @@ class Detector(BaseModule):
                     return False, f"Threshold for category '{category}' must be a number, got {type(threshold).__name__}"
                 if not 0.0 <= threshold <= 1.0:
                     return False, f"Threshold for category '{category}' must be between 0.0 and 1.0, got {threshold}"
+        
+        # Validate quantization
+        if "quantization" in config:
+            quantization = config["quantization"]
+            if quantization not in [None, "int8", "fp16", "dynamic"]:
+                return False, f"Invalid quantization option: {quantization}. Supported: None, 'int8', 'fp16', 'dynamic'"
+        
+        # Validate custom_classes
+        if "custom_classes" in config:
+            custom_classes = config["custom_classes"]
+            if not isinstance(custom_classes, dict):
+                return False, f"custom_classes must be a dictionary, got {type(custom_classes).__name__}"
+            # Validate each entry in custom_classes
+            for class_id, class_name in custom_classes.items():
+                if not isinstance(class_id, int):
+                    return False, f"Class ID in custom_classes must be an integer, got {type(class_id).__name__}"
+                if not isinstance(class_name, str):
+                    return False, f"Class name in custom_classes must be a string, got {type(class_name).__name__}"
+        
+        # Validate custom_model
+        if "custom_model" in config:
+            custom_model = config["custom_model"]
+            if not isinstance(custom_model, bool):
+                return False, f"custom_model must be a boolean, got {type(custom_model).__name__}"
         
         return True, None
     
@@ -358,6 +391,10 @@ class Detector(BaseModule):
                 - device: Device being used ('cpu', 'cuda', 'mps')
                 - conf_threshold: Confidence threshold
                 - iou_threshold: IoU threshold (for YOLO)
+                - quantization: Quantization setting (if any)
+                - custom_model: Whether this is a custom trained model
+                - custom_classes_count: Number of custom classes (if any)
+                - enable_segmentation: Whether segmentation is enabled
             
             If not initialized, returns: {"status": "not_initialized"}
         
@@ -382,7 +419,15 @@ class Detector(BaseModule):
             "device": self.config.get("device", "cpu"),
             "conf_threshold": self.config.get("conf_threshold", 0.25),
             "iou_threshold": self.config.get("iou_threshold", 0.45),
+            "quantization": self.config.get("quantization", None),
+            "custom_model": self.config.get("custom_model", False),
+            "enable_segmentation": self.config.get("enable_segmentation", False),
         }
+        
+        # Add custom classes count if available
+        custom_classes = self.config.get("custom_classes", {})
+        if custom_classes:
+            info["custom_classes_count"] = len(custom_classes)
         
         # Add model-specific information
         if self.model_type == "detr":

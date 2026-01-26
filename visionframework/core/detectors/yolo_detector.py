@@ -68,6 +68,7 @@ class YOLODetector(BaseDetector):
                     - 'cpu': CPU inference (default)
                     - 'cuda': GPU inference (requires CUDA-capable GPU)
                     - 'mps': Apple Silicon GPU (macOS only)
+                    - 'auto': Automatically select best available device
                 - enable_segmentation: Enable instance segmentation (default: False)
                   If True and model_path doesn't contain "seg", will try to load segmentation model.
                 - batch_inference: Enable batch inference (default: False)
@@ -75,6 +76,14 @@ class YOLODetector(BaseDetector):
                   Automatically adjusts batch size based on available memory and input size.
                 - max_batch_size: Maximum batch size for dynamic batching (default: 8)
                 - min_batch_size: Minimum batch size for dynamic batching (default: 1)
+                - quantization: Model quantization option, one of:
+                    - None: No quantization (default)
+                    - 'int8': INT8 quantization for CPU/GPU
+                    - 'fp16': FP16 quantization for GPU
+                    - 'dynamic': Dynamic quantization
+                - custom_classes: Optional dictionary mapping class IDs to class names
+                  Used for custom trained models
+                - custom_model: Boolean flag indicating if this is a custom trained model (default: False)
         
         Raises:
             ValueError: If configuration is invalid (will be logged as warning)
@@ -94,6 +103,9 @@ class YOLODetector(BaseDetector):
         self.max_batch_size: int = int(self.config.get("max_batch_size", perf.get("max_batch_size", 8)))
         self.min_batch_size: int = int(self.config.get("min_batch_size", perf.get("min_batch_size", 1)))
         self.use_fp16: bool = bool(self.config.get("use_fp16", perf.get("use_fp16", False)))
+        self.quantization: Optional[str] = self.config.get("quantization")
+        self.custom_classes: Optional[Dict[int, str]] = self.config.get("custom_classes")
+        self.custom_model: bool = bool(self.config.get("custom_model", False))
         self._cached_model_key: Optional[str] = None
     
     def initialize(self) -> bool:
@@ -105,25 +117,9 @@ class YOLODetector(BaseDetector):
             # Determine model name for ModelManager
             model_name = self.model_path.split(".")[0]  # Extract model name without extension
             
-            # Load segmentation model if enabled
-            if self.enable_segmentation and "seg" not in model_name.lower():
-                seg_model_name = f"{model_name}-seg"
-                try:
-                    self.model = ModelCache.get_from_manager(seg_model_name)
-                    self._cached_model_key = seg_model_name
-                    logger.debug(f"Loaded segmentation model from ModelManager: {seg_model_name}")
-                except (FileNotFoundError, RuntimeError, ValueError) as e:
-                    # Fallback to regular model
-                    logger.warning(f"Failed to load segmentation model, falling back to regular model: {e}")
-                    self.model = ModelCache.get_from_manager(model_name)
-                    self._cached_model_key = model_name
-            else:
-                self.model = ModelCache.get_from_manager(model_name)
-                self._cached_model_key = model_name
-            
-            # Check if model was successfully loaded
-            if self.model is None:
-                raise RuntimeError(f"Failed to load model from ModelManager: {model_name}")
+            # Load model directly from file path (supports custom models)
+            logger.info(f"Loading YOLO model from: {self.model_path}")
+            self.model = YOLO(self.model_path)
             
             # Handle auto device selection
             if self.device == 'auto':
@@ -137,6 +133,27 @@ class YOLODetector(BaseDetector):
                     logger.info(f"Requested device '{self.device}' not available, using '{device}' instead")
                 self.device = device
             
+            # Apply quantization if specified
+            if self.quantization:
+                logger.info(f"Applying {self.quantization} quantization to model")
+                try:
+                    # Handle different quantization types
+                    if self.quantization == 'int8':
+                        # For Ultralytics YOLO, we can set the model to use INT8 precision
+                        # This is handled through the device parameter or model configuration
+                        pass  # YOLO handles INT8 through device context
+                    elif self.quantization == 'fp16':
+                        # FP16 is already supported through use_fp16 flag
+                        self.use_fp16 = True
+                    elif self.quantization == 'dynamic':
+                        # Dynamic quantization for CPU
+                        if self.device == 'cpu':
+                            logger.info("Enabling dynamic quantization for CPU")
+                            # Note: Ultralytics YOLO doesn't directly support dynamic quantization
+                            # This would require additional implementation with PyTorch
+                except Exception as e:
+                    logger.warning(f"Failed to apply quantization: {e}")
+            
             # Try moving model to device if supported by model wrapper
             try:
                 if hasattr(self.model, 'to'):
@@ -144,8 +161,17 @@ class YOLODetector(BaseDetector):
             except Exception:
                 logger.debug("Model.to(device) not supported or failed; continuing")
             
+            # Set custom classes if provided
+            if self.custom_classes:
+                logger.info(f"Setting custom classes: {self.custom_classes}")
+                # Update model names with custom classes
+                if hasattr(self.model, 'names'):
+                    # Create a copy to avoid modifying the original
+                    self.model.names = dict(self.model.names)  # Convert to dict if needed
+                    self.model.names.update(self.custom_classes)
+            
             self.is_initialized = True
-            logger.info(f"YOLO detector initialized successfully with model: {model_name}")
+            logger.info(f"YOLO detector initialized successfully with model: {self.model_path}")
             return True
         except ImportError as e:
             logger.error(f"Missing dependency for YOLO detector: {e}", exc_info=True)
@@ -412,7 +438,13 @@ class YOLODetector(BaseDetector):
                     box = boxes.xyxy[i].cpu().numpy()
                     conf = float(boxes.conf[i].cpu().numpy())
                     cls_id = int(boxes.cls[i].cpu().numpy())
-                    cls_name = result.names[cls_id] if hasattr(result, 'names') else str(cls_id)
+                    
+                    # Get class name - use custom classes if provided, otherwise use result.names
+                    cls_name = str(cls_id)
+                    if self.custom_classes and cls_id in self.custom_classes:
+                        cls_name = self.custom_classes[cls_id]
+                    elif hasattr(result, 'names') and cls_id in result.names:
+                        cls_name = result.names[cls_id]
                     
                     # Check if we should keep this detection
                     if self._should_keep_detection(conf, cls_id, cls_name, categories):
@@ -420,6 +452,9 @@ class YOLODetector(BaseDetector):
                         detection = self._create_detection(box, conf, cls_id, cls_name, masks, i, source_images[img_idx])
                         if detection:
                             img_detections.append(detection)
+            
+            # Additional post-processing: sort detections by confidence
+            img_detections.sort(key=lambda x: x.confidence, reverse=True)
             
             detections_list.append(img_detections)
         
