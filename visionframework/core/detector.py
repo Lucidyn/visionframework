@@ -11,6 +11,7 @@ import numpy as np
 from .base import BaseModule
 from ..data.detection import Detection
 from ..utils.monitoring.logger import get_logger
+from .segmenters import SAMSegmenter
 
 logger = get_logger(__name__)
 
@@ -75,6 +76,10 @@ class Detector(BaseModule):
                 - custom_classes: Optional dictionary mapping class IDs to class names
                   Used for custom trained models
                 - custom_model: Boolean flag indicating if this is a custom trained model (default: False)
+                - segmenter_type: Type of segmenter, one of: None, 'sam' (default: None)
+                - sam_model_path: Path to SAM model file (default: None, downloads automatically)
+                - sam_model_type: SAM model type, one of: 'vit_h', 'vit_l', 'vit_b' (default: 'vit_b')
+                - sam_use_fp16: Whether to use FP16 precision for SAM (default: True for CUDA, False for CPU)
         
         Raises:
             ValueError: If configuration is invalid (will be logged as warning)
@@ -83,6 +88,13 @@ class Detector(BaseModule):
         self.detector_impl: Optional[BaseModule] = None
         self.model_type: str = self.config.get("model_type", "yolo")
         self.model_path: str = self.config.get("model_path", "yolov8n.pt")
+        
+        # Segmenter integration
+        self.segmenter: Optional[SAMSegmenter] = None
+        self.segmenter_type: Optional[str] = self.config.get("segmenter_type")
+        self.sam_model_path: Optional[str] = self.config.get("sam_model_path")
+        self.sam_model_type: str = self.config.get("sam_model_type", "vit_b")
+        self.sam_use_fp16: bool = self.config.get("sam_use_fp16", self.config.get("device") == "cuda")
     
     def validate_config(self, config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         """
@@ -169,6 +181,18 @@ class Detector(BaseModule):
             if not isinstance(custom_model, bool):
                 return False, f"custom_model must be a boolean, got {type(custom_model).__name__}"
         
+        # Validate segmenter_type
+        if "segmenter_type" in config:
+            segmenter_type = config["segmenter_type"]
+            if segmenter_type not in [None, "sam"]:
+                return False, f"Invalid segmenter_type: {segmenter_type}. Supported: None, 'sam'"
+        
+        # Validate sam_model_type
+        if "sam_model_type" in config:
+            sam_model_type = config["sam_model_type"]
+            if sam_model_type not in ["vit_h", "vit_l", "vit_b"]:
+                return False, f"Invalid sam_model_type: {sam_model_type}. Supported: 'vit_h', 'vit_l', 'vit_b'"
+        
         return True, None
     
     def initialize(self) -> bool:
@@ -220,6 +244,18 @@ class Detector(BaseModule):
             
             result = self.detector_impl.initialize()
             if result:
+                # Initialize segmenter if configured
+                if self.segmenter_type == "sam":
+                    self.segmenter = SAMSegmenter({
+                        "model_type": self.sam_model_type,
+                        "model_path": self.sam_model_path,
+                        "device": self.config.get("device", "cpu"),
+                        "use_fp16": self.sam_use_fp16
+                    })
+                    segmenter_result = self.segmenter.initialize()
+                    if not segmenter_result:
+                        logger.warning("Failed to initialize SAM segmenter, continuing with detection only")
+                        self.segmenter = None
                 self.is_initialized = True
             return result
         except ValueError as e:
@@ -280,7 +316,13 @@ class Detector(BaseModule):
             return []
         
         try:
-            return self.detector_impl.detect(image, categories=categories)
+            detections = self.detector_impl.detect(image, categories=categories)
+            
+            # If segmenter is available, perform segmentation on detections
+            if self.segmenter is not None and detections:
+                detections = self.segmenter.segment_detections(image, detections)
+            
+            return detections
         except Exception as e:
             logger.error(f"Error during detection: {e}", exc_info=True)
             return []
@@ -346,15 +388,22 @@ class Detector(BaseModule):
         try:
             # Check if detector has batch detect method
             if hasattr(self.detector_impl, 'detect_batch'):
-                return self.detector_impl.detect_batch(images, categories=categories)
+                all_detections = self.detector_impl.detect_batch(images, categories=categories)
             else:
                 # Fallback: process images individually
                 logger.debug("Detector does not support batch detection, processing individually")
-                results = []
+                all_detections = []
                 for image in images:
                     dets = self.detector_impl.detect(image, categories=categories)
-                    results.append(dets)
-                return results
+                    all_detections.append(dets)
+            
+            # If segmenter is available, perform segmentation on detections
+            if self.segmenter is not None:
+                for i, detections in enumerate(all_detections):
+                    if detections:
+                        all_detections[i] = self.segmenter.segment_detections(images[i], detections)
+            
+            return all_detections
         except Exception as e:
             logger.error(f"Error during batch detection: {e}", exc_info=True)
             return [[] for _ in images]
@@ -440,6 +489,15 @@ class Detector(BaseModule):
     def cleanup(self) -> None:
         """Cleanup resources held by detector and underlying implementation."""
         try:
+            # Cleanup segmenter first if available
+            if self.segmenter:
+                try:
+                    self.segmenter.cleanup()
+                except Exception as e:
+                    logger.warning(f"Error during segmenter.cleanup(): {e}")
+                self.segmenter = None
+            
+            # Cleanup detector implementation
             if self.detector_impl and hasattr(self.detector_impl, 'cleanup'):
                 try:
                     self.detector_impl.cleanup()
@@ -447,4 +505,5 @@ class Detector(BaseModule):
                     logger.warning(f"Error during detector_impl.cleanup(): {e}")
         finally:
             self.detector_impl = None
+            self.segmenter = None
             self.is_initialized = False

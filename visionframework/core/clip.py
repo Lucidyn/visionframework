@@ -9,12 +9,12 @@ This module keeps dependencies optional: if `transformers` or `torch` are
 not available the module will fail on `initialize()` with a clear message.
 """
 
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 import numpy as np
 
 # Try relative import first (normal package import), then fallback for direct file imports
 try:
-    from ..utils.io.config import ModelCache, DeviceManager
+    from ..utils.io.config_models import ModelCache, DeviceManager
     from ..utils.monitoring.logger import get_logger
 except ImportError:
     # Fallback for direct file imports or edge cases
@@ -23,7 +23,7 @@ except ImportError:
     parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
-    from visionframework.utils.io.config import ModelCache, DeviceManager
+    from visionframework.utils.io.config_models import ModelCache, DeviceManager
     from visionframework.utils.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
@@ -62,11 +62,20 @@ class CLIPExtractor:
         
         # Supported CLIP model architectures
         self.supported_models = [
+            # OpenAI CLIP
             "openai/clip-vit-base-patch32",
             "openai/clip-vit-base-patch16",
             "openai/clip-vit-large-patch14",
+            
+            # OpenCLIP
             "laion/CLIP-ViT-B-32-laion2B-s34B-b79K",
             "laion/CLIP-ViT-L-14-laion2B-s32B-b82K",
+            "laion/CLIP-ViT-g-14-laion2B-s12B-b42K",
+            
+            # Chinese CLIP
+            "OFA-Sys/chinese-clip-vit-base-patch16",
+            "OFA-Sys/chinese-clip-vit-large-patch14",
+            "OFA-Sys/chinese-clip-vit-huge-patch14",
         ]
 
     def initialize(self) -> bool:

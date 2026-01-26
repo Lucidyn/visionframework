@@ -4,7 +4,8 @@
 
 import numpy as np
 import pytest
-from visionframework.utils.evaluation import DetectionEvaluator, TrackingEvaluator
+from visionframework.utils.evaluation.detection_evaluator import DetectionEvaluator
+from visionframework.utils.evaluation.tracking_evaluator import TrackingEvaluator
 from visionframework.data.detection import Detection
 
 

@@ -7,7 +7,7 @@ long_description = readme_file.read_text(encoding="utf-8") if readme_file.exists
 
 setup(
     name="visionframework",
-    version="0.2.10",
+    version="0.2.12",
     description="A comprehensive vision framework for detection, tracking, and more with configuration management, model management, and device autoselection",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -47,6 +47,9 @@ setup(
         "detr": [
             "transformers>=4.30.0",
         ],
+        "sam": [
+            "segment-anything>=1.0",
+        ],
         "rfdetr": [
             "rfdetr>=0.1.0",
             "supervision>=0.18.0",
@@ -60,6 +63,7 @@ setup(
         ],
         "all": [
             "transformers>=4.30.0",
+            "segment-anything>=1.0",
             "rfdetr>=0.1.0",
             "supervision>=0.18.0",
             "pytest>=7.0.0",

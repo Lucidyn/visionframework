@@ -143,10 +143,24 @@ def test_pose_visualizer():
         KeyPoint(keypoint_id=0, x=150, y=150, confidence=0.9, keypoint_name="nose"),
         KeyPoint(keypoint_id=1, x=140, y=140, confidence=0.8, keypoint_name="left_eye"),
         KeyPoint(keypoint_id=2, x=160, y=140, confidence=0.8, keypoint_name="right_eye"),
+        KeyPoint(keypoint_id=3, x=130, y=160, confidence=0.7, keypoint_name="left_ear"),
+        KeyPoint(keypoint_id=4, x=170, y=160, confidence=0.7, keypoint_name="right_ear"),
+        KeyPoint(keypoint_id=5, x=120, y=200, confidence=0.8, keypoint_name="left_shoulder"),
+        KeyPoint(keypoint_id=6, x=180, y=200, confidence=0.8, keypoint_name="right_shoulder"),
+        KeyPoint(keypoint_id=7, x=110, y=250, confidence=0.7, keypoint_name="left_elbow"),
+        KeyPoint(keypoint_id=8, x=190, y=250, confidence=0.7, keypoint_name="right_elbow"),
+        KeyPoint(keypoint_id=9, x=100, y=300, confidence=0.6, keypoint_name="left_wrist"),
+        KeyPoint(keypoint_id=10, x=200, y=300, confidence=0.6, keypoint_name="right_wrist"),
+        KeyPoint(keypoint_id=11, x=130, y=350, confidence=0.7, keypoint_name="left_hip"),
+        KeyPoint(keypoint_id=12, x=170, y=350, confidence=0.7, keypoint_name="right_hip"),
+        KeyPoint(keypoint_id=13, x=120, y=400, confidence=0.6, keypoint_name="left_knee"),
+        KeyPoint(keypoint_id=14, x=180, y=400, confidence=0.6, keypoint_name="right_knee"),
+        KeyPoint(keypoint_id=15, x=110, y=450, confidence=0.5, keypoint_name="left_ankle"),
+        KeyPoint(keypoint_id=16, x=190, y=450, confidence=0.5, keypoint_name="right_ankle"),
     ]
     
     sample_pose = Pose(
-        bbox=(100, 100, 200, 300),
+        bbox=(100, 100, 200, 480),
         confidence=0.9,
         pose_id=1,
         keypoints=keypoints
@@ -168,6 +182,16 @@ def test_pose_visualizer():
         sample_pose, 
         draw_skeleton=False, 
         draw_keypoints=True, 
+        draw_bbox=False
+    )
+    assert result.shape == image.shape
+    
+    # 测试只绘制骨骼
+    result = viz.draw_pose(
+        image.copy(), 
+        sample_pose, 
+        draw_skeleton=True, 
+        draw_keypoints=False, 
         draw_bbox=False
     )
     assert result.shape == image.shape
@@ -215,6 +239,8 @@ def test_visualizer():
     
     keypoints = [
         KeyPoint(keypoint_id=0, x=150, y=150, confidence=0.9, keypoint_name="nose"),
+        KeyPoint(keypoint_id=1, x=140, y=140, confidence=0.8, keypoint_name="left_eye"),
+        KeyPoint(keypoint_id=2, x=160, y=140, confidence=0.8, keypoint_name="right_eye"),
     ]
     
     sample_pose = Pose(

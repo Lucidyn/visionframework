@@ -17,7 +17,7 @@ except ImportError:
 
 from .feature_extractor import FeatureExtractor
 from ...utils.monitoring.logger import get_logger
-from ...utils.io.config import Config, ModelCache
+from ...utils.io.config_models import Config, ModelCache
 
 logger = get_logger(__name__)
 

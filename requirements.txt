@@ -12,6 +12,10 @@ pydantic>=2.0.0
 # For CLIP or DETR support:
 # transformers>=4.30.0
 
+# For SAM (Segment Anything Model) support:
+# segment-anything>=1.0
+# onnxruntime>=1.14.0  # Optional, for ONNX model inference
+
 # For RF-DETR support:
 # rfdetr>=0.1.0
 # supervision>=0.18.0
@@ -22,6 +26,7 @@ pydantic>=2.0.0
 # Or install specific feature groups:
 # pip install -e ".[clip]"       # For CLIP support
 # pip install -e ".[detr]"       # For DETR support
+# pip install -e ".[sam]"        # For SAM support
 # pip install -e ".[rfdetr]"     # For RF-DETR support
 # pip install -e ".[dev]"        # For development (testing, linting)
 

@@ -68,6 +68,19 @@ results = pipeline.process_batch(frames)  # 200 FPS！
 
 ## 关键更新
 
+**v0.2.12 - 示例与文档完善**:
+- ✨ **CLIP示例代码**：新增 `09_clip_features.py` 示例，演示CLIP特征功能（图像-文本相似度、零样本分类）
+- ✨ **姿态估计示例代码**：新增 `10_pose_estimation.py` 示例，演示姿态估计功能（YOLO Pose、MediaPipe Pose）
+- ✨ **文档更新**：更新了 `examples/README.md`，添加了新示例的说明
+- ✨ **示例优化**：优化了现有示例代码，修复了姿态估计示例中的方法调用错误
+
+**v0.2.11 - 模型功能增强**:
+- ✨ **SAM分割器集成**：添加 `SAMSegmenter` 类，支持自动分割、交互式分割（点/框提示），支持多种SAM模型变体（vit_h, vit_l, vit_b）
+- ✨ **检测器+分割器集成**：增强 `Detector` 类，支持集成SAM分割器，实现检测+分割联合推理
+- ✨ **CLIP模型扩展**：扩展 `CLIPExtractor` 类，支持多种CLIP模型（OpenAI CLIP、OpenCLIP、中文CLIP）
+- ✨ **姿态估计增强**：增强 `PoseEstimator` 类，支持YOLO Pose和MediaPipe Pose模型
+- ✨ **SAM示例代码**：新增 `08_segmentation_sam.py` 示例，演示SAM分割功能
+
 **v0.2.10 - 配置与模型管理优化**:
 - ✨ **配置系统优化**：整合 `Config` 类与 Pydantic 模型，消除重复默认值定义，添加 `load_as_model` 和 `save_model` 方法
 - ✨ **模型管理增强**：增强 `ModelCache` 类，添加 `load_model` 方法，支持直接加载模型实例，改进模型下载和加载流程
@@ -263,6 +276,9 @@ exporter.export_to_coco_format(detections, 1, image_info, "output/coco_annotatio
 | `05_advanced_features.py` | 高级功能示例（模型管理、批量处理、配置文件、结果导出） |
 | `06_tools_usage.py` | 工具类使用示例 |
 | `07_enhanced_features.py` | 增强功能示例（ReID跟踪、轨迹分析、性能监控） |
+| `08_segmentation_sam.py` | SAM分割示例（自动分割、交互式分割、检测+分割联合推理） |
+| `09_clip_features.py` | CLIP特征示例（图像-文本相似度、零样本分类、图像特征提取） |
+| `10_pose_estimation.py` | 姿态估计示例（YOLO Pose、MediaPipe Pose、关键点检测与可视化） |
 
 ## 依赖项
 
@@ -277,6 +293,7 @@ exporter.export_to_coco_format(detections, 1, image_info, "output/coco_annotatio
 
 ### 可选依赖
 - transformers >= 4.30.0 (用于 DETR/CLIP 模型)
+- segment-anything >= 1.0 (用于 SAM 分割模型)
 - rfdetr >= 0.1.0 (用于 RF-DETR 模型)
 - supervision >= 0.18.0 (用于 RF-DETR 模型)
 
@@ -307,7 +324,7 @@ A: 可以，所有模块都是可扩展的，支持继承和定制。
 
 ---
 
-**Vision Framework v0.2.10** | 配置与模型管理优化版本 | 生产就绪
+**Vision Framework v0.2.12** | 示例与文档完善版本 | 生产就绪
 
 ## 许可证
 

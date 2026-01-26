@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any, Union
 from .base_detector import BaseDetector
 from ...data.detection import Detection
 from ...utils.monitoring.logger import get_logger
-from ...utils.io.config import DeviceManager, ModelCache
+from ...utils.io.config_models import DeviceManager, ModelCache
 
 logger = get_logger(__name__)
 

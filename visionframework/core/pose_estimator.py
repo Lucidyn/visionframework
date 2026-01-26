@@ -18,6 +18,18 @@ except ImportError:
     YOLO_POSE_AVAILABLE = False
     YOLO = None
 
+# Try to import MediaPipe
+try:
+    import mediapipe as mp
+    MEDIAPIPE_AVAILABLE = True
+    mp_pose = mp.solutions.pose
+    mp_drawing = mp.solutions.drawing_utils
+except ImportError:
+    MEDIAPIPE_AVAILABLE = False
+    mp = None
+    mp_pose = None
+    mp_drawing = None
+
 
 class PoseEstimator(BaseModule):
     """
@@ -61,7 +73,7 @@ class PoseEstimator(BaseModule):
                   First use will automatically download the model.
                   Available models: yolov8n-pose.pt, yolov8s-pose.pt, yolov8m-pose.pt, etc.
                 - model_type: Type of model (default: 'yolo_pose')
-                  Currently only 'yolo_pose' is supported.
+                  Supported: 'yolo_pose', 'mediapipe'
                 - conf_threshold: Confidence threshold for pose detection between 0.0 and 1.0 (default: 0.25)
                   Poses with confidence below this threshold are filtered out.
                 - keypoint_threshold: Confidence threshold for individual keypoints between 0.0 and 1.0 (default: 0.5)
@@ -72,18 +84,24 @@ class PoseEstimator(BaseModule):
                     - 'mps': Apple Silicon GPU (macOS only)
                 - keypoint_names: List of keypoint names (default: COCO_KEYPOINT_NAMES)
                   Should match the number of keypoints in the model.
+                - min_detection_confidence: Minimum confidence for initial detection (MediaPipe only, default: 0.5)
+                - min_tracking_confidence: Minimum confidence for tracking (MediaPipe only, default: 0.5)
         
         Raises:
             ValueError: If configuration is invalid (will be logged as warning)
         """
         super().__init__(config)
-        self.model: Optional[Any] = None  # YOLO model type from ultralytics
+        self.model: Optional[Any] = None  # YOLO or MediaPipe model
         self.model_path: str = self.config.get("model_path", "yolov8n-pose.pt")
         self.model_type: str = self.config.get("model_type", "yolo_pose")
         self.conf_threshold: float = float(self.config.get("conf_threshold", 0.25))
         self.keypoint_threshold: float = float(self.config.get("keypoint_threshold", 0.5))
         self.device: str = self.config.get("device", "cpu")
         self.keypoint_names: List[str] = self.config.get("keypoint_names", self.COCO_KEYPOINT_NAMES)
+        
+        # MediaPipe specific parameters
+        self.min_detection_confidence: float = self.config.get("min_detection_confidence", 0.5)
+        self.min_tracking_confidence: float = self.config.get("min_tracking_confidence", 0.5)
     
     def initialize(self) -> bool:
         """Initialize the pose estimator model"""
@@ -93,11 +111,23 @@ class PoseEstimator(BaseModule):
                     raise ImportError("ultralytics not installed. Install with: pip install ultralytics")
                 self.model = YOLO(self.model_path)
                 self.model.to(self.device)
+            elif self.model_type == "mediapipe":
+                if not MEDIAPIPE_AVAILABLE:
+                    raise ImportError("mediapipe not installed. Install with: pip install mediapipe")
+                # Initialize MediaPipe Pose model
+                self.model = mp_pose.Pose(
+                    static_image_mode=False,
+                    model_complexity=1,
+                    smooth_landmarks=True,
+                    enable_segmentation=False,
+                    min_detection_confidence=self.min_detection_confidence,
+                    min_tracking_confidence=self.min_tracking_confidence
+                )
             else:
-                raise ValueError(f"Unsupported model_type: {self.model_type}. Supported: 'yolo_pose'")
+                raise ValueError(f"Unsupported model_type: {self.model_type}. Supported: 'yolo_pose', 'mediapipe'")
             
             self.is_initialized = True
-            logger.info(f"Pose estimator initialized successfully with model: {self.model_path}")
+            logger.info(f"Pose estimator initialized successfully with model: {self.model_type}")
             return True
         except ImportError as e:
             logger.error(f"Missing dependency for pose estimator: {e}", exc_info=True)
@@ -208,6 +238,53 @@ class PoseEstimator(BaseModule):
                                 pose_id=i
                             )
                             poses.append(pose)
+            elif self.model_type == "mediapipe":
+                # Convert BGR to RGB for MediaPipe
+                image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                
+                # Run MediaPipe Pose inference
+                results = self.model.process(image_rgb)
+                
+                # Process results
+                if results.pose_landmarks:
+                    # Extract bounding box from keypoints
+                    h, w = image.shape[:2]
+                    landmarks = results.pose_landmarks.landmark
+                    
+                    # Get min and max coordinates for bounding box
+                    x_coords = [landmark.x for landmark in landmarks if landmark.visibility > self.keypoint_threshold]
+                    y_coords = [landmark.y for landmark in landmarks if landmark.visibility > self.keypoint_threshold]
+                    
+                    if x_coords and y_coords:
+                        x1 = max(0, int(min(x_coords) * w) - 20)
+                        y1 = max(0, int(min(y_coords) * h) - 20)
+                        x2 = min(w, int(max(x_coords) * w) + 20)
+                        y2 = min(h, int(max(y_coords) * h) + 20)
+                        
+                        # Extract keypoints
+                        keypoint_list: List[KeyPoint] = []
+                        for j, landmark in enumerate(landmarks):
+                            if landmark.visibility > self.keypoint_threshold:
+                                # MediaPipe has 33 keypoints, map to COCO format where possible
+                                # For simplicity, use MediaPipe keypoint names
+                                keypoint_name = f"mediapipe_{j}"
+                                keypoint = KeyPoint(
+                                    x=float(landmark.x * w),
+                                    y=float(landmark.y * h),
+                                    confidence=float(landmark.visibility),
+                                    keypoint_id=j,
+                                    keypoint_name=keypoint_name
+                                )
+                                keypoint_list.append(keypoint)
+                        
+                        # Create Pose object
+                        pose = Pose(
+                            bbox=(float(x1), float(y1), float(x2), float(y2)),
+                            keypoints=keypoint_list,
+                            confidence=0.9,  # MediaPipe doesn't provide an overall confidence score
+                            pose_id=0  # MediaPipe currently returns one pose per image
+                        )
+                        poses.append(pose)
             
             return poses
             

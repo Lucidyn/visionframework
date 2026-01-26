@@ -7,19 +7,6 @@ import pytest
 from visionframework.utils.monitoring.performance import PerformanceMonitor, Timer
 
 
-# 测试PerformanceMetrics类
-def test_performance_metrics_initialization():
-    """测试性能指标初始化"""
-    from visionframework.utils.monitoring.performance import PerformanceMetrics
-    metrics = PerformanceMetrics()
-    
-    assert metrics.fps == 0.0
-    assert metrics.avg_fps == 0.0
-    assert metrics.frame_count == 0
-    assert metrics.total_time == 0.0
-    assert metrics.avg_time_per_frame == 0.0
-
-
 # 测试PerformanceMonitor类
 def test_performance_monitor_initialization():
     """测试性能监控器初始化"""
@@ -80,6 +67,8 @@ def test_performance_monitor_get_metrics():
     assert metrics.fps == 0.0
     assert metrics.avg_fps == 0.0
     assert metrics.frame_count == 0
+    assert metrics.total_time == 0.0
+    assert metrics.avg_time_per_frame == 0.0
     
     # 测试有数据的指标
     monitor.start()
@@ -95,6 +84,33 @@ def test_performance_monitor_get_metrics():
     assert metrics.avg_fps > 0
     assert metrics.total_time > 0
     assert metrics.avg_time_per_frame > 0
+
+
+def test_performance_monitor_get_detailed_report():
+    """测试获取详细性能报告"""
+    monitor = PerformanceMonitor()
+    
+    # 测试空报告
+    report = monitor.get_detailed_report()
+    assert "timestamp" in report
+    assert "fps" in report
+    assert "frame_times" in report
+    assert "component_times_ms" in report
+    assert "memory" in report
+    assert "general" in report
+    
+    # 测试有数据的报告
+    monitor.start()
+    for i in range(10):
+        time.sleep(0.001)
+        monitor.tick()
+        monitor.record_component_time("detection", 0.01 * (i + 1))
+        monitor.record_component_time("tracking", 0.005 * (i + 1))
+    
+    report = monitor.get_detailed_report()
+    assert report["general"]["frame_count"] == 10
+    assert report["fps"]["current"] > 0
+    assert report["fps"]["average"] > 0
 
 
 def test_performance_monitor_reset():

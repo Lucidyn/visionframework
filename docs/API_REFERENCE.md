@@ -66,7 +66,42 @@ VisionPipeline(
 
 ## 检测器
 
+### Detector
+
+统一检测器接口，支持多种检测模型和SAM分割器集成。
+
+```python
+Detector(
+    config: Optional[Dict[str, Any]] = None
+)
+```
+
+**参数：**
+- `config`：配置字典，包含以下可选键：
+  - `model_path`：模型文件路径或模型名称（例如，"yolov8n.pt"、"yolov26n.pt"）
+  - `model_type`：模型类型（"yolo"、"detr"、"rfdetr"）
+  - `device`：运行推理的设备（"auto"、"cuda"、"cpu"、"cuda:0"）
+  - `conf_threshold`：检测结果的默认置信度阈值
+  - `iou_threshold`：NMS（非最大抑制）的IoU阈值
+  - `category_thresholds`：特定类别的置信度阈值字典（例如，{"person": 0.5, "car": 0.3}）
+  - `enable_segmentation`：是否启用实例分割
+  - `batch_inference`：是否启用批量推理
+  - `dynamic_batch_size`：是否启用动态批量大小
+  - `use_fp16`：是否使用FP16精度推理
+  - `segmenter_type`：分割器类型（None、"sam"）
+  - `sam_model_path`：SAM模型文件路径
+  - `sam_model_type`：SAM模型类型（"vit_h"、"vit_l"、"vit_b"）
+  - `sam_use_fp16`：是否对SAM使用FP16精度
+
+**方法：**
+- `detect(image: np.ndarray, categories: Optional[list] = None) -> List[Detection]`：检测图像中的目标
+- `detect_batch(images: List[np.ndarray], categories: Optional[list] = None) -> List[List[Detection]]`：批量检测多张图像中的目标
+- `initialize() -> bool`：初始化检测器（加载模型等）
+- `cleanup() -> None`：清理资源
+
 ### YOLODetector
+
+YOLO检测器实现，支持YOLOv8和YOLO26系列模型。
 
 ```python
 YOLODetector(
@@ -90,6 +125,36 @@ YOLODetector(
 - `detect(image: np.ndarray) -> List[Dict[str, Any]]`：检测图像中的目标
 - `detect_batch(images: List[np.ndarray]) -> List[List[Dict[str, Any]]]`：批量检测多张图像中的目标
 - `initialize() -> None`：初始化检测器（加载模型等）
+- `cleanup() -> None`：清理资源
+
+## 分割器
+
+### SAMSegmenter
+
+Segment Anything Model (SAM) 分割器，支持自动分割和交互式分割。
+
+```python
+SAMSegmenter(
+    config: Optional[Dict[str, Any]] = None
+)
+```
+
+**参数：**
+- `config`：配置字典，包含以下可选键：
+  - `model_type`：SAM模型类型（"vit_h"、"vit_l"、"vit_b"）
+  - `model_path`：SAM模型文件路径
+  - `device`：运行推理的设备（"auto"、"cuda"、"cpu"、"cuda:0"）
+  - `use_fp16`：是否使用FP16精度推理
+  - `automatic_threshold`：自动分割的质量阈值
+  - `max_masks`：自动分割返回的最大掩码数量
+
+**方法：**
+- `automatic_segment(image: np.ndarray) -> List[Dict[str, Any]]`：自动分割图像
+- `segment_with_points(image: np.ndarray, points: List[Tuple[int, int]], labels: List[int]) -> List[Dict[str, Any]]`：使用点提示分割
+- `segment_with_boxes(image: np.ndarray, boxes: List[Tuple[int, int, int, int]]) -> List[Dict[str, Any]]`：使用框提示分割
+- `segment_detections(image: np.ndarray, detections: List[Detection]) -> List[Detection]`：根据检测结果分割
+- `process(image: np.ndarray, detections: Optional[List[Detection]] = None, **kwargs) -> Any`：通用处理方法
+- `initialize() -> bool`：初始化分割器
 - `cleanup() -> None`：清理资源
 
 ## 跟踪器
@@ -355,6 +420,65 @@ ModelCache(
 - `cache_model(model_path: str, model_name: str) -> str`：缓存模型
 - `clear_cache() -> None`：清除缓存
 
+## CLIP提取器
+
+### CLIPExtractor
+
+CLIP模型封装，支持多种CLIP模型变体，用于图像-文本交互。
+
+```python
+CLIPExtractor(
+    config: Optional[dict] = None
+)
+```
+
+**参数：**
+- `config`：配置字典，包含以下可选键：
+  - `model_name`：CLIP模型名称（例如，"openai/clip-vit-base-patch32"、"OFA-Sys/chinese-clip-vit-base-patch16"）
+  - `device`：运行推理的设备（"auto"、"cuda"、"cpu"）
+  - `use_fp16`：是否使用FP16精度推理
+  - `cache_enabled`：是否启用嵌入缓存
+  - `max_cache_size`：嵌入缓存的最大大小
+  - `preprocess_options`：预处理选项
+
+**方法：**
+- `initialize() -> bool`：初始化CLIP模型和处理器
+- `encode_image(image: Any) -> np.ndarray`：编码单张图像或图像列表
+- `encode_text(texts: List[str]) -> np.ndarray`：编码文本列表
+- `image_text_similarity(image: Any, texts: List[str]) -> np.ndarray`：计算图像与文本的相似度
+- `zero_shot_classify(image: Any, candidate_labels: List[str]) -> List[float]`：零样本分类
+- `filter_detections_by_text(image: np.ndarray, detections: List[Any], text_description: str, threshold: float = 0.5) -> List[Any]`：根据文本过滤检测结果
+- `clear_cache(cache_type: Optional[str] = None) -> None`：清除缓存
+- `get_cache_status() -> Dict[str, int]`：获取缓存状态
+- `cleanup() -> None`：清理资源
+
+## 姿态估计器
+
+### PoseEstimator
+
+姿态估计器，支持YOLO Pose和MediaPipe Pose模型。
+
+```python
+PoseEstimator(
+    config: Optional[Dict[str, Any]] = None
+)
+```
+
+**参数：**
+- `config`：配置字典，包含以下可选键：
+  - `model_path`：模型文件路径或模型名称（例如，"yolov8n-pose.pt"）
+  - `model_type`：模型类型（"yolo_pose"、"mediapipe"）
+  - `conf_threshold`：姿态检测的置信度阈值
+  - `keypoint_threshold`：关键点的置信度阈值
+  - `device`：运行推理的设备（"auto"、"cuda"、"cpu"）
+  - `min_detection_confidence`：MediaPipe特定，初始检测的最小置信度
+  - `min_tracking_confidence`：MediaPipe特定，跟踪的最小置信度
+
+**方法：**
+- `estimate(image: np.ndarray) -> List[Pose]`：估计图像中的姿态
+- `process(image: np.ndarray) -> List[Pose]`：处理图像，估计姿态
+- `initialize() -> bool`：初始化姿态估计器
+
 ## 异常类
 
 ### VisionFrameworkError
@@ -510,4 +634,106 @@ for det in results["detections"]:
 
 cv2.imshow("结果", image)
 cv2.waitKey(0)
+```
+
+### SAM分割示例
+
+```python
+from visionframework.core.detector import Detector
+import cv2
+
+# 初始化带SAM分割器的检测器
+detector = Detector({
+    "model_path": "yolov8n.pt",
+    "conf_threshold": 0.3,
+    "segmenter_type": "sam",
+    "sam_model_type": "vit_b",
+    "device": "cuda"
+})
+detector.initialize()
+
+# 加载图像
+image = cv2.imread("test.jpg")
+
+# 检测+分割联合推理
+detections = detector.detect(image)
+print(f"检测到 {len(detections)} 个目标，其中 {sum(1 for d in detections if hasattr(d, 'mask') and d.mask is not None)} 个带有分割掩码")
+
+# 绘制带有掩码的检测结果
+result = image.copy()
+for det in detections:
+    if hasattr(det, 'mask') and det.mask is not None:
+        # 绘制掩码
+        mask = det.mask.astype(np.uint8) * 255
+        colored_mask = np.zeros_like(image)
+        colored_mask[mask > 128] = (0, 255, 0)
+        result = cv2.addWeighted(result, 0.7, colored_mask, 0.3, 0)
+    
+    # 绘制边界框和标签
+    x1, y1, x2, y2 = det.bbox
+    cv2.rectangle(result, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+    cv2.putText(result, f"{det.class_name}: {det.confidence:.2f}", 
+                (int(x1), int(y1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+# 保存结果
+cv2.imwrite("sam_segmentation_result.jpg", result)
+```
+
+### CLIP零样本分类示例
+
+```python
+from visionframework.core.clip import CLIPExtractor
+import cv2
+
+# 初始化CLIP提取器
+clip = CLIPExtractor({
+    "model_name": "OFA-Sys/chinese-clip-vit-base-patch16",
+    "device": "cuda"
+})
+clip.initialize()
+
+# 加载图像
+image = cv2.imread("test.jpg")
+
+# 零样本分类
+candidate_labels = ["猫", "狗", "汽车", "人", "自行车"]
+scores = clip.zero_shot_classify(image, candidate_labels)
+
+# 打印结果
+for label, score in zip(candidate_labels, scores):
+    print(f"{label}: {score:.4f}")
+```
+
+### 姿态估计示例
+
+```python
+from visionframework.core.pose_estimator import PoseEstimator
+import cv2
+
+# 初始化姿态估计器（使用MediaPipe）
+pose_estimator = PoseEstimator({
+    "model_type": "mediapipe",
+    "min_detection_confidence": 0.5,
+    "min_tracking_confidence": 0.5
+})
+pose_estimator.initialize()
+
+# 加载图像
+image = cv2.imread("person.jpg")
+
+# 估计姿态
+poses = pose_estimator.estimate(image)
+print(f"检测到 {len(poses)} 个姿态")
+
+# 绘制姿态关键点和骨架
+result = image.copy()
+for pose in poses:
+    # 绘制关键点
+    for kp in pose.keypoints:
+        cv2.circle(result, (int(kp.x), int(kp.y)), 5, (0, 255, 0), -1)
+        cv2.putText(result, f"{kp.keypoint_name[:2]}", 
+                    (int(kp.x)+10, int(kp.y)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+
+# 保存结果
+cv2.imwrite("pose_estimation_result.jpg", result)
 ```

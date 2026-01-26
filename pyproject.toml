@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visionframework"
-version = "0.2.10"
+version = "0.2.12"
 description = "A comprehensive vision framework for detection, tracking, and more with configuration management, model management, and device autoselection"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -51,6 +51,10 @@ dev = [
 # Feature groups for optional heavy dependencies
 clip = [
     "transformers>=4.30.0"
+]
+
+sam = [
+    "segment-anything>=1.0"
 ]
 
 rfdetr = [
