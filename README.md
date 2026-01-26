@@ -146,6 +146,109 @@ device_info = DeviceManager.get_device_info(device)
 print(f"Device info: {device_info}")
 ```
 
+### 工具类使用
+
+#### 可视化工具
+
+```python
+from visionframework.utils.visualization import Visualizer
+from visionframework.data.detection import Detection
+import cv2
+import numpy as np
+
+# 创建可视化器
+visualizer = Visualizer()
+
+# 创建测试图像和检测结果
+image = np.zeros((480, 640, 3), dtype=np.uint8)
+detections = [
+    Detection(bbox=(100, 100, 200, 200), confidence=0.9, class_id=0, class_name="person"),
+    Detection(bbox=(300, 150, 400, 250), confidence=0.85, class_id=1, class_name="car")
+]
+
+# 绘制检测结果
+result = visualizer.draw_detections(image, detections)
+cv2.imshow("Detections", result)
+```
+
+#### 评估工具
+
+```python
+from visionframework.utils.evaluation.detection_evaluator import DetectionEvaluator
+from visionframework.data.detection import Detection
+
+# 创建评估器
+evaluator = DetectionEvaluator(iou_threshold=0.5)
+
+# 创建预测和真实检测结果
+pred_detections = [
+    Detection(bbox=(100, 100, 200, 200), confidence=0.9, class_id=0, class_name="person"),
+    Detection(bbox=(300, 150, 400, 250), confidence=0.85, class_id=1, class_name="car")
+]
+
+gt_detections = [
+    Detection(bbox=(105, 105, 205, 205), confidence=1.0, class_id=0, class_name="person"),
+    Detection(bbox=(310, 160, 410, 260), confidence=1.0, class_id=1, class_name="car")
+]
+
+# 计算评估指标
+metrics = evaluator.calculate_metrics(pred_detections, gt_detections)
+print(f"准确率: {metrics['precision']:.2f}, 召回率: {metrics['recall']:.2f}, F1: {metrics['f1']:.2f}")
+```
+
+#### 性能监控
+
+```python
+from visionframework.utils.monitoring.performance import PerformanceMonitor, Timer
+import time
+
+# 创建性能监控器
+monitor = PerformanceMonitor(window_size=30)
+monitor.start()
+
+# 模拟处理过程
+with Timer("测试处理") as timer:
+    for i in range(5):
+        # 模拟检测过程
+        with Timer() as det_timer:
+            time.sleep(0.1)  # 模拟检测耗时
+        monitor.record_detection_time(det_timer.get_elapsed())
+        
+        # 记录帧处理
+        monitor.tick()
+
+# 获取性能指标
+print(f"当前FPS: {monitor.get_current_fps():.2f}")
+print(f"平均FPS: {monitor.get_average_fps():.2f}")
+
+# 打印性能摘要
+monitor.print_summary()
+```
+
+#### 结果导出
+
+```python
+from visionframework.utils.data.export import ResultExporter
+from visionframework.data.detection import Detection
+
+# 创建结果导出器
+exporter = ResultExporter()
+
+# 创建检测结果
+detections = [
+    Detection(bbox=(100, 100, 200, 200), confidence=0.9, class_id=0, class_name="person"),
+    Detection(bbox=(300, 150, 400, 250), confidence=0.85, class_id=1, class_name="car")
+]
+
+# 导出为不同格式
+exporter.export_detections_to_json(detections, "output/detections.json")
+exporter.export_detections_to_csv(detections, "output/detections.csv")
+
+# 导出为COCO格式
+image_info = {"width": 640, "height": 480, "file_name": "test.jpg"}
+exporter.export_to_coco_format(detections, 1, image_info, "output/coco_annotations.json")
+```
+
 ## 示例代码
 
 查看 `examples/` 目录获取完整示例代码：

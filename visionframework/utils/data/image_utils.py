@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from typing import Tuple, Optional
 from pathlib import Path
-from .logger import get_logger
+from ..monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -7,9 +7,9 @@ import csv
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from datetime import datetime
-from ..data.detection import Detection
-from ..data.track import Track
-from ..utils.logger import get_logger
+from visionframework.data.detection import Detection
+from visionframework.data.track import Track
+from ..monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 

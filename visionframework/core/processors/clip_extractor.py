@@ -7,8 +7,8 @@ Provides CLIP-based image/text embedding and zero-shot classification.
 from typing import List, Optional, Any, Union
 import numpy as np
 from .feature_extractor import FeatureExtractor
-from ...utils.config import ModelCache, DeviceManager
-from ...utils.logger import get_logger
+from ...utils.io.config import ModelCache, DeviceManager
+from ...utils.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 

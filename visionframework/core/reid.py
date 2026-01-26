@@ -9,8 +9,8 @@ import torch
 import torchvision.transforms as T
 from torchvision.models import resnet50, ResNet50_Weights
 from .base import BaseModule
-from ..utils.logger import get_logger
-from ..utils.config import Config
+from ..utils.monitoring.logger import get_logger
+from ..utils.io.config import Config
 
 logger = get_logger(__name__)
 

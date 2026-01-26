@@ -14,8 +14,8 @@ import numpy as np
 
 # Try relative import first (normal package import), then fallback for direct file imports
 try:
-    from ..utils.config import ModelCache, DeviceManager
-    from ..utils.logger import get_logger
+    from ..utils.io.config import ModelCache, DeviceManager
+    from ..utils.monitoring.logger import get_logger
 except ImportError:
     # Fallback for direct file imports or edge cases
     import sys
@@ -23,8 +23,8 @@ except ImportError:
     parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
-    from visionframework.utils.config import ModelCache, DeviceManager
-    from visionframework.utils.logger import get_logger
+    from visionframework.utils.io.config import ModelCache, DeviceManager
+    from visionframework.utils.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 

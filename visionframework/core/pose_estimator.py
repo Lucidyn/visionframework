@@ -7,7 +7,7 @@ import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from .base import BaseModule
 from ..data.pose import Pose, KeyPoint
-from ..utils.logger import get_logger
+from ..utils.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 

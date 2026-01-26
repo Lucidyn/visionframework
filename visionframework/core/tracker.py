@@ -11,7 +11,7 @@ import numpy as np
 from .base import BaseModule
 from ..data.detection import Detection
 from ..data.track import Track
-from ..utils.logger import get_logger
+from ..utils.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 

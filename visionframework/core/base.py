@@ -153,7 +153,7 @@ class BaseModule(ABC):
         return True, None
     
     @staticmethod
-    def handle_errors(default_return: Any = None, log_errors: bool = True):
+    def handle_errors(default_return: Any = None):
         """
         Decorator for unified error handling
         
@@ -161,20 +161,10 @@ class BaseModule(ABC):
         It catches exceptions, logs them, and returns a default value.
         
         Args:
-            default_return: Default value to return on error. If None, the function
-                           should specify its own default return type.
-            log_errors: Whether to log errors. Default is True.
+            default_return: Default value to return on error
         
         Returns:
             Decorated function that handles errors uniformly
-        
-        Example:
-            ```python
-            @BaseModule.handle_errors(default_return=[])
-            def detect(self, image: np.ndarray) -> List[Detection]:
-                # Implementation
-                return detections
-            ```
         """
         def decorator(func: Callable) -> Callable:
             @wraps(func)
@@ -182,13 +172,12 @@ class BaseModule(ABC):
                 try:
                     return func(self, *args, **kwargs)
                 except Exception as e:
-                    if log_errors:
-                        from ..utils.logger import get_logger
-                        logger = get_logger(self.__class__.__module__)
-                        logger.error(
-                            f"Error in {self.__class__.__name__}.{func.__name__}: {e}",
-                            exc_info=True
-                        )
+                    from ..utils.monitoring.logger import get_logger
+                    logger = get_logger(self.__class__.__module__)
+                    logger.error(
+                        f"Error in {self.__class__.__name__}.{func.__name__}: {e}",
+                        exc_info=True
+                    )
                     return default_return
             return wrapper
         return decorator

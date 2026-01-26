@@ -16,7 +16,7 @@ except ImportError:
 
 from .feature_extractor import FeatureExtractor
 from ...data.pose import Pose, KeyPoint
-from ...utils.logger import get_logger
+from ...utils.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 

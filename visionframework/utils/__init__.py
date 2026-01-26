@@ -2,17 +2,17 @@
 Utility modules for vision framework with lazy loading for heavy dependencies
 """
 
-from .config import Config, DeviceManager, ModelCache
-from .config_models import (
+from .io.config_models import (
     BaseConfig, DetectorConfig, TrackerConfig, PerformanceConfig,
-    PipelineConfig, VisualizerConfig, AutoLabelerConfig, validate_config
+    PipelineConfig, VisualizerConfig, AutoLabelerConfig,
+    Config, DeviceManager, ModelCache
 )
-from .image_utils import ImageUtils
-from .export import ResultExporter
-from .performance import PerformanceMonitor, Timer
-from .video_utils import VideoProcessor, VideoWriter, process_video
-from .logger import setup_logger, get_logger
-from .trajectory_analyzer import TrajectoryAnalyzer
+from .data.image_utils import ImageUtils
+from .data.export import ResultExporter
+from .monitoring.performance import PerformanceMonitor, Timer
+from .io.video_utils import VideoProcessor, VideoWriter, process_video
+from .monitoring.logger import setup_logger, get_logger
+from .data.trajectory_analyzer import TrajectoryAnalyzer
 
 
 def __getattr__(name):
@@ -53,6 +53,5 @@ __all__ = [
     "PipelineConfig",
     "VisualizerConfig",
     "AutoLabelerConfig",
-    "validate_config",
 ]
 

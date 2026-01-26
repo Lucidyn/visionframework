@@ -26,16 +26,13 @@ class Track:
         self.time_since_update = 0
         self.history = [bbox]
     
-    def update(self, bbox: Tuple[float, float, float, float], confidence: float):
+    def update(self, bbox: Tuple[float, float, float, float], confidence: float, max_history_len: int = 30):
         """Update track with new detection"""
         self.bbox = bbox
         self.confidence = confidence
         self.time_since_update = 0
         self.history.append(bbox)
-        # Lazy import to avoid circular imports
-        from ..utils.config import Config
-        max_len = Config.get_default_tracker_config().get("track_history_length", 30)
-        if len(self.history) > max_len:
+        if len(self.history) > max_history_len:
             self.history.pop(0)
     
     def predict(self):
@@ -94,16 +91,13 @@ class STrack:
         self.mean = np.array([bbox[0], bbox[1], bbox[2], bbox[3]], dtype=np.float32)
         self.covariance = np.eye(4, dtype=np.float32) * 2
     
-    def update_bbox(self, bbox: Tuple[float, float, float, float], score: float):
+    def update_bbox(self, bbox: Tuple[float, float, float, float], score: float, max_history_len: int = 30):
         """Update bounding box"""
         self.bbox = bbox
         self.score = score
         self.confidence = score
         self.history.append(bbox)
-        # Lazy import to avoid circular imports
-        from ..utils.config import Config
-        max_len = Config.get_default_tracker_config().get("track_history_length", 30)
-        if len(self.history) > max_len:
+        if len(self.history) > max_history_len:
             self.history.pop(0)
     
     def activate(self, frame_id: int):

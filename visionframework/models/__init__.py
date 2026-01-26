@@ -48,18 +48,6 @@ class ModelManager:
         "yolo26": {
             "base_url": "https://github.com/ultralytics/assets/releases/download/v0.0.0/",
             "file_extension": ".pt"
-        },
-        "clip": {
-            "base_url": "https://huggingface.co/openai/",
-            "file_extension": ".pt"
-        },
-        "detr": {
-            "base_url": "https://huggingface.co/facebook/",
-            "file_extension": ".pt"
-        },
-        "huggingface": {
-            "base_url": "https://huggingface.co/",
-            "file_extension": ".safetensors"
         }
     }
     
@@ -73,7 +61,6 @@ class ModelManager:
         self.cache_dir = cache_dir or self.DEFAULT_CACHE_DIR
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._model_registry: Dict[str, Dict[str, Any]] = {}
-        self._model_metadata: Dict[str, Dict[str, Any]] = {}
         
         # Register default models
         self._register_default_models()
@@ -207,7 +194,6 @@ class ModelManager:
         return hasher.hexdigest()
     
     def get_model_path(self, name: str, download: bool = True, 
-                       verify_hash: bool = True, 
                        progress: bool = True) -> Optional[Path]:
         """
         Get path to model file, downloading if necessary.
@@ -215,7 +201,6 @@ class ModelManager:
         Args:
             name: Model identifier
             download: Whether to download if not cached
-            verify_hash: Whether to verify file hash after download
             progress: Show progress bar during download
         
         Returns:
@@ -240,28 +225,9 @@ class ModelManager:
             return None
         
         # Get download URL based on source
-        if source in self.MODEL_SOURCES:
-            source_info = self.MODEL_SOURCES[source]
-            base_url = source_info["base_url"]
-            
-            if source in ["yolo", "yolo26"]:
-                # YOLO models are directly downloadable
-                download_url = f"{base_url}{file_name}"
-            else:
-                # For other sources like Hugging Face, we'd need more complex logic
-                from ..exceptions import ModelNotFoundError
-                raise ModelNotFoundError(
-                    message="Download not implemented for this source type",
-                    model_path=str(cache_path),
-                    original_error=NotImplementedError(f"Download not implemented for source: {source}")
-                )
-        else:
-            from ..exceptions import ModelNotFoundError
-            raise ModelNotFoundError(
-                message="Unknown model source",
-                model_path=str(cache_path),
-                original_error=ValueError(f"Unknown source: {source}")
-            )
+        source_info = self.MODEL_SOURCES[source]
+        base_url = source_info["base_url"]
+        download_url = f"{base_url}{file_name}"
         
         # Download the file
         print(f"Downloading model: {name} from {download_url}")
@@ -272,19 +238,6 @@ class ModelManager:
         
         try:
             self._download_file(download_url, tmp_path, progress=progress)
-            
-            # Verify hash if requested
-            if verify_hash and "hash" in config:
-                file_hash = self._calculate_file_hash(tmp_path)
-                expected_hash = config["hash"]
-                if file_hash != expected_hash:
-                    tmp_path.unlink()
-                    from ..exceptions import ModelLoadError
-                    raise ModelLoadError(
-                        message="Hash verification failed",
-                        model_path=str(cache_path),
-                        original_error=ValueError(f"Expected hash: {expected_hash}, Got: {file_hash}")
-                    )
             
             # Move to final location
             shutil.move(tmp_path, cache_path)
@@ -306,14 +259,13 @@ class ModelManager:
             ) from e
     
     def load_model(self, name: str, download: bool = True, 
-                   verify_hash: bool = True, progress: bool = True) -> Any:
+                   progress: bool = True) -> Any:
         """
         Load a model from disk or cache.
         
         Args:
             name: Model identifier
             download: Whether to download if not cached
-            verify_hash: Whether to verify file hash after download
             progress: Show progress bar during download
         
         Returns:
@@ -324,7 +276,7 @@ class ModelManager:
             ModelLoadError: If model loading fails
         """
         # Get model path
-        model_path = self.get_model_path(name, download=download, verify_hash=verify_hash, progress=progress)
+        model_path = self.get_model_path(name, download=download, progress=progress)
         if not model_path:
             from ..exceptions import ModelNotFoundError
             raise ModelNotFoundError(
@@ -332,30 +284,17 @@ class ModelManager:
                 model_path=str(model_path)
             )
         
-        # Try to load the model based on source
-        model_info = self._model_registry[name]
-        source = model_info["source"]
-        
-        if source in ["yolo", "yolo26"]:
-            # Try to load YOLO model
-            try:
-                from ultralytics import YOLO
-                return YOLO(str(model_path))
-            except Exception as e:
-                from ..exceptions import ModelLoadError
-                raise ModelLoadError(
-                    message="Failed to load YOLO model",
-                    model_path=str(model_path),
-                    original_error=e
-                ) from e
-        else:
-            from ..exceptions import NotImplementedError as VisionNotImplementedError
+        # Try to load the model
+        try:
+            from ultralytics import YOLO
+            return YOLO(str(model_path))
+        except Exception as e:
             from ..exceptions import ModelLoadError
             raise ModelLoadError(
-                message="Model loading not implemented for this source type",
+                message="Failed to load YOLO model",
                 model_path=str(model_path),
-                original_error=VisionNotImplementedError(f"Model loading not implemented for source: {source}")
-            )
+                original_error=e
+            ) from e
     
     def get_cache_dir(self) -> Path:
         """Get the cache directory path."""

@@ -168,6 +168,139 @@ ReidTracker(
 
 ## 工具类
 
+### 可视化工具
+
+#### Visualizer 类
+
+统一可视化器，支持检测、跟踪和姿态估计结果的可视化。
+
+```python
+Visualizer(config: Optional[Dict[str, Any]] = None)
+```
+
+**参数：**
+- `config`：配置字典，包含可视化相关的配置选项
+
+**方法：**
+- `draw_detections(image: np.ndarray, detections: List[Detection]) -> np.ndarray`：绘制检测结果
+- `draw_tracks(image: np.ndarray, tracks: List[Track], draw_history: bool = True) -> np.ndarray`：绘制跟踪结果
+- `draw_poses(image: np.ndarray, poses: List[Pose], draw_skeleton: bool = True, draw_keypoints: bool = True, draw_bbox: bool = True) -> np.ndarray`：绘制姿态估计结果
+- `draw_results(image: np.ndarray, detections: Optional[List[Detection]] = None, tracks: Optional[List[Track]] = None, poses: Optional[List[Pose]] = None, draw_history: bool = True) -> np.ndarray`：绘制所有结果
+
+#### DetectionVisualizer 类
+
+检测结果可视化器，继承自 BaseVisualizer。
+
+```python
+DetectionVisualizer(config: Optional[Dict[str, Any]] = None)
+```
+
+**方法：**
+- `draw_detection(image: np.ndarray, detection: Detection, color: Optional[Tuple[int, int, int]] = None) -> np.ndarray`：绘制单个检测结果
+- `draw_detections(image: np.ndarray, detections: List[Detection]) -> np.ndarray`：绘制多个检测结果
+
+#### TrackVisualizer 类
+
+跟踪结果可视化器，继承自 BaseVisualizer。
+
+```python
+TrackVisualizer(config: Optional[Dict[str, Any]] = None)
+```
+
+**方法：**
+- `draw_track(image: np.ndarray, track: Track, color: Optional[Tuple[int, int, int]] = None, draw_history: bool = True) -> np.ndarray`：绘制单个跟踪结果
+- `draw_tracks(image: np.ndarray, tracks: List[Track], draw_history: bool = True) -> np.ndarray`：绘制多个跟踪结果
+
+### 评估工具
+
+#### DetectionEvaluator 类
+
+检测结果评估器，用于计算检测性能指标。
+
+```python
+DetectionEvaluator(iou_threshold: float = 0.5)
+```
+
+**参数：**
+- `iou_threshold`：IoU 阈值，用于匹配预测和真实检测结果，默认为 0.5
+
+**方法：**
+- `calculate_metrics(pred_detections: List[Detection], gt_detections: List[Detection]) -> Dict[str, float]`：计算检测性能指标
+- `calculate_map(all_pred_detections: List[List[Detection]], all_gt_detections: List[List[Detection]], num_classes: Optional[int] = None) -> Dict[str, Any]`：计算 mAP（mean Average Precision）
+
+#### TrackingEvaluator 类
+
+跟踪结果评估器，用于计算跟踪性能指标。
+
+```python
+TrackingEvaluator(iou_threshold: float = 0.5)
+```
+
+**参数：**
+- `iou_threshold`：IoU 阈值，用于匹配预测和真实跟踪结果，默认为 0.5
+
+**方法：**
+- `calculate_mota(pred_tracks: List[Dict[str, Any]], gt_tracks: List[Dict[str, Any]]) -> Dict[str, float]`：计算 MOTA（Multiple Object Tracking Accuracy）
+- `calculate_motp(pred_tracks: List[Dict[str, Any]], gt_tracks: List[Dict[str, Any]]) -> Dict[str, float]`：计算 MOTP（Multiple Object Tracking Precision）
+- `calculate_idf1(pred_tracks: List[Dict[str, Any]], gt_tracks: List[Dict[str, Any]]) -> Dict[str, float]`：计算 IDF1（ID F1 Score）
+- `evaluate(pred_tracks: List[Dict[str, Any]], gt_tracks: List[Dict[str, Any]]) -> Dict[str, Any]`：综合评估，计算所有跟踪指标
+
+### 性能监控
+
+#### PerformanceMonitor 类
+
+性能监控器，用于监控和分析性能指标。
+
+```python
+PerformanceMonitor(window_size: int = 30)
+```
+
+**参数：**
+- `window_size`：滑动窗口大小，用于计算 FPS 和其他指标，默认为 30
+
+**方法：**
+- `start()`：开始性能监控
+- `tick()`：记录一帧处理完成
+- `record_component_time(component: str, elapsed: float)`：记录组件处理时间
+  - `component`：组件名称（"detection"、"tracking"、"visualization"）
+  - `elapsed`：处理时间（秒）
+- `get_metrics() -> PerformanceMetrics`：获取综合性能指标
+- `reset()`：重置性能监控器
+
+#### Timer 类
+
+简单的计时器，用于测量代码块的执行时间。
+
+```python
+Timer(name: str = "Operation")
+```
+
+**参数：**
+- `name`：计时器名称，默认为 "Operation"
+
+**方法：**
+- `__enter__() -> Timer`：进入上下文管理器，开始计时
+- `__exit__(exc_type, exc_val, exc_tb) -> bool`：退出上下文管理器，结束计时
+- `get_elapsed() -> float`：获取经过的时间
+
+### 结果导出
+
+#### ResultExporter 类
+
+结果导出器，用于将检测和跟踪结果导出为各种格式。
+
+```python
+ResultExporter()
+```
+
+**方法：**
+- `export_detections_to_json(detections: List[Detection], output_path: str, metadata: Optional[Dict[str, Any]] = None) -> bool`：将检测结果导出为 JSON 格式
+- `export_tracks_to_json(tracks: List[Track], output_path: str, metadata: Optional[Dict[str, Any]] = None) -> bool`：将跟踪结果导出为 JSON 格式
+- `export_detections_to_csv(detections: List[Detection], output_path: str) -> bool`：将检测结果导出为 CSV 格式
+- `export_tracks_to_csv(tracks: List[Track], output_path: str) -> bool`：将跟踪结果导出为 CSV 格式
+- `export_video_results_to_json(video_results: List[Dict[str, Any]], output_path: str, video_info: Optional[Dict[str, Any]] = None) -> bool`：将视频处理结果导出为 JSON 格式
+- `export_to_coco_format(detections: List[Detection], image_id: int, image_info: Dict[str, Any], output_path: str) -> bool`：将检测结果导出为 COCO 格式
+
 ### VideoUtils
 
 #### `VideoProcessor`

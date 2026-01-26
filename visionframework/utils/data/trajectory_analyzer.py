@@ -4,7 +4,7 @@ Trajectory analysis utilities
 
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
-from ..data.track import Track
+from visionframework.data.track import Track
 
 
 class TrajectoryAnalyzer:

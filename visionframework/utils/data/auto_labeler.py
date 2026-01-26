@@ -7,7 +7,7 @@
 
 Example:
     ```python
-    from visionframework.utils.auto_labeler import AutoLabeler
+    from visionframework.utils import AutoLabeler
     from visionframework import Config
     
     # 初始化自动标注器
@@ -35,14 +35,14 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from ..core.detector import Detector
-from ..core.tracker import Tracker
-from ..core.pipeline import VisionPipeline
-from ..data.detection import Detection
-from ..data.track import Track
-from ..utils.export import ResultExporter
-from ..utils.video_utils import process_video
-from ..utils.logger import get_logger
+from visionframework.core.detector import Detector
+from visionframework.core.tracker import Tracker
+from visionframework.core.pipeline import VisionPipeline
+from visionframework.data.detection import Detection
+from visionframework.data.track import Track
+from .export import ResultExporter
+from ..io.video_utils import process_video
+from ..monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -16,8 +16,8 @@ except ImportError:
     torch = None
 
 from .feature_extractor import FeatureExtractor
-from ...utils.logger import get_logger
-from ...utils.config import Config, ModelCache
+from ...utils.monitoring.logger import get_logger
+from ...utils.io.config import Config, ModelCache
 
 logger = get_logger(__name__)
 

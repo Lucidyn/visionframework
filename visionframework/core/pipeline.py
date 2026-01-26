@@ -13,7 +13,7 @@ from .detector import Detector
 from .tracker import Tracker
 from ..data.detection import Detection
 from ..data.track import Track
-from ..utils.logger import get_logger
+from ..utils.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -56,21 +56,10 @@ class VisionPipeline(BaseModule):
         
         Args:
             config: Configuration dictionary with keys:
-                - detector_config: Configuration dictionary for the detector.
-                                  See Detector.__init__() for available parameters.
-                                  If not provided, default detector configuration is used.
-                - tracker_config: Configuration dictionary for the tracker.
-                                 See Tracker.__init__() for available parameters.
-                                 Only used if enable_tracking is True.
-                - enable_tracking: Boolean flag to enable/disable tracking (default: True).
-                                 If False, only detection is performed.
-                - enable_performance_monitoring: Boolean flag to enable/disable performance monitoring (default: False).
-                - performance_metrics: List of performance metrics to monitor (default: ["fps"]).
+                - detector_config: Configuration dictionary for the detector
+                - tracker_config: Configuration dictionary for the tracker
+                - enable_tracking: Boolean flag to enable/disable tracking (default: False)
         
-        Note:
-            Configuration validation is performed automatically for both detector
-            and tracker configurations if their validate_config() methods are implemented.
-            
         Example:
             # Simplest usage - uses default YOLOv8n model
             pipeline = VisionPipeline()
@@ -81,50 +70,37 @@ class VisionPipeline(BaseModule):
                 "detector_config": {"model_path": "yolov8s.pt", "conf_threshold": 0.3}
             })
         """
-        # Default configuration
-        default_config = {
-            "enable_tracking": False,
-            "detector_config": {
-                "model_path": "yolov8n.pt",
-                "conf_threshold": 0.25
-            },
-            "tracker_config": {
-                "tracker_type": "bytetrack",
-                "max_age": 30
-            }
-        }
+        # Initialize with minimal default config
+        super().__init__({})
         
-        # Merge user config with default config
-        if config is None:
-            config = {}
+        # Set default config values
+        self.config.setdefault("enable_tracking", False)
+        self.config.setdefault("detector_config", {
+            "model_path": "yolov8n.pt",
+            "conf_threshold": 0.25
+        })
+        self.config.setdefault("tracker_config", {
+            "tracker_type": "bytetrack",
+            "max_age": 30
+        })
         
-        # Deep merge detector and tracker configs
-        merged_config = default_config.copy()
-        merged_config.update(config)
+        # Update with user-provided config
+        if config:
+            # Update top-level config
+            self.config.update(config)
+            
+            # Deep merge detector and tracker configs
+            if "detector_config" in config:
+                self.config["detector_config"].update(config["detector_config"])
+            if "tracker_config" in config:
+                self.config["tracker_config"].update(config["tracker_config"])
         
-        if "detector_config" in config:
-            merged_config["detector_config"] = default_config["detector_config"].copy()
-            merged_config["detector_config"].update(config["detector_config"])
-        
-        if "tracker_config" in config:
-            merged_config["tracker_config"] = default_config["tracker_config"].copy()
-            merged_config["tracker_config"].update(config["tracker_config"])
-        
-        super().__init__(merged_config)
+        # Initialize core attributes
         self.detector: Optional[Detector] = None
         self.tracker: Optional[Tracker] = None
-        self.enable_tracking: bool = self.config.get("enable_tracking", False)
-        self.detector_config: Dict[str, Any] = self.config.get("detector_config", {})
-        self.tracker_config: Dict[str, Any] = self.config.get("tracker_config", {})
-        
-        # Performance monitoring
-        self.enable_performance_monitoring: bool = self.config.get("enable_performance_monitoring", False)
-        self.performance_metrics: List[str] = self.config.get("performance_metrics", ["fps"])
-        self.performance_monitor: Optional[PerformanceMonitor] = None
-        
-        # Post-processing hooks
-        self.post_detection_hooks: List[Callable[[List[Detection], np.ndarray], List[Detection]]] = []
-        self.post_tracking_hooks: List[Callable[[List[Track], np.ndarray], List[Track]]] = []
+        self.enable_tracking: bool = self.config["enable_tracking"]
+        self.detector_config: Dict[str, Any] = self.config["detector_config"]
+        self.tracker_config: Dict[str, Any] = self.config["tracker_config"]
         
     @classmethod
     def with_tracking(cls, config: Optional[Dict[str, Any]] = None):
@@ -648,7 +624,7 @@ class VisionPipeline(BaseModule):
             )
             ```
         """
-        from ..utils.video_utils import VideoProcessor, VideoWriter
+        from ..utils.io.video_utils import VideoProcessor, VideoWriter
         
         # Initialize video processor
         processor = VideoProcessor(input_source)
@@ -903,7 +879,7 @@ class VisionPipeline(BaseModule):
             )
             ```
         """
-        from ..utils.video_utils import VideoProcessor, VideoWriter
+        from ..utils.io.video_utils import VideoProcessor, VideoWriter
         
         # Initialize video processor
         processor = VideoProcessor(input_source)

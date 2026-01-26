@@ -9,8 +9,8 @@ from .base_tracker import BaseTracker
 from ...data.track import STrack
 from ...data.detection import Detection
 from ..processors.reid_extractor import ReIDExtractor
-from ...utils.logger import get_logger
-from ...utils.config import Config
+from ...utils.monitoring.logger import get_logger
+from ...utils.io.config import Config
 
 logger = get_logger(__name__)
 
