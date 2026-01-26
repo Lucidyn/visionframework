@@ -29,13 +29,34 @@
         "matching_strategy": "hungarian",
         "matching_cost_threshold": 0.7
     },
+    "pose_estimator": {
+        "model_path": "yolov8n-pose.pt",
+        "conf_threshold": 0.25,
+        "keypoint_threshold": 0.5,
+        "device": "auto",
+        "use_fp16": false
+    },
+    "clip_extractor": {
+        "model_path": "ViT-B/32",
+        "device": "auto",
+        "use_fp16": false
+    },
+    "sam_segmenter": {
+        "model_path": "sam_vit_h_4b8939.pth",
+        "device": "auto",
+        "use_fp16": false,
+        "predictor_type": "default"
+    },
     "pipeline": {
         "enable_tracking": true,
+        "enable_pose_estimation": false,
+        "enable_clip": false,
+        "enable_sam": false,
         "detector_config": {
             "model_path": "yolov8n.pt",
             "model_type": "yolo",
             "conf_threshold": 0.25,
-            "category_thresholds": null,
+            "category_thresholds": {},
             "iou_threshold": 0.45,
             "device": "cpu",
             "enable_segmentation": false,
@@ -58,6 +79,24 @@
             "matching_strategy": "hungarian",
             "matching_cost_threshold": 0.7
         },
+        "pose_estimator_config": {
+            "model_path": "yolov8n-pose.pt",
+            "conf_threshold": 0.25,
+            "keypoint_threshold": 0.5,
+            "device": "auto",
+            "use_fp16": false
+        },
+        "clip_extractor_config": {
+            "model_path": "ViT-B/32",
+            "device": "auto",
+            "use_fp16": false
+        },
+        "sam_segmenter_config": {
+            "model_path": "sam_vit_h_4b8939.pth",
+            "device": "auto",
+            "use_fp16": false,
+            "predictor_type": "default"
+        },
         "performance": {
             "batch_inference": false,
             "use_fp16": false,
@@ -68,9 +107,14 @@
         "show_labels": true,
         "show_confidences": true,
         "show_track_ids": true,
+        "show_keypoints": true,
+        "show_skeleton": true,
         "line_thickness": 2,
-        "font_scale": 0.5
+        "font_scale": 0.5,
+        "keypoint_radius": 3,
+        "skeleton_thickness": 2
     },
+
     "rois": [
         {
             "name": "zone1",

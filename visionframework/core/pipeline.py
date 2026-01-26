@@ -14,6 +14,7 @@ from .tracker import Tracker
 from ..data.detection import Detection
 from ..data.track import Track
 from ..utils.monitoring.logger import get_logger
+from ..utils.monitoring.performance import PerformanceMonitor
 
 logger = get_logger(__name__)
 
@@ -113,6 +114,8 @@ class VisionPipeline(BaseModule):
         self.pose_estimator: Optional[Any] = None
         self.enable_tracking: bool = self.config["enable_tracking"]
         self.enable_pose_estimation: bool = self.config["enable_pose_estimation"]
+        self.enable_performance_monitoring: bool = self.config.get("enable_performance_monitoring", False)
+        self.performance_metrics: List[str] = self.config.get("performance_metrics", [])
         self.detector_config: Dict[str, Any] = self.config["detector_config"]
         self.tracker_config: Dict[str, Any] = self.config["tracker_config"]
         self.pose_estimator_config: Dict[str, Any] = self.config["pose_estimator_config"]
@@ -901,6 +904,10 @@ class VisionPipeline(BaseModule):
             self.tracker = None
             self.pose_estimator = None
             self.is_initialized = False
+    
+    def shutdown(self) -> None:
+        """Shutdown pipeline and cleanup resources"""
+        self.cleanup()
     
     def process_video(
         self, 
