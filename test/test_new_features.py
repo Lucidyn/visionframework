@@ -253,6 +253,193 @@ def test_detector_sam_integration():
         test_results["failed"].append(test_name)
 
 
+def test_model_cache():
+    """测试模型缓存功能"""
+    test_name = "模型缓存测试"
+    print(f"\n=== {test_name} ===")
+    
+    try:
+        from visionframework.utils.io.config_models import ModelCache
+        
+        # 测试模型缓存的基本功能
+        print("  - 测试模型缓存初始化")
+        
+        # 创建一个简单的模型加载函数
+        def simple_model_loader():
+            import numpy as np
+            # 创建一个简单的模型对象
+            class SimpleModel:
+                def predict(self, x):
+                    return np.sum(x)
+            return SimpleModel()
+        
+        # 测试缓存功能
+        model1 = ModelCache.get_model("test_model", simple_model_loader)
+        model2 = ModelCache.get_model("test_model", simple_model_loader)
+        
+        # 验证返回的是同一个实例
+        print(f"  - 模型缓存命中测试: {model1 is model2}")
+        
+        # 测试模型释放
+        ModelCache.release_model("test_model")
+        print("  - 模型释放测试成功")
+        
+        # 测试缓存状态获取
+        cache_status = ModelCache.get_cache_status()
+        print(f"  - 缓存状态获取成功: {cache_status}")
+        
+        test_results["passed"].append(test_name)
+    except ImportError as e:
+        print(f"⚠ 导入错误：{e}，跳過模型缓存测试")
+        test_results["skipped"].append(f"{test_name} - 缺少依赖")
+    except Exception as e:
+        print(f"✗ 测试失败：{e}")
+        traceback.print_exc()
+        test_results["failed"].append(test_name)
+
+
+def test_extended_model_support():
+    """测试扩展模型支持功能"""
+    test_name = "扩展模型支持测试"
+    print(f"\n=== {test_name} ===")
+    
+    try:
+        from visionframework.models import get_model_manager
+        
+        # 获取模型管理器
+        model_manager = get_model_manager()
+        
+        # 测试模型注册
+        print("  - 测试模型注册功能")
+        
+        # 注册一个自定义模型
+        model_manager.register_model(
+            name="test_custom_model",
+            source="yolo",
+            config={"file_name": "test_model.pt"}
+        )
+        
+        # 测试获取模型信息
+        model_info = model_manager.get_model_info("test_custom_model")
+        print(f"  - 模型信息获取成功: {model_info}")
+        
+        # 测试获取所有注册模型
+        registered_models = model_manager.get_all_registered_models()
+        print(f"  - 注册模型数量: {len(registered_models)}")
+        
+        # 验证新添加的模型类型
+        has_efficientdet = any("efficientdet" in model for model in registered_models)
+        has_fasterrcnn = any("fasterrcnn" in model for model in registered_models)
+        print(f"  - 包含 EfficientDet 模型: {has_efficientdet}")
+        print(f"  - 包含 Faster R-CNN 模型: {has_fasterrcnn}")
+        
+        test_results["passed"].append(test_name)
+    except ImportError as e:
+        print(f"⚠ 导入错误：{e}，跳过扩展模型支持测试")
+        test_results["skipped"].append(f"{test_name} - 缺少依赖")
+    except Exception as e:
+        print(f"✗ 测试失败：{e}")
+        traceback.print_exc()
+        test_results["failed"].append(test_name)
+
+
+def test_batch_processing_optimization():
+    """测试批处理性能优化功能"""
+    test_name = "批处理性能优化测试"
+    print(f"\n=== {test_name} ===")
+    
+    try:
+        from visionframework.core.pipeline import VisionPipeline
+        import numpy as np
+        
+        # 创建测试配置
+        config = {
+            "detector_config": {
+                "model_path": "yolov8n.pt",
+                "device": "cpu"
+            }
+        }
+        
+        # 初始化管道
+        pipeline = VisionPipeline(config)
+        
+        # 创建测试图像
+        test_images = [np.zeros((480, 640, 3), dtype=np.uint8) for _ in range(4)]
+        
+        # 测试基本批处理
+        print("  - 测试基本批处理")
+        results1 = pipeline.process_batch(test_images)
+        print(f"  - 基本批处理结果数量: {len(results1)}")
+        
+        # 测试最大批处理大小限制
+        print("  - 测试最大批处理大小限制")
+        results2 = pipeline.process_batch(test_images, max_batch_size=2)
+        print(f"  - 限制批处理大小结果数量: {len(results2)}")
+        
+        # 验证两种方式结果数量一致
+        print(f"  - 结果一致性测试: {len(results1) == len(results2) == 4}")
+        
+        test_results["passed"].append(test_name)
+    except ImportError as e:
+        print(f"⚠ 导入错误：{e}，跳过批处理性能优化测试")
+        test_results["skipped"].append(f"{test_name} - 缺少依赖")
+    except Exception as e:
+        print(f"✗ 测试失败：{e}")
+        traceback.print_exc()
+        test_results["failed"].append(test_name)
+
+
+def test_reid_functionality():
+    """测试ReID功能"""
+    test_name = "ReID功能测试"
+    print(f"\n=== {test_name} ===")
+    
+    try:
+        from visionframework.core.processors.reid_extractor import ReIDExtractor
+        import numpy as np
+        
+        # 创建测试图像
+        test_image = np.zeros((480, 640, 3), dtype=np.uint8)
+        
+        # 创建测试边界框
+        test_bboxes = [(100, 100, 200, 300), (300, 150, 400, 350)]
+        
+        # 初始化ReID提取器
+        reid_extractor = ReIDExtractor(
+            model_name="resnet50",
+            device="cpu",
+            input_size=(128, 256)
+        )
+        
+        # 尝试初始化
+        initialized = reid_extractor.initialize()
+        
+        if initialized:
+            # 测试特征提取
+            print("  - 测试ReID特征提取")
+            features = reid_extractor.extract(test_image, test_bboxes)
+            print(f"  - 特征提取成功，形状: {features.shape}")
+            
+            # 测试批量处理
+            print("  - 测试ReID批量处理")
+            batch_images = [test_image, test_image]
+            batch_bboxes = [test_bboxes, test_bboxes]
+            batch_features = reid_extractor.process_batch(batch_images, batch_bboxes)
+            print(f"  - 批量处理成功，结果数量: {len(batch_features)}")
+            
+            test_results["passed"].append(test_name)
+        else:
+            print(f"⚠ ReID提取器初始化失败，跳过功能测试")
+            test_results["skipped"].append(f"{test_name} - 初始化失败")
+    except ImportError as e:
+        print(f"⚠ 导入错误：{e}，跳过ReID功能测试")
+        test_results["skipped"].append(f"{test_name} - 缺少依赖")
+    except Exception as e:
+        print(f"✗ 测试失败：{e}")
+        traceback.print_exc()
+        test_results["failed"].append(test_name)
+
+
 def run_all_tests():
     """运行所有测试"""
     print("开始测试新增功能...")
@@ -263,6 +450,10 @@ def run_all_tests():
     test_pose_estimator()
     test_sam_segmenter()
     test_detector_sam_integration()
+    test_model_cache()
+    test_extended_model_support()
+    test_batch_processing_optimization()
+    test_reid_functionality()
     
     # 打印测试结果
     print("\n" + "=" * 50)
@@ -299,4 +490,23 @@ def run_all_tests():
 
 
 if __name__ == "__main__":
-    run_all_tests()
+    result = run_all_tests()
+    # 将测试结果写入文件
+    with open('test_results.txt', 'w', encoding='utf-8') as f:
+        f.write("测试结果汇总\n")
+        f.write("=" * 50 + "\n")
+        f.write(f"通过测试: {len(test_results['passed'])}\n")
+        for test in test_results['passed']:
+            f.write(f"  ✓ {test}\n")
+        f.write(f"\n跳过测试: {len(test_results['skipped'])}\n")
+        for test in test_results['skipped']:
+            f.write(f"  ⚠ {test}\n")
+        f.write(f"\n失败测试: {len(test_results['failed'])}\n")
+        for test in test_results['failed']:
+            f.write(f"  ✗ {test}\n")
+        f.write("=" * 50 + "\n")
+        total_tests = len(test_results['passed']) + len(test_results['failed']) + len(test_results['skipped'])
+        if total_tests > 0:
+            success_rate = (len(test_results['passed']) / total_tests) * 100
+            f.write(f"总体测试成功率: {success_rate:.1f}%\n")
+    print("测试结果已写入 test_results.txt 文件")

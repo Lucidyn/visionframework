@@ -71,7 +71,8 @@ results = pipeline.process_batch(frames)  # 200 FPS！
 **v0.2.12 - 示例与文档完善**:
 - ✨ **CLIP示例代码**：新增 `09_clip_features.py` 示例，演示CLIP特征功能（图像-文本相似度、零样本分类）
 - ✨ **姿态估计示例代码**：新增 `10_pose_estimation.py` 示例，演示姿态估计功能（YOLO Pose、MediaPipe Pose）
-- ✨ **文档更新**：更新了 `examples/README.md`，添加了新示例的说明
+- ✨ **配置文件驱动示例**：新增 `11_config_based_processing.py` 示例，演示配置文件驱动的视觉处理管道
+- ✨ **文档更新**：更新了 `examples/README.md` 和 `README.md`，添加了新示例的说明
 - ✨ **示例优化**：优化了现有示例代码，修复了姿态估计示例中的方法调用错误
 
 **v0.2.11 - 模型功能增强**:
@@ -279,6 +280,7 @@ exporter.export_to_coco_format(detections, 1, image_info, "output/coco_annotatio
 | `08_segmentation_sam.py` | SAM分割示例（自动分割、交互式分割、检测+分割联合推理） |
 | `09_clip_features.py` | CLIP特征示例（图像-文本相似度、零样本分类、图像特征提取） |
 | `10_pose_estimation.py` | 姿态估计示例（YOLO Pose、MediaPipe Pose、关键点检测与可视化） |
+| `11_config_based_processing.py` | 配置文件驱动的视觉处理示例（支持检测、跟踪、姿态估计、CLIP特征、SAM分割） |
 
 ## 依赖项
 

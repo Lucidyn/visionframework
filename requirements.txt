@@ -7,6 +7,7 @@ scipy>=1.10.0
 Pillow>=10.0.0
 pyyaml>=6.0
 pydantic>=2.0.0
+huggingface_hub>=0.14.0
 
 # Optional dependencies (install as needed):
 # For CLIP or DETR support:
@@ -20,6 +21,9 @@ pydantic>=2.0.0
 # rfdetr>=0.1.0
 # supervision>=0.18.0
 
+# For PyAV video processing (higher performance):
+# av>=11.0.0
+
 # Install all optional dependencies:
 # pip install -e ".[all]"
 # 
@@ -28,5 +32,6 @@ pydantic>=2.0.0
 # pip install -e ".[detr]"       # For DETR support
 # pip install -e ".[sam]"        # For SAM support
 # pip install -e ".[rfdetr]"     # For RF-DETR support
+# pip install -e ".[pyav]"       # For PyAV video processing support
 # pip install -e ".[dev]"        # For development (testing, linting)
 

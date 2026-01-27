@@ -7,7 +7,7 @@ from .config_models import (
     PipelineConfig, VisualizerConfig, AutoLabelerConfig,
     Config, DeviceManager, ModelCache
 )
-from .video_utils import VideoProcessor, VideoWriter, process_video
+from .video_utils import VideoProcessor, VideoWriter, PyAVVideoProcessor, PyAVVideoWriter, process_video
 
 __all__ = [
     "Config",
@@ -15,6 +15,8 @@ __all__ = [
     "ModelCache",
     "VideoProcessor",
     "VideoWriter",
+    "PyAVVideoProcessor",
+    "PyAVVideoWriter",
     "process_video",
     "BaseConfig",
     "DetectorConfig",

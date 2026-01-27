@@ -11,24 +11,43 @@ from ..utils.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 
-try:
-    from ultralytics import YOLO
-    YOLO_POSE_AVAILABLE = True
-except ImportError:
-    YOLO_POSE_AVAILABLE = False
-    YOLO = None
+# Lazy import flags
+YOLO_POSE_AVAILABLE = False
+MEDIAPIPE_AVAILABLE = False
 
-# Try to import MediaPipe
-try:
-    import mediapipe as mp
-    MEDIAPIPE_AVAILABLE = True
-    mp_pose = mp.solutions.pose
-    mp_drawing = mp.solutions.drawing_utils
-except ImportError:
-    MEDIAPIPE_AVAILABLE = False
-    mp = None
-    mp_pose = None
-    mp_drawing = None
+# Import references (will be set on first use)
+YOLO = None
+mp = None
+mp_pose = None
+mp_drawing = None
+
+
+def _ensure_yolo_import():
+    """Ensure YOLO is imported"""
+    global YOLO, YOLO_POSE_AVAILABLE
+    if not YOLO_POSE_AVAILABLE:
+        try:
+            from ultralytics import YOLO
+            YOLO_POSE_AVAILABLE = True
+        except ImportError:
+            YOLO_POSE_AVAILABLE = False
+            YOLO = None
+
+
+def _ensure_mediapipe_import():
+    """Ensure MediaPipe is imported"""
+    global mp, mp_pose, mp_drawing, MEDIAPIPE_AVAILABLE
+    if not MEDIAPIPE_AVAILABLE:
+        try:
+            import mediapipe as mp
+            MEDIAPIPE_AVAILABLE = True
+            mp_pose = mp.solutions.pose
+            mp_drawing = mp.solutions.drawing_utils
+        except ImportError:
+            MEDIAPIPE_AVAILABLE = False
+            mp = None
+            mp_pose = None
+            mp_drawing = None
 
 
 class PoseEstimator(BaseModule):
@@ -107,13 +126,19 @@ class PoseEstimator(BaseModule):
         """Initialize the pose estimator model"""
         try:
             if self.model_type == "yolo_pose":
+                # Lazy import YOLO
+                _ensure_yolo_import()
                 if not YOLO_POSE_AVAILABLE:
                     raise ImportError("ultralytics not installed. Install with: pip install ultralytics")
+                global YOLO
                 self.model = YOLO(self.model_path)
                 self.model.to(self.device)
             elif self.model_type == "mediapipe":
+                # Lazy import MediaPipe
+                _ensure_mediapipe_import()
                 if not MEDIAPIPE_AVAILABLE:
                     raise ImportError("mediapipe not installed. Install with: pip install mediapipe")
+                global mp_pose
                 # Initialize MediaPipe Pose model
                 self.model = mp_pose.Pose(
                     static_image_mode=False,

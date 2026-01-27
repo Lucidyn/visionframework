@@ -7,7 +7,7 @@ object detection and tracking in a single, easy-to-use interface.
 
 import cv2
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple, Callable
+from typing import List, Dict, Any, Optional, Tuple, Callable, Union
 from .base import BaseModule
 from .detector import Detector
 from .tracker import Tracker
@@ -15,6 +15,8 @@ from ..data.detection import Detection
 from ..data.track import Track
 from ..utils.monitoring.logger import get_logger
 from ..utils.monitoring.performance import PerformanceMonitor
+from ..utils.memory import create_memory_pool, acquire_memory, release_memory, optimize_memory_usage
+from ..utils.concurrent import parallel_map
 
 logger = get_logger(__name__)
 
@@ -119,9 +121,10 @@ class VisionPipeline(BaseModule):
         self.detector_config: Dict[str, Any] = self.config["detector_config"]
         self.tracker_config: Dict[str, Any] = self.config["tracker_config"]
         self.pose_estimator_config: Dict[str, Any] = self.config["pose_estimator_config"]
+        self.performance_monitor: Optional[PerformanceMonitor] = None
         
     @classmethod
-    def with_tracking(cls, config: Optional[Dict[str, Any]] = None):
+    def with_tracking(cls, config: Optional[Dict[str, Any]] = None) -> 'VisionPipeline':
         """
         Create a VisionPipeline with tracking enabled by default
         
@@ -141,7 +144,7 @@ class VisionPipeline(BaseModule):
         return cls(config)
     
     @classmethod
-    def from_model(cls, model_path: str, enable_tracking: bool = False, conf_threshold: float = 0.25):
+    def from_model(cls, model_path: str, enable_tracking: bool = False, conf_threshold: float = 0.25) -> 'VisionPipeline':
         """
         Create a VisionPipeline from a specific model path
         
@@ -209,7 +212,7 @@ class VisionPipeline(BaseModule):
     
     @staticmethod
     def run_video(
-        input_source: str or int,
+        input_source: Union[str, int],
         output_path: Optional[str] = None,
         model_path: str = "yolov8n.pt",
         enable_tracking: bool = False,
@@ -230,31 +233,10 @@ class VisionPipeline(BaseModule):
             enable_tracking: Whether to enable tracking (default: False)
             conf_threshold: Confidence threshold for detections (default: 0.25)
             batch_size: Batch size for processing (0 for non-batch processing, default: 0)
-            **kwargs: Additional arguments passed to process_video or process_video_batch
+            **kwargs: Additional arguments passed to process_video
             
         Returns:
             bool: True if processing completed successfully, False otherwise
-            
-        Example:
-            ```python
-            from visionframework import VisionPipeline
-            
-            # Process video file with default settings
-            VisionPipeline.run_video(
-                input_source="input.mp4",
-                output_path="output.mp4"
-            )
-            
-            # Process RTSP stream with custom settings
-            VisionPipeline.run_video(
-                input_source="rtsp://example.com/stream",
-                output_path="output_stream.mp4",
-                model_path="yolov8s.pt",
-                enable_tracking=True,
-                conf_threshold=0.3,
-                batch_size=16
-            )
-            ```
         """
         pipeline = VisionPipeline.from_model(model_path, enable_tracking, conf_threshold)
         pipeline.initialize()
@@ -263,19 +245,12 @@ class VisionPipeline(BaseModule):
         if batch_size > 0 and hasattr(pipeline.detector, 'detector_impl'):
             pipeline.detector.detector_impl.batch_inference = True
         
-        if batch_size > 0:
-            return pipeline.process_video_batch(
-                input_source=input_source,
-                output_path=output_path,
-                batch_size=batch_size,
-                **kwargs
-            )
-        else:
-            return pipeline.process_video(
-                input_source=input_source,
-                output_path=output_path,
-                **kwargs
-            )
+        return pipeline.process_video(
+            input_source=input_source,
+            output_path=output_path,
+            batch_size=batch_size if batch_size > 0 else None,
+            **kwargs
+        )
     
     def validate_config(self, config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         """
@@ -407,14 +382,15 @@ class VisionPipeline(BaseModule):
                 logger.info("Initializing performance monitor...")
                 self.performance_monitor = PerformanceMonitor(metrics=self.performance_metrics)
             
+            # Initialize memory pools
+            self._initialize_memory_pools()
+            
             self.is_initialized = True
             logger.info("Pipeline initialized successfully")
             return True
-        except (ValueError, RuntimeError) as e:
-            logger.error(f"Failed to initialize pipeline: {e}", exc_info=True)
-            return False
         except Exception as e:
-            logger.error(f"Unexpected error initializing pipeline: {e}", exc_info=True)
+            from ..exceptions import PipelineIntegrationError
+            logger.error(f"Failed to initialize pipeline: {e}", exc_info=True)
             return False
     
     def process(self, image: np.ndarray) -> Dict[str, Any]:
@@ -435,6 +411,7 @@ class VisionPipeline(BaseModule):
             Dict[str, Any]: Dictionary containing:
                 - "detections": List[Detection] - List of detected objects from current frame
                 - "tracks": List[Track] - List of tracked objects (if tracking enabled, else empty list)
+                - "poses": List[Pose] - List of pose estimations (if pose estimation enabled, else empty list)
                 
                 Each Detection contains:
                 - bbox: Tuple of (x1, y1, x2, y2) coordinates
@@ -452,7 +429,7 @@ class VisionPipeline(BaseModule):
                 - time_since_update: Frames since last update
                 - history: Previous positions (if available)
             
-            Returns {"detections": [], "tracks": []} if:
+            Returns {"detections": [], "tracks": [], "poses": []} if:
                 - Pipeline is not initialized and initialization fails
                 - Detector is None
                 - An error occurs during processing
@@ -509,10 +486,11 @@ class VisionPipeline(BaseModule):
             
             return results
         except Exception as e:
+            from ..exceptions import ProcessingError
             logger.error(f"Error during pipeline processing: {e}", exc_info=True)
             return {"detections": [], "tracks": [], "poses": []}
     
-    def process_batch(self, images: List[np.ndarray]) -> List[Dict[str, Any]]:
+    def process_batch(self, images: List[np.ndarray], max_batch_size: Optional[int] = None, use_parallel: bool = False, max_workers: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Process multiple images in a batch through detection and tracking pipeline
         
@@ -523,12 +501,17 @@ class VisionPipeline(BaseModule):
         Args:
             images: List of input images in BGR format (OpenCV standard).
                    Each image should be numpy array with shape (H, W, 3) and uint8 data type.
+            max_batch_size: Maximum batch size for processing. If None, use all images in one batch.
+                           Useful for memory-constrained environments.
+            use_parallel: Whether to use parallel processing for individual images
+            max_workers: Maximum number of workers for parallel processing
         
         Returns:
             List[Dict[str, Any]]: List of result dictionaries, one per image.
                 Each dictionary contains:
                 - "detections": List[Detection] - Detected objects in that frame
                 - "tracks": List[Track] - Tracked objects in that frame (if tracking enabled)
+                - "poses": List[Pose] - Pose estimations in that frame (if pose estimation enabled)
                 - "frame_idx": int - Index of the frame in the input list
         
         Example:
@@ -545,6 +528,9 @@ class VisionPipeline(BaseModule):
             # Process multiple frames at once
             frames = [frame1, frame2, frame3, ...]
             results = pipeline.process_batch(frames)
+            
+            # Process with parallel processing
+            results = pipeline.process_batch(frames, use_parallel=True, max_workers=4)
             
             for idx, result in enumerate(results):
                 print(f"Frame {idx}: {len(result['detections'])} detections, {len(result['tracks'])} tracks")
@@ -563,69 +549,152 @@ class VisionPipeline(BaseModule):
             logger.warning("Empty image list provided to process_batch")
             return []
         
+        try:
+            # Split into smaller batches if max_batch_size is specified
+            if max_batch_size and len(images) > max_batch_size:
+                logger.debug(f"Splitting {len(images)} images into batches of {max_batch_size}")
+                # Process in chunks
+                chunk_results = []
+                for i in range(0, len(images), max_batch_size):
+                    chunk = images[i:i + max_batch_size]
+                    chunk_result = self._process_batch_chunk(chunk, i, use_parallel, max_workers)
+                    chunk_results.extend(chunk_result)
+                return chunk_results
+            else:
+                # Process all images in one batch
+                return self._process_batch_chunk(images, 0, use_parallel, max_workers)
+        except Exception as e:
+            from ..exceptions import BatchProcessingError
+            logger.error(f"Error during batch pipeline processing: {e}", exc_info=True)
+            return [{"detections": [], "tracks": [], "poses": [], "frame_idx": i} for i in range(len(images))]
+    
+    def _process_batch_chunk(self, images: List[np.ndarray], start_frame_idx: int = 0, use_parallel: bool = False, max_workers: Optional[int] = None) -> List[Dict[str, Any]]:
+        """
+        Process a chunk of images in a batch
+        
+        Args:
+            images: List of input images in BGR format
+            start_frame_idx: Starting frame index for this chunk
+            use_parallel: Whether to use parallel processing
+            max_workers: Maximum number of workers for parallel processing
+            
+        Returns:
+            List of result dictionaries, one per image
+        """
         results: List[Dict[str, Any]] = []
         
-        try:
-            # Check if detector supports batch processing via batch_inference flag
-            detector_impl = self.detector.detector_impl
-            use_batch = getattr(detector_impl, 'batch_inference', False) if detector_impl else False
+        # Check if detector supports batch processing via batch_inference flag
+        detector_impl = getattr(self.detector, 'detector_impl', None)
+        use_batch = getattr(detector_impl, 'batch_inference', False) if detector_impl else False
+        
+        if use_batch and len(images) > 1:
+            # Use batch inference if supported and multiple images
+            logger.debug(f"Using batch inference for {len(images)} images")
+            all_detections = self.detector.process(images)
             
-            if use_batch and len(images) > 1:
-                # Use batch inference if supported and multiple images
-                logger.debug(f"Using batch inference for {len(images)} images")
-                all_detections = self.detector.process(images)
-                
-                # If detector returns detections for all images
-                if isinstance(all_detections, list) and len(all_detections) > 0:
-                    # Check if first element is a list (batch) or Detection object
-                    if isinstance(all_detections[0], list):
-                        # Batch results - one list per image
-                        detections_per_image = all_detections
-                    else:
-                        # Single image result or flat list - wrap in list
-                        detections_per_image = [[det] if not isinstance(det, list) else det 
-                                               for det in all_detections[:len(images)]]
+            # If detector returns detections for all images
+            if isinstance(all_detections, list) and len(all_detections) > 0:
+                # Check if first element is a list (batch) or Detection object
+                if isinstance(all_detections[0], list):
+                    # Batch results - one list per image
+                    detections_per_image = all_detections
                 else:
-                    detections_per_image = [[] for _ in range(len(images))]
+                    # Single image result or flat list - wrap in list
+                    detections_per_image = []
+                    for i in range(len(images)):
+                        if i < len(all_detections):
+                            det = all_detections[i]
+                            detections_per_image.append([det] if not isinstance(det, list) else det)
+                        else:
+                            detections_per_image.append([])
             else:
-                # Process each image individually
-                logger.debug(f"Processing {len(images)} images individually")
+                detections_per_image = [[] for _ in range(len(images))]
+        else:
+            # Process each image individually
+            logger.debug(f"Processing {len(images)} images individually")
+            
+            if use_parallel and len(images) > 1:
+                # Use parallel processing
+                logger.debug(f"Using parallel processing with {max_workers or 'auto'} workers")
+                
+                def process_single_image(image):
+                    return self.detector.process(image)
+                
+                detections_per_image = parallel_map(
+                    images, 
+                    process_single_image, 
+                    max_workers=max_workers,
+                    use_processes=False  # Use threads for I/O-bound operations
+                )
+            else:
+                # Process sequentially
                 detections_per_image = []
                 for image in images:
                     dets = self.detector.process(image)
                     detections_per_image.append(dets)
+        
+        # Process tracking and pose estimation for each frame
+        if use_parallel and len(images) > 1 and not self.enable_tracking:
+            # Use parallel processing for post-processing (if no tracking)
+            logger.debug(f"Using parallel post-processing")
             
-            # Process tracking and pose estimation for each frame
-            for frame_idx, detections in enumerate(detections_per_image):
+            def process_post(image_and_detections):
+                image, detections, frame_idx = image_and_detections
                 frame_result: Dict[str, Any] = {
                     "detections": detections,
-                    "frame_idx": frame_idx
+                    "frame_idx": start_frame_idx + frame_idx
+                }
+                
+                # Run pose estimation if enabled
+                if self.enable_pose_estimation and self.pose_estimator is not None:
+                    poses = self.pose_estimator.process(image)
+                    frame_result["poses"] = poses
+                else:
+                    frame_result["poses"] = []
+                
+                return frame_result
+            
+            # Prepare data for parallel processing
+            data_for_parallel = [(img, dets, idx) for idx, (img, dets) in enumerate(zip(images, detections_per_image))]
+            
+            # Process in parallel
+            parallel_results = parallel_map(
+                data_for_parallel, 
+                process_post, 
+                max_workers=max_workers,
+                use_processes=False
+            )
+            
+            results.extend(parallel_results)
+        else:
+            # Process sequentially (required for tracking to maintain state)
+            for frame_idx, (detections, image) in enumerate(zip(detections_per_image, images)):
+                frame_result: Dict[str, Any] = {
+                    "detections": detections,
+                    "frame_idx": start_frame_idx + frame_idx
                 }
                 
                 # Run tracking if enabled
                 if self.enable_tracking and self.tracker is not None:
-                    tracks = self.tracker.process(detections, image=images[frame_idx])
+                    tracks = self.tracker.process(detections, image=image)
                     frame_result["tracks"] = tracks
                 else:
                     frame_result["tracks"] = []
                 
                 # Run pose estimation if enabled
                 if self.enable_pose_estimation and self.pose_estimator is not None:
-                    poses = self.pose_estimator.process(images[frame_idx])
+                    poses = self.pose_estimator.process(image)
                     frame_result["poses"] = poses
                 else:
                     frame_result["poses"] = []
                 
                 results.append(frame_result)
-            
-            return results
-        except Exception as e:
-            logger.error(f"Error during batch pipeline processing: {e}", exc_info=True)
-            return [{"detections": [], "tracks": [], "poses": [], "frame_idx": i} for i in range(len(images))]
+        
+        return results
     
     def process_video_batch(
         self, 
-        input_source: str or int, 
+        input_source: Union[str, int], 
         output_path: Optional[str] = None, 
         start_frame: int = 0, 
         end_frame: Optional[int] = None, 
@@ -788,21 +857,6 @@ class VisionPipeline(BaseModule):
             if writer:
                 writer.close()
     
-    def process_frame(self, image: np.ndarray) -> Dict[str, Any]:
-        """
-        Alias for process method
-        
-        This method is provided for clarity when processing video frames.
-        It is functionally equivalent to process().
-        
-        Args:
-            image: Input image frame in BGR format (numpy array, shape: (H, W, 3))
-        
-        Returns:
-            Dict[str, Any]: Dictionary containing detections and tracks
-        """
-        return self.process(image)
-    
     def reset(self) -> None:
         """
         Reset pipeline state
@@ -889,6 +943,12 @@ class VisionPipeline(BaseModule):
         """
         return self.pose_estimator
     
+    def _initialize_memory_pools(self) -> None:
+        """
+        Initialize memory pools for efficient memory allocation and reuse
+        """
+        pass
+    
     def cleanup(self) -> None:
         """Cleanup resources held by pipeline components"""
         try:
@@ -899,6 +959,8 @@ class VisionPipeline(BaseModule):
             if self.pose_estimator is not None:
                 # Pose estimator doesn't have a cleanup method yet, but we can add one if needed in the future
                 pass
+            # Optimize memory usage by clearing unused memory
+            optimize_memory_usage()
         finally:
             self.detector = None
             self.tracker = None
@@ -911,7 +973,7 @@ class VisionPipeline(BaseModule):
     
     def process_video(
         self, 
-        input_source: str or int, 
+        input_source: Union[str, int], 
         output_path: Optional[str] = None, 
         start_frame: int = 0, 
         end_frame: Optional[int] = None, 
@@ -1025,7 +1087,7 @@ class VisionPipeline(BaseModule):
                     continue
                 
                 # Process frame using the pipeline
-                results = self.process_frame(frame)
+                results = self.process(frame)
                 
                 # Apply frame callback if provided
                 processed_frame = frame.copy()

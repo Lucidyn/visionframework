@@ -39,8 +39,12 @@ VisionPipeline(
 #### `process_frame(image: np.ndarray) -> Dict[str, Any]`
 `process`方法的别名，用于视频帧处理。
 
-#### `process_batch(images: List[np.ndarray]) -> List[Dict[str, Any]]`
-批量处理多张图像。
+#### `process_batch(images: List[np.ndarray], max_batch_size: Optional[int] = None) -> List[Dict[str, Any]]`
+批量处理多张图像，支持自动分块以优化内存使用。
+
+**参数：**
+- `images`：要处理的图像列表
+- `max_batch_size`：最大批处理大小，超过此大小会自动分块处理，默认为None（使用模型默认批处理大小）
 
 #### `process_video(input_source: str or int, output_path: Optional[str] = None, start_frame: int = 0, end_frame: Optional[int] = None, skip_frames: int = 0, frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None, progress_callback: Optional[Callable[[float, int, int], None]] = None) -> bool`
 处理视频文件或流。
@@ -79,7 +83,7 @@ Detector(
 **参数：**
 - `config`：配置字典，包含以下可选键：
   - `model_path`：模型文件路径或模型名称（例如，"yolov8n.pt"、"yolov26n.pt"）
-  - `model_type`：模型类型（"yolo"、"detr"、"rfdetr"）
+  - `model_type`：模型类型（"yolo"、"detr"、"rfdetr"、"efficientdet"、"faster_rcnn"）
   - `device`：运行推理的设备（"auto"、"cuda"、"cpu"、"cuda:0"）
   - `conf_threshold`：检测结果的默认置信度阈值
   - `iou_threshold`：NMS（非最大抑制）的IoU阈值
@@ -196,14 +200,29 @@ IoUTracker(
 
 ### ReidTracker
 
+基于ReID（Person Re-Identification）的跟踪器，使用外观特征来提高跨帧目标跟踪的准确性。
+
 ```python
 ReidTracker(
     max_age: int = 30,
     iou_threshold: float = 0.3,
     min_hits: int = 3,
-    reid_model: str = "osnet_x0_25_market1501.pt"
+    reid_model: str = "osnet_x0_25_market1501.pt",
+    reid_threshold: float = 0.5
 )
 ```
+
+**参数：**
+- `max_age`：目标消失后保持跟踪ID的最大帧数
+- `iou_threshold`：IoU阈值，用于匹配检测结果和跟踪目标
+- `min_hits`：开始跟踪前需要连续检测到目标的最小次数
+- `reid_model`：ReID模型路径或名称
+- `reid_threshold`：ReID特征匹配的阈值，超过此阈值认为是同一目标
+
+**方法：**
+- `update(detections: List[Dict[str, Any]], frame: np.ndarray = None) -> List[Dict[str, Any]]`：使用新的检测结果和ReID特征更新跟踪
+- `reset() -> None`：重置跟踪器
+- `extract_features(bbox: Tuple[int, int, int, int], frame: np.ndarray) -> np.ndarray`：从目标区域提取ReID特征
 
 ## 数据结构
 
@@ -415,10 +434,22 @@ ModelCache(
 )
 ```
 
+**参数：**
+- `cache_dir`：模型缓存目录，默认为None（使用默认缓存目录）
+
 **方法：**
 - `get_model_path(model_name: str) -> str`：获取缓存模型的路径
 - `cache_model(model_path: str, model_name: str) -> str`：缓存模型
 - `clear_cache() -> None`：清除缓存
+- `get_cache_info() -> Dict[str, Any]`：获取缓存信息
+- `delete_model(model_name: str) -> bool`：删除指定模型
+
+**支持的模型类型：**
+- YOLO系列模型（yolov8n.pt, yolov26n.pt等）
+- CLIP模型（openai/clip-vit-base-patch32等）
+- DETR模型
+- 姿态估计模型（yolov8n-pose.pt等）
+- ReID模型（osnet_x0_25_market1501.pt等）
 
 ## CLIP提取器
 
@@ -736,4 +767,62 @@ for pose in poses:
 
 # 保存结果
 cv2.imwrite("pose_estimation_result.jpg", result)
+```
+
+### 批量处理优化示例
+
+```python
+from visionframework.core.pipeline import VisionPipeline
+import cv2
+import numpy as np
+
+# 初始化管道
+pipeline = VisionPipeline({
+    "detector_config": {
+        "model_path": "yolov8n.pt",
+        "conf_threshold": 0.5
+    }
+})
+
+# 加载多张图像
+images = []
+for i in range(10):
+    # 假设我们有10张测试图像
+    image = cv2.imread(f"test_{i}.jpg")
+    if image is not None:
+        images.append(image)
+
+# 批量处理，设置最大批处理大小为4（自动分块）
+results = pipeline.process_batch(images, max_batch_size=4)
+
+# 处理结果
+for i, result in enumerate(results):
+    print(f"图像 {i+1} 检测到 {len(result['detections'])} 个目标")
+```
+
+### ReID跟踪示例
+
+```python
+from visionframework.core.pipeline import VisionPipeline
+import cv2
+
+# 初始化带ReID跟踪的管道
+pipeline = VisionPipeline({
+    "detector_config": {
+        "model_path": "yolov8n.pt",
+        "conf_threshold": 0.5
+    },
+    "tracker_config": {
+        "tracker_type": "reidtracker",
+        "reid_model": "osnet_x0_25_market1501.pt",
+        "reid_threshold": 0.5
+    },
+    "enable_tracking": True
+})
+
+# 处理视频
+pipeline.process_video(
+    input_path="input.mp4",
+    output_path="output_reid.mp4"
+)
 ```

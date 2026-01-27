@@ -327,21 +327,6 @@ class Detector(BaseModule):
             logger.error(f"Error during detection: {e}", exc_info=True)
             return []
     
-    def detect(self, image: np.ndarray, categories: Optional[list] = None) -> List[Detection]:
-        """
-        Alias for process method
-        
-        This method is provided for convenience and clarity. It is functionally
-        equivalent to process().
-        
-        Args:
-            image: Input image in BGR format (numpy array, shape: (H, W, 3))
-        
-        Returns:
-            List[Detection]: List of detected objects
-        """
-        return self.process(image, categories=categories)
-    
     def process_batch(self, images: List[np.ndarray], categories: Optional[list] = None) -> List[List[Detection]]:
         """
         Process multiple images in batch mode
@@ -357,24 +342,6 @@ class Detector(BaseModule):
         Returns:
             List[List[Detection]]: List of detection lists, one list per image.
                                   Each inner list contains Detection objects for that image.
-        
-        Raises:
-            RuntimeError: If detector is not initialized or batch processing fails
-        
-        Example:
-            ```python
-            detector = Detector({
-                "model_type": "yolo",
-                "batch_inference": True  # Enable batch inference for better throughput
-            })
-            detector.initialize()
-            
-            images = [frame1, frame2, frame3]
-            batch_results = detector.process_batch(images)
-            
-            for frame_dets in batch_results:
-                print(f"Detected {len(frame_dets)} objects")
-            ```
         """
         if not self.is_initialized:
             if not self.initialize():
@@ -407,22 +374,6 @@ class Detector(BaseModule):
         except Exception as e:
             logger.error(f"Error during batch detection: {e}", exc_info=True)
             return [[] for _ in images]
-    
-    def detect_batch(self, images: List[np.ndarray], categories: Optional[list] = None) -> List[List[Detection]]:
-        """
-        Alias for process_batch method
-        
-        This method is provided for convenience and clarity. It is functionally
-        equivalent to process_batch().
-        
-        Args:
-            images: List of input images in BGR format
-            categories: Optional list of category names
-        
-        Returns:
-            List[List[Detection]]: List of detection lists for each image
-        """
-        return self.process_batch(images, categories=categories)
     
     def get_model_info(self) -> Dict[str, Any]:
         """

@@ -48,6 +48,14 @@ class ModelManager:
         "yolo26": {
             "base_url": "https://github.com/ultralytics/assets/releases/download/v0.0.0/",
             "file_extension": ".pt"
+        },
+        "efficientdet": {
+            "base_url": "https://github.com/google/automl/releases/download/efficientdet/",
+            "file_extension": ".pth"
+        },
+        "fasterrcnn": {
+            "base_url": "https://download.pytorch.org/models/",
+            "file_extension": ".pth"
         }
     }
     
@@ -61,6 +69,7 @@ class ModelManager:
         self.cache_dir = cache_dir or self.DEFAULT_CACHE_DIR
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._model_registry: Dict[str, Dict[str, Any]] = {}
+        self._model_metadata: Dict[str, Dict[str, Any]] = {}
         
         # Register default models
         self._register_default_models()
@@ -82,6 +91,32 @@ class ModelManager:
                 name=model_name,
                 source="yolo" if "v8" in model_name else "yolo26",
                 config={"file_name": f"{model_name}.pt"}
+            )
+        
+        # Register EfficientDet models
+        efficientdet_models = [
+            "efficientdet-d0", "efficientdet-d1", "efficientdet-d2", "efficientdet-d3", 
+            "efficientdet-d4", "efficientdet-d5", "efficientdet-d6", "efficientdet-d7"
+        ]
+        
+        for model_name in efficientdet_models:
+            self.register_model(
+                name=model_name,
+                source="efficientdet",
+                config={"file_name": f"{model_name}.pth"}
+            )
+        
+        # Register Faster R-CNN models
+        fasterrcnn_models = [
+            "fasterrcnn_resnet50_fpn", "fasterrcnn_resnet50_fpn_v2", 
+            "fasterrcnn_mobilenet_v3_large_fpn", "fasterrcnn_mobilenet_v3_small_fpn"
+        ]
+        
+        for model_name in fasterrcnn_models:
+            self.register_model(
+                name=model_name,
+                source="fasterrcnn",
+                config={"file_name": f"{model_name}.pth"}
             )
     
     def register_model(self, name: str, source: str, config: Dict[str, Any]) -> None:
@@ -284,14 +319,46 @@ class ModelManager:
                 model_path=str(model_path)
             )
         
-        # Try to load the model
+        # Get model source
+        if name not in self._model_registry:
+            raise ValueError(f"Model not registered: {name}. Register it first with register_model()")
+        
+        model_info = self._model_registry[name]
+        source = model_info["source"]
+        
+        # Try to load the model based on source
         try:
-            from ultralytics import YOLO
-            return YOLO(str(model_path))
+            if source in ["yolo", "yolo26"]:
+                from ultralytics import YOLO
+                return YOLO(str(model_path))
+            elif source == "efficientdet":
+                # EfficientDet model loading
+                import torch
+                model = torch.load(str(model_path))
+                return model
+            elif source == "fasterrcnn":
+                # Faster R-CNN model loading
+                import torchvision.models as models
+                from torchvision.models.detection import faster_rcnn
+                
+                # Create model based on name
+                if "resnet50_fpn" in name:
+                    if "v2" in name:
+                        return models.detection.fasterrcnn_resnet50_fpn_v2(pretrained=False)
+                    else:
+                        return models.detection.fasterrcnn_resnet50_fpn(pretrained=False)
+                elif "mobilenet_v3_large_fpn" in name:
+                    return models.detection.fasterrcnn_mobilenet_v3_large_fpn(pretrained=False)
+                elif "mobilenet_v3_small_fpn" in name:
+                    return models.detection.fasterrcnn_mobilenet_v3_small_fpn(pretrained=False)
+                else:
+                    raise ValueError(f"Unknown Faster R-CNN model: {name}")
+            else:
+                raise ValueError(f"Unsupported model source: {source}")
         except Exception as e:
             from ..exceptions import ModelLoadError
             raise ModelLoadError(
-                message="Failed to load YOLO model",
+                message=f"Failed to load {source} model",
                 model_path=str(model_path),
                 original_error=e
             ) from e

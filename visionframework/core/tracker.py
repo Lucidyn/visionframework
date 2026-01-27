@@ -303,21 +303,6 @@ class Tracker(BaseModule):
             logger.error(f"Error during tracking: {e}", exc_info=True)
             return []
     
-    def update(self, detections: List[Detection], image: Optional[np.ndarray] = None) -> List[Track]:
-        """
-        Alias for process method
-        
-        This method is provided for convenience and clarity. It is functionally
-        equivalent to process().
-        
-        Args:
-            detections: List of Detection objects from the current frame
-            image: Optional current frame image
-        
-        Returns:
-            List[Track]: List of tracked objects
-        """
-        return self.process(detections, image=image)    
     def process_batch(self, 
                      detections_list: List[List[Detection]], 
                      images: Optional[List[np.ndarray]] = None) -> List[List[Track]]:
@@ -335,21 +320,6 @@ class Tracker(BaseModule):
         
         Returns:
             List[List[Track]]: List of track lists, one per frame
-        
-        Example:
-            ```python
-            tracker = Tracker()
-            tracker.initialize()
-            
-            # Process detections from multiple frames sequentially
-            detections_frames = [dets_frame1, dets_frame2, dets_frame3]
-            images_frames = [frame1, frame2, frame3]
-            
-            tracks_frames = tracker.process_batch(detections_frames, images_frames)
-            
-            for frame_idx, tracks in enumerate(tracks_frames):
-                print(f"Frame {frame_idx}: {len(tracks)} active tracks")
-            ```
         """
         if not self.is_initialized:
             if not self.initialize():
@@ -372,25 +342,7 @@ class Tracker(BaseModule):
             return batch_tracks
         except Exception as e:
             logger.error(f"Error during batch tracking: {e}", exc_info=True)
-            return [[] for _ in detections_list]
-    
-    def update_batch(self, 
-                    detections_list: List[List[Detection]], 
-                    images: Optional[List[np.ndarray]] = None) -> List[List[Track]]:
-        """
-        Alias for process_batch method
-        
-        This method is provided for convenience and clarity. It is functionally
-        equivalent to process_batch().
-        
-        Args:
-            detections_list: List of detection lists, one per frame
-            images: Optional list of frame images
-        
-        Returns:
-            List[List[Track]]: List of track lists, one per frame
-        """
-        return self.process_batch(detections_list, images)    
+            return [[] for _ in detections_list]    
     def reset(self) -> None:
         """
         Reset tracker state

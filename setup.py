@@ -38,6 +38,7 @@ setup(
         "Pillow>=10.0.0",
         "pyyaml>=6.0",
         "pydantic>=2.0.0",
+        "huggingface_hub>=0.14.0",
     ],
     python_requires=">=3.8",
     extras_require={
@@ -54,6 +55,9 @@ setup(
             "rfdetr>=0.1.0",
             "supervision>=0.18.0",
         ],
+        "pyav": [
+            "av>=11.0.0",
+        ],
         "dev": [
             "pytest>=7.0.0",
             "pytest-cov>=4.0.0",
@@ -66,6 +70,7 @@ setup(
             "segment-anything>=1.0",
             "rfdetr>=0.1.0",
             "supervision>=0.18.0",
+            "av>=11.0.0",
             "pytest>=7.0.0",
             "pytest-cov>=4.0.0",
             "black>=23.0.0",

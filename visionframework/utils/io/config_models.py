@@ -6,7 +6,7 @@ a configuration manager for loading/saving configurations from files.
 """
 
 from typing import Dict, Any, Optional, List, Union
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 import json
 
 # Try to import yaml, but make it optional
@@ -20,10 +20,11 @@ except ImportError:
 
 class BaseConfig(BaseModel):
     """Base configuration model with common validation"""
-    class Config:
-        extra = "allow"  # Allow additional fields not explicitly defined
-        from_attributes = True  # Support loading from objects
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(
+        extra="allow",  # Allow additional fields not explicitly defined
+        from_attributes=True,  # Support loading from objects
+        arbitrary_types_allowed=True
+    )
 
 
 class DetectorConfig(BaseConfig):
@@ -204,19 +205,24 @@ class Config:
     from files. It supports both JSON and YAML formats.
     """
     
+    # Configuration version
+    CONFIG_VERSION = "1.0"
+    
     @staticmethod
-    def load_from_file(file_path: str) -> Dict[str, Any]:
+    def load_from_file(file_path: str, return_default_if_not_found: bool = False, default_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Load configuration from file (supports JSON and YAML)
         
         Args:
             file_path: Path to configuration file (.json, .yaml, or .yml)
+            return_default_if_not_found: If True, return default_config instead of raising FileNotFoundError
+            default_config: Default configuration to return if file not found
         
         Returns:
             Dict[str, Any]: Configuration dictionary
         
         Raises:
-            FileNotFoundError: If the file does not exist
+            FileNotFoundError: If the file does not exist and return_default_if_not_found is False
             ValueError: If the file format is not supported
             ImportError: If YAML file is used but PyYAML is not installed
         """
@@ -224,6 +230,8 @@ class Config:
         
         path = Path(file_path)
         if not path.exists():
+            if return_default_if_not_found:
+                return default_config or {}
             raise FileNotFoundError(f"Configuration file not found: {file_path}")
         
         suffix = path.suffix.lower()
@@ -256,6 +264,8 @@ class Config:
         from pathlib import Path
         
         path = Path(file_path)
+        # Create parent directory if it doesn't exist
+        path.parent.mkdir(parents=True, exist_ok=True)
         
         # Determine format
         if format is None:
@@ -267,33 +277,45 @@ class Config:
             else:
                 format = 'json'  # Default to JSON
         
+        # Add configuration version
+        config_with_version = config.copy()
+        config_with_version['config_version'] = Config.CONFIG_VERSION
+        
         if format == 'json':
             with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=4, ensure_ascii=False)
+                json.dump(config_with_version, f, indent=4, ensure_ascii=False)
         elif format == 'yaml':
             if not YAML_AVAILABLE:
                 raise ImportError(
                     "PyYAML is required for YAML files. Install with: pip install pyyaml"
                 )
             with open(file_path, 'w', encoding='utf-8') as f:
-                yaml.dump(config, f, default_flow_style=False, allow_unicode=True, indent=2)
+                yaml.dump(config_with_version, f, default_flow_style=False, allow_unicode=True, indent=2)
         else:
             raise ValueError(f"Unsupported format: {format}. Supported: 'json', 'yaml'")
     
     @classmethod
-    def load_as_model(cls, file_path: str, model_type):
+    def load_as_model(cls, file_path: str, model_type, return_default_if_not_found: bool = False):
         """
         Load configuration from file and parse it into a Pydantic model
         
         Args:
             file_path: Path to configuration file
             model_type: Pydantic model class to use for parsing
+            return_default_if_not_found: If True, return default model instance instead of raising FileNotFoundError
         
         Returns:
             Parsed Pydantic model instance
         """
-        config_dict = cls.load_from_file(file_path)
-        return model_type(**config_dict)
+        try:
+            config_dict = cls.load_from_file(file_path)
+            # Remove config_version if present
+            config_dict.pop('config_version', None)
+            return model_type(**config_dict)
+        except FileNotFoundError:
+            if return_default_if_not_found:
+                return model_type()
+            raise
     
     @classmethod
     def save_model(cls, model: BaseConfig, file_path: str, format: Optional[str] = None):
@@ -315,9 +337,19 @@ class Config:
         return DetectorConfig().model_dump()
     
     @staticmethod
+    def get_default_detector_config_model() -> DetectorConfig:
+        """Get default detector configuration as Pydantic model"""
+        return DetectorConfig()
+    
+    @staticmethod
     def get_default_tracker_config() -> Dict[str, Any]:
         """Get default tracker configuration"""
         return TrackerConfig().model_dump()
+    
+    @staticmethod
+    def get_default_tracker_config_model() -> TrackerConfig:
+        """Get default tracker configuration as Pydantic model"""
+        return TrackerConfig()
     
     @staticmethod
     def get_default_pipeline_config() -> Dict[str, Any]:
@@ -325,14 +357,58 @@ class Config:
         return PipelineConfig().model_dump()
     
     @staticmethod
+    def get_default_pipeline_config_model() -> PipelineConfig:
+        """Get default pipeline configuration as Pydantic model"""
+        return PipelineConfig()
+    
+    @staticmethod
     def get_default_visualizer_config() -> Dict[str, Any]:
         """Get default visualizer configuration"""
         return VisualizerConfig().model_dump()
     
     @staticmethod
+    def get_default_visualizer_config_model() -> VisualizerConfig:
+        """Get default visualizer configuration as Pydantic model"""
+        return VisualizerConfig()
+    
+    @staticmethod
     def get_default_performance_config() -> Dict[str, Any]:
         """Get default performance configuration"""
         return PerformanceConfig().model_dump()
+    
+    @staticmethod
+    def get_default_performance_config_model() -> PerformanceConfig:
+        """Get default performance configuration as Pydantic model"""
+        return PerformanceConfig()
+    
+    @staticmethod
+    def validate_config(config: Dict[str, Any], config_type: str) -> bool:
+        """
+        Validate configuration dictionary
+        
+        Args:
+            config: Configuration dictionary to validate
+            config_type: Type of configuration ('detector', 'tracker', 'pipeline', 'visualizer', 'performance')
+        
+        Returns:
+            bool: True if configuration is valid, False otherwise
+        """
+        try:
+            if config_type == 'detector':
+                DetectorConfig(**config)
+            elif config_type == 'tracker':
+                TrackerConfig(**config)
+            elif config_type == 'pipeline':
+                PipelineConfig(**config)
+            elif config_type == 'visualizer':
+                VisualizerConfig(**config)
+            elif config_type == 'performance':
+                PerformanceConfig(**config)
+            else:
+                return False
+            return True
+        except Exception:
+            return False
 
 
 class ModelCache:
@@ -359,6 +435,40 @@ class ModelCache:
         'detr': lambda path: None,  # Will be implemented with proper DETR loading
         'pose': lambda path: None,  # Will be implemented with proper pose estimation loading
     }
+    _loaders_initialized = False  # Flag to track if model loaders have been initialized
+    
+    @classmethod
+    def _initialize_model_loaders(cls):
+        """Initialize model loaders for different model types."""
+        try:
+            from ultralytics import YOLO
+            cls._model_loaders['yolo'] = lambda path: YOLO(str(path))
+            cls._model_loaders['pose'] = lambda path: YOLO(str(path))
+        except ImportError:
+            pass
+        
+        try:
+            from transformers import CLIPModel, CLIPProcessor, DetrForObjectDetection, DetrImageProcessor
+            def load_clip(path):
+                try:
+                    model = CLIPModel.from_pretrained(path)
+                    processor = CLIPProcessor.from_pretrained(path)
+                    return (model, processor)
+                except Exception:
+                    return None
+            
+            def load_detr(path):
+                try:
+                    model = DetrForObjectDetection.from_pretrained(path)
+                    processor = DetrImageProcessor.from_pretrained(path)
+                    return (model, processor)
+                except Exception:
+                    return None
+            
+            cls._model_loaders['clip'] = load_clip
+            cls._model_loaders['detr'] = load_detr
+        except ImportError:
+            pass
 
     try:
         import threading
@@ -393,6 +503,11 @@ class ModelCache:
     @classmethod
     def get_model(cls, key: str, loader):
         """Return cached model for `key`. `loader` is a callable to create the model if missing."""
+        # Lazy initialize model loaders
+        if not cls._loaders_initialized:
+            cls._initialize_model_loaders()
+            cls._loaders_initialized = True
+            
         import time
         current_time = time.time()
         
@@ -586,3 +701,6 @@ class ModelCache:
         finally:
             if cls._lock:
                 cls._lock.release()
+
+
+
