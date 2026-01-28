@@ -72,6 +72,8 @@ results = pipeline.process_batch(frames)  # 200 FPS！
 - ✨ **CLIP示例代码**：新增 `09_clip_features.py` 示例，演示CLIP特征功能（图像-文本相似度、零样本分类）
 - ✨ **姿态估计示例代码**：新增 `10_pose_estimation.py` 示例，演示姿态估计功能（YOLO Pose、MediaPipe Pose）
 - ✨ **配置文件驱动示例**：新增 `11_config_based_processing.py` 示例，演示配置文件驱动的视觉处理管道
+- ✨ **PyAV视频处理示例**：新增 `12_pyav_video_processing.py` 示例，演示使用PyAV进行高性能视频处理
+- ✨ **VisionPipeline PyAV集成示例**：新增 `13_vision_pipeline_pyav.py` 示例，演示在VisionPipeline中使用PyAV
 - ✨ **文档更新**：更新了 `examples/README.md` 和 `README.md`，添加了新示例的说明
 - ✨ **示例优化**：优化了现有示例代码，修复了姿态估计示例中的方法调用错误
 
@@ -281,6 +283,8 @@ exporter.export_to_coco_format(detections, 1, image_info, "output/coco_annotatio
 | `09_clip_features.py` | CLIP特征示例（图像-文本相似度、零样本分类、图像特征提取） |
 | `10_pose_estimation.py` | 姿态估计示例（YOLO Pose、MediaPipe Pose、关键点检测与可视化） |
 | `11_config_based_processing.py` | 配置文件驱动的视觉处理示例（支持检测、跟踪、姿态估计、CLIP特征、SAM分割） |
+| `12_pyav_video_processing.py` | PyAV视频处理示例（高性能视频处理、与OpenCV性能对比） |
+| `13_vision_pipeline_pyav.py` | VisionPipeline PyAV集成示例（在管道中使用PyAV、性能测试） |
 
 ## 依赖项
 
@@ -298,6 +302,7 @@ exporter.export_to_coco_format(detections, 1, image_info, "output/coco_annotatio
 - segment-anything >= 1.0 (用于 SAM 分割模型)
 - rfdetr >= 0.1.0 (用于 RF-DETR 模型)
 - supervision >= 0.18.0 (用于 RF-DETR 模型)
+- av >= 11.0.0 (用于 PyAV 高性能视频处理)
 
 ## 许可证
 

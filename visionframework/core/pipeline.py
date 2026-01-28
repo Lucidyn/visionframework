@@ -218,6 +218,7 @@ class VisionPipeline(BaseModule):
         enable_tracking: bool = False,
         conf_threshold: float = 0.25,
         batch_size: int = 0,
+        use_pyav: bool = False,
         **kwargs
     ) -> bool:
         """
@@ -233,6 +234,8 @@ class VisionPipeline(BaseModule):
             enable_tracking: Whether to enable tracking (default: False)
             conf_threshold: Confidence threshold for detections (default: 0.25)
             batch_size: Batch size for processing (0 for non-batch processing, default: 0)
+            use_pyav: Whether to use pyav for video processing (default: False, use OpenCV)
+                      Note: PyAV currently only supports video files, not cameras or streams
             **kwargs: Additional arguments passed to process_video
             
         Returns:
@@ -249,6 +252,7 @@ class VisionPipeline(BaseModule):
             input_source=input_source,
             output_path=output_path,
             batch_size=batch_size if batch_size > 0 else None,
+            use_pyav=use_pyav,
             **kwargs
         )
     
@@ -745,10 +749,34 @@ class VisionPipeline(BaseModule):
             )
             ```
         """
-        from ..utils.io.video_utils import VideoProcessor, VideoWriter
+        from ..utils.io.video_utils import VideoProcessor, VideoWriter, PyAVVideoProcessor, PyAVVideoWriter
+        
+        # Try to import pyav for optional usage
+        try:
+            import av
+            pyav_available = True
+        except ImportError:
+            pyav_available = False
+        
+        # Determine if we can use pyav
+        use_pyav_final = use_pyav and pyav_available
+        
+        # Check if input is a video file (PyAV doesn't support cameras)
+        if use_pyav_final:
+            is_camera = isinstance(input_source, int) or (isinstance(input_source, str) and input_source == "0")
+            is_stream = isinstance(input_source, str) and (input_source.startswith("rtsp://") or \
+                                                         input_source.startswith("http://") or \
+                                                         input_source.startswith("https://"))
+            if is_camera or is_stream:
+                logger.info("PyAV only supports video files, not cameras or streams. Falling back to OpenCV.")
+                use_pyav_final = False
         
         # Initialize video processor
-        processor = VideoProcessor(input_source)
+        if use_pyav_final:
+            processor = PyAVVideoProcessor(input_source)
+        else:
+            processor = VideoProcessor(input_source)
+        
         if not processor.open():
             logger.error(f"Failed to open video source: {input_source}")
             return False
@@ -762,11 +790,18 @@ class VisionPipeline(BaseModule):
         # Initialize video writer if output path is provided
         writer = None
         if output_path:
-            writer = VideoWriter(
-                output_path,
-                fps=video_info["fps"],
-                frame_size=(video_info["width"], video_info["height"])
-            )
+            if use_pyav_final:
+                writer = PyAVVideoWriter(
+                    output_path,
+                    fps=video_info["fps"],
+                    frame_size=(video_info["width"], video_info["height"])
+                )
+            else:
+                writer = VideoWriter(
+                    output_path,
+                    fps=video_info["fps"],
+                    frame_size=(video_info["width"], video_info["height"])
+                )
             if not writer.open():
                 logger.error(f"Failed to open video writer: {output_path}")
                 return False
@@ -979,7 +1014,8 @@ class VisionPipeline(BaseModule):
         end_frame: Optional[int] = None, 
         skip_frames: int = 0,
         frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None,
-        progress_callback: Optional[Callable[[float, int, int], None]] = None
+        progress_callback: Optional[Callable[[float, int, int], None]] = None,
+        use_pyav: bool = False
     ) -> bool:
         """
         Process video file, camera stream, or video stream (RTSP/HTTP) through the vision pipeline
@@ -999,6 +1035,8 @@ class VisionPipeline(BaseModule):
                            Called after each frame is processed, can be used for visualization
             progress_callback: Optional callback function(progress, current_frame, total_frames) -> None
                               Called periodically with processing progress
+            use_pyav: Whether to use pyav for video processing (default: False, use OpenCV)
+                      Note: PyAV currently only supports video files, not cameras or streams
         
         Returns:
             bool: True if processing completed successfully, False otherwise

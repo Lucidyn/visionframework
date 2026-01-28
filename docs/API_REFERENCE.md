@@ -46,8 +46,12 @@ VisionPipeline(
 - `images`：要处理的图像列表
 - `max_batch_size`：最大批处理大小，超过此大小会自动分块处理，默认为None（使用模型默认批处理大小）
 
-#### `process_video(input_source: str or int, output_path: Optional[str] = None, start_frame: int = 0, end_frame: Optional[int] = None, skip_frames: int = 0, frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None, progress_callback: Optional[Callable[[float, int, int], None]] = None) -> bool`
+#### `process_video(input_source: str or int, output_path: Optional[str] = None, start_frame: int = 0, end_frame: Optional[int] = None, skip_frames: int = 0, frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None, progress_callback: Optional[Callable[[float, int, int], None]] = None, use_pyav: bool = False) -> bool`
 处理视频文件或流。
+
+**参数：**
+- `use_pyav`：是否使用PyAV进行视频处理（默认False，使用OpenCV）
+  - 注意：PyAV仅支持视频文件，不支持摄像头或流
 
 #### `process_video_batch(input_source: str or int, output_path: Optional[str] = None, start_frame: int = 0, end_frame: Optional[int] = None, batch_size: int = 8, skip_frames: int = 0, frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None, progress_callback: Optional[Callable[[float, int, int], None]] = None) -> bool`
 使用批量处理来处理视频，以提高性能。
@@ -57,8 +61,12 @@ VisionPipeline(
 #### `VisionPipeline.process_image(image: np.ndarray, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]`
 无需初始化管道即可快速处理图像。
 
-#### `VisionPipeline.run_video(input_source: str or int, output_path: Optional[str] = None, model_path: str = "yolov8n.pt", enable_tracking: bool = False, conf_threshold: float = 0.25, batch_size: int = 0, **kwargs) -> bool`
+#### `VisionPipeline.run_video(input_source: str or int, output_path: Optional[str] = None, model_path: str = "yolov8n.pt", enable_tracking: bool = False, conf_threshold: float = 0.25, batch_size: int = 0, use_pyav: bool = False, **kwargs) -> bool`
 使用简单API运行视频处理。
+
+**参数：**
+- `use_pyav`：是否使用PyAV进行视频处理（默认False，使用OpenCV）
+  - 注意：PyAV仅支持视频文件，不支持摄像头或流
 
 ### 类方法
 
@@ -390,21 +398,94 @@ ResultExporter()
 #### `VideoProcessor`
 ```python
 VideoProcessor(
-    input_path: str,
-    output_path: str = None,
-    show: bool = False,
-    fps: int = None,
-    resolution: Tuple[int, int] = None
+    video_path: str or int
 )
 ```
 
-**方法：**
-- `get_frame() -> Tuple[bool, np.ndarray]`：获取下一帧
-- `write_frame(frame: np.ndarray) -> None`：将帧写入输出
-- `release() -> None`：释放资源
+**参数：**
+- `video_path`：视频文件路径、视频流URL或摄像头索引
 
-#### `process_video(input_path: str, process_func: Callable, output_path: str = None, show: bool = False) -> None`
+**方法：**
+- `open() -> bool`：打开视频文件或摄像头
+- `read_frame() -> Tuple[bool, Optional[np.ndarray]]`：读取下一帧
+- `get_frame(frame_number: int) -> Optional[np.ndarray]`：获取特定帧
+- `get_info() -> Dict[str, Any]`：获取视频信息
+- `close() -> None`：关闭视频文件或摄像头
+
+#### `PyAVVideoProcessor`
+基于FFmpeg的高性能视频处理器，提供比OpenCV更高的视频处理性能。
+
+```python
+PyAVVideoProcessor(
+    video_path: str
+)
+```
+
+**参数：**
+- `video_path`：视频文件路径（仅支持本地视频文件，不支持摄像头或流）
+
+**方法：**
+- `open() -> bool`：打开视频文件
+- `read_frame() -> Tuple[bool, Optional[np.ndarray]]`：读取下一帧
+- `get_frame(frame_number: int) -> Optional[np.ndarray]`：获取特定帧
+- `get_info() -> Dict[str, Any]`：获取视频信息
+- `close() -> None`：关闭视频文件
+
+#### `VideoWriter`
+```python
+VideoWriter(
+    output_path: str,
+    fps: float = 30.0,
+    frame_size: Optional[Tuple[int, int]] = None,
+    fourcc: str = "mp4v"
+)
+```
+
+**参数：**
+- `output_path`：输出视频文件路径
+- `fps`：帧率
+- `frame_size`：帧大小（宽度，高度）
+- `fourcc`：视频编码
+
+**方法：**
+- `open(frame_size: Optional[Tuple[int, int]] = None) -> bool`：打开视频写入器
+- `write(frame: np.ndarray) -> bool`：写入帧
+- `close() -> None`：关闭视频写入器
+
+#### `PyAVVideoWriter`
+基于FFmpeg的高性能视频写入器，提供比OpenCV更多的编码选项。
+
+```python
+PyAVVideoWriter(
+    output_path: str,
+    fps: float = 30.0,
+    frame_size: Optional[Tuple[int, int]] = None,
+    codec: str = "h264"
+)
+```
+
+**参数：**
+- `output_path`：输出视频文件路径
+- `fps`：帧率
+- `frame_size`：帧大小（宽度，高度）
+- `codec`：视频编码
+
+**方法：**
+- `open(frame_size: Optional[Tuple[int, int]] = None) -> bool`：打开视频写入器
+- `write(frame: np.ndarray) -> bool`：写入帧
+- `close() -> None`：关闭视频写入器
+
+#### `process_video(input_path: str or int, output_path: Optional[str] = None, frame_callback: Optional[Callable[[np.ndarray, int], np.ndarray]] = None, start_frame: int = 0, end_frame: Optional[int] = None, skip_frames: int = 0, use_pyav: bool = False) -> bool`
 使用自定义处理函数处理视频。
+
+**参数：**
+- `input_path`：视频文件路径、视频流URL或摄像头索引
+- `output_path`：输出视频文件路径
+- `frame_callback`：帧处理函数
+- `start_frame`：开始处理的帧号
+- `end_frame`：结束处理的帧号
+- `skip_frames`：跳过的帧数
+- `use_pyav`：是否使用PyAV进行视频处理（默认False，使用OpenCV）
 
 ### 配置工具
 
@@ -825,4 +906,60 @@ pipeline.process_video(
     input_path="input.mp4",
     output_path="output_reid.mp4"
 )
+```
+
+### PyAV视频处理示例
+
+```python
+from visionframework.core.pipeline import VisionPipeline
+
+# 初始化管道
+pipeline = VisionPipeline({
+    "detector_config": {
+        "model_path": "yolov8n.pt",
+        "conf_threshold": 0.3
+    },
+    "enable_tracking": True
+})
+
+# 使用PyAV处理视频（高性能）
+pipeline.process_video(
+    input_path="input.mp4",
+    output_path="output_pyav.mp4",
+    use_pyav=True  # 启用PyAV后端
+)
+
+# 使用简化API
+from visionframework import VisionPipeline
+
+# 使用静态方法快速处理视频（带PyAV）
+VisionPipeline.run_video(
+    input_source="input.mp4",
+    output_path="output_simple.mp4",
+    model_path="yolov8n.pt",
+    enable_tracking=True,
+    use_pyav=True  # 启用PyAV后端
+)
+
+# 直接使用PyAVVideoProcessor
+from visionframework.utils.io import PyAVVideoProcessor, PyAVVideoWriter
+import cv2
+
+# 读取视频
+with PyAVVideoProcessor("input.mp4") as processor:
+    info = processor.get_info()
+    print(f"视频信息: {info}")
+    
+    # 创建写入器
+    with PyAVVideoWriter("output_direct.mp4", fps=info["fps"], frame_size=(info["width"], info["height"])) as writer:
+        while True:
+            ret, frame = processor.read_frame()
+            if not ret:
+                break
+            
+            # 简单处理
+            cv2.putText(frame, "Processed with PyAV", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+            
+            # 写入帧
+            writer.write(frame)
 ```

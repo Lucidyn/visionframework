@@ -508,6 +508,9 @@ class PyAVVideoProcessor:
             img = frame.to_rgb().to_ndarray()
             # Convert RGB to BGR for compatibility with OpenCV
             img = img[..., ::-1]
+            # Ensure the array is contiguous for OpenCV compatibility
+            if not img.flags.contiguous:
+                img = np.ascontiguousarray(img)
             self.current_frame_num += 1
             return True, img
         except StopIteration:

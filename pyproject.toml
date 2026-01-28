@@ -62,6 +62,18 @@ rfdetr = [
     "supervision>=0.18.0"
 ]
 
+pyav = [
+    "av>=11.0.0"
+]
+
+all = [
+    "visionframework[clip]",
+    "visionframework[sam]",
+    "visionframework[rfdetr]",
+    "visionframework[pyav]",
+    "visionframework[dev]"
+]
+
 [tool.setuptools]
 packages = ["visionframework"]
 
