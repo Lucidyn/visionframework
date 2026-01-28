@@ -422,14 +422,14 @@ PyAVVideoProcessor(
 ```
 
 **参数：**
-- `video_path`：视频文件路径（仅支持本地视频文件，不支持摄像头或流）
+- `video_path`：视频文件路径或RTSP/HTTP流URL
 
 **方法：**
-- `open() -> bool`：打开视频文件
+- `open() -> bool`：打开视频文件或流
 - `read_frame() -> Tuple[bool, Optional[np.ndarray]]`：读取下一帧
 - `get_frame(frame_number: int) -> Optional[np.ndarray]`：获取特定帧
 - `get_info() -> Dict[str, Any]`：获取视频信息
-- `close() -> None`：关闭视频文件
+- `close() -> None`：关闭视频文件或流
 
 #### `VideoWriter`
 ```python
@@ -486,6 +486,7 @@ PyAVVideoWriter(
 - `end_frame`：结束处理的帧号
 - `skip_frames`：跳过的帧数
 - `use_pyav`：是否使用PyAV进行视频处理（默认False，使用OpenCV）
+  - 注意：PyAV支持视频文件和RTSP/HTTP流，但不支持摄像头
 
 ### 配置工具
 

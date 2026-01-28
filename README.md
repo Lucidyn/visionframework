@@ -72,8 +72,8 @@ results = pipeline.process_batch(frames)  # 200 FPS！
 - ✨ **CLIP示例代码**：新增 `09_clip_features.py` 示例，演示CLIP特征功能（图像-文本相似度、零样本分类）
 - ✨ **姿态估计示例代码**：新增 `10_pose_estimation.py` 示例，演示姿态估计功能（YOLO Pose、MediaPipe Pose）
 - ✨ **配置文件驱动示例**：新增 `11_config_based_processing.py` 示例，演示配置文件驱动的视觉处理管道
-- ✨ **PyAV视频处理示例**：新增 `12_pyav_video_processing.py` 示例，演示使用PyAV进行高性能视频处理
-- ✨ **VisionPipeline PyAV集成示例**：新增 `13_vision_pipeline_pyav.py` 示例，演示在VisionPipeline中使用PyAV
+- ✨ **PyAV视频处理示例**：新增 `12_pyav_video_processing.py` 示例，演示使用PyAV进行高性能视频处理和RTSP流处理
+- ✨ **VisionPipeline PyAV集成示例**：新增 `13_vision_pipeline_pyav.py` 示例，演示在VisionPipeline中使用PyAV，包括RTSP流支持
 - ✨ **文档更新**：更新了 `examples/README.md` 和 `README.md`，添加了新示例的说明
 - ✨ **示例优化**：优化了现有示例代码，修复了姿态估计示例中的方法调用错误
 

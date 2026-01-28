@@ -414,10 +414,10 @@ class VideoWriter:
 
 
 class PyAVVideoProcessor:
-    """Video processing class for reading video files using pyav
+    """Video processing class for reading video files and streams using pyav
     
     This class provides an easy-to-use interface for reading video frames from files
-    using pyav, which is based on FFmpeg and typically offers better performance
+    or streams using pyav, which is based on FFmpeg and typically offers better performance
     than OpenCV's VideoCapture.
     
     Example:
@@ -435,6 +435,18 @@ class PyAVVideoProcessor:
                     break
                 # Process frame here
                 print(f"Processing frame {processor.current_frame_num}")
+        
+        # Read RTSP stream using context manager
+        with PyAVVideoProcessor("rtsp://example.com/stream") as processor:
+            info = processor.get_info()
+            print(f"Stream info: {info}")
+            
+            while True:
+                ret, frame = processor.read_frame()
+                if not ret:
+                    break
+                # Process frame here
+                print(f"Processing frame {processor.current_frame_num}")
         ```
     """
     
@@ -443,10 +455,7 @@ class PyAVVideoProcessor:
         Initialize pyav video processor
         
         Args:
-            video_path: Path to video file
-            
-        Note:
-            PyAVVideoProcessor currently only supports video files, not cameras or streams
+            video_path: Path to video file or RTSP/HTTP stream URL
         """
         if av is None:
             raise ImportError("PyAV is required for PyAVVideoProcessor. Install with: pip install av")
@@ -461,26 +470,35 @@ class PyAVVideoProcessor:
         self.total_frames = 0
         self.current_frame_num = 0
         self.frame_generator = None
+        # Check if it's a video stream URL
+        self.is_stream = isinstance(video_path, str) and (video_path.startswith("rtsp://") or \
+                                                         video_path.startswith("http://") or \
+                                                         video_path.startswith("https://"))
     
     def open(self) -> bool:
         """
-        Open video file using pyav
+        Open video file or stream using pyav
         
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            # Open the video container
+            # Open the video container or stream
             self.container = av.open(self.video_path)
             
             # Get the first video stream
             self.stream = next(s for s in self.container.streams if s.type == 'video')
             
             # Get video properties
-            self.fps = self.stream.average_rate
+            self.fps = self.stream.average_rate or 30.0  # Default to 30fps for streams
             self.width = self.stream.width
             self.height = self.stream.height
-            self.total_frames = self.stream.frames
+            
+            # For streams, total_frames is not available
+            if self.is_stream:
+                self.total_frames = -1  # -1 indicates unknown total frames
+            else:
+                self.total_frames = self.stream.frames or 0
             
             # Create frame generator
             self.frame_generator = self.container.decode(video=0)
@@ -561,13 +579,13 @@ class PyAVVideoProcessor:
             "total_frames": self.total_frames,
             "current_frame": self.current_frame_num,
             "is_camera": False,
-            "is_stream": False,
+            "is_stream": self.is_stream,
             "backend": "pyav"
         }
     
     def close(self):
         """
-        Close video file
+        Close video file or stream
         """
         if self.container is not None:
             self.container.close()
@@ -777,9 +795,9 @@ def process_video(
         if av is None:
             print("PyAV is not installed. Falling back to OpenCV.")
             use_pyav = False
-        # Check if input is a video file (PyAV doesn't support cameras)
-        elif isinstance(input_path, int) or (isinstance(input_path, str) and (input_path == "0" or input_path.startswith("rtsp://") or input_path.startswith("http://") or input_path.startswith("https://"))):
-            print("PyAV only supports video files, not cameras or streams. Falling back to OpenCV.")
+        # Check if input is a camera (PyAV doesn't support cameras)
+        elif isinstance(input_path, int) or (isinstance(input_path, str) and input_path == "0"):
+            print("PyAV only supports video files and streams, not cameras. Falling back to OpenCV.")
             use_pyav = False
     
     if use_pyav:

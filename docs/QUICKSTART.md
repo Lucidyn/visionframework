@@ -53,6 +53,7 @@
    pip install -e "[clip]"       # 用于 CLIP 支持
    pip install -e "[sam]"        # 用于 SAM 分割支持
    pip install -e "[rfdetr]"     # 用于 RF-DETR 支持
+   pip install -e "[pyav]"       # 用于 PyAV 高性能视频处理支持
    ```
 
 ## 基本使用
@@ -253,6 +254,27 @@ for text, sim in zip(texts, similarities):
     print(f"{text}: {sim:.4f}")
 ```
 
+### 示例 9: PyAV 视频处理
+
+```python
+from visionframework.core.pipeline import VisionPipeline
+
+# 使用配置字典处理视频文件（使用PyAV）
+pipeline = VisionPipeline({
+    "detector_config": {"model_path": "yolov8n.pt"}
+})
+pipeline.process_video("input.mp4", "output.mp4", use_pyav=True)
+
+# 处理RTSP流（使用PyAV）
+pipeline.process_video("rtsp://example.com/stream", "output_rtsp.mp4", use_pyav=True)
+
+# 或者使用静态方法（使用PyAV）
+VisionPipeline.run_video("input.mp4", "output.mp4", model_path="yolov8n.pt", use_pyav=True)
+
+# 使用静态方法处理RTSP流（使用PyAV）
+VisionPipeline.run_video("rtsp://example.com/stream", "output_rtsp.mp4", model_path="yolov8n.pt", use_pyav=True)
+```
+
 ## 验证
 
 要验证安装是否成功，运行其中一个示例脚本：
@@ -272,6 +294,12 @@ python examples/08_segmentation_sam.py
 
 # 运行 CLIP 特征示例
 python examples/09_clip_features.py
+
+# 运行 PyAV 视频处理示例
+python examples/12_pyav_video_processing.py
+
+# 运行 VisionPipeline PyAV 集成示例
+python examples/13_vision_pipeline_pyav.py
 ```
 
 ## 下一步

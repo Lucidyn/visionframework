@@ -29,7 +29,7 @@
 - **高性能后端**: 
   - PyAV集成（基于FFmpeg），提供比OpenCV更高的视频处理性能
   - 自动回退机制，当PyAV不可用时使用OpenCV
-  - 仅支持视频文件的PyAV后端，摄像机和流仍使用OpenCV
+  - PyAV后端支持视频文件和RTSP/HTTP流，摄像机仍使用OpenCV
 
 ### 4. 自动标注
 - **多种格式支持**: YOLO、COCO、Pascal VOC

@@ -17,6 +17,8 @@ Files:
 - `09_clip_features.py` — CLIP特征示例，包括图像-文本相似度和零样本分类
 - `10_pose_estimation.py` — 姿态估计示例，支持YOLO Pose和MediaPipe Pose
 - `11_config_based_processing.py` — 配置文件驱动的视觉处理示例
+- `12_pyav_video_processing.py` — PyAV视频处理示例，展示高性能视频处理、与OpenCV的性能对比以及RTSP流处理
+- `13_vision_pipeline_pyav.py` — VisionPipeline PyAV集成示例，展示在管道中使用PyAV的方法，包括RTSP流支持
 - `my_config.json` — 配置文件示例
 
 运行示例：在项目根目录执行，例如：
@@ -34,6 +36,8 @@ python examples/08_segmentation_sam.py
 python examples/09_clip_features.py
 python examples/10_pose_estimation.py
 python examples/11_config_based_processing.py
+python examples/12_pyav_video_processing.py
+python examples/13_vision_pipeline_pyav.py
 ```
 
 这些示例展示了VisionFramework的不同功能和使用方式，从基础的目标检测到高级的视频处理、SAM分割、CLIP特征提取和姿态估计。

@@ -235,5 +235,103 @@ def main():
                 print(f"   已清理: {video}")
 
 
+def test_rtsp_stream_with_pyav():
+    """测试 VisionPipeline 处理 RTSP 流"""
+    print("\n=== RTSP 流处理测试 ===")
+    
+    # 示例 RTSP URL（请替换为实际的 RTSP 流地址）
+    rtsp_url = "rtsp://example.com/stream"
+    
+    print(f"尝试使用 VisionPipeline + PyAV 处理 RTSP 流: {rtsp_url}")
+    print("注意：请将上面的 URL 替换为实际的 RTSP 流地址")
+    print("例如：rtsp://username:password@192.168.1.100:554/stream1")
+    
+    # 创建管道
+    pipeline = VisionPipeline({
+        "detector_config": {
+            "model_path": "yolov8n.pt",
+            "conf_threshold": 0.25
+        },
+        "enable_tracking": True
+    })
+    
+    try:
+        # 初始化管道
+        pipeline.initialize()
+        print("管道初始化成功")
+        
+        # 测试使用 PyAV 处理 RTSP 流
+        print("\n使用 PyAV 处理 RTSP 流:")
+        output_rtsp = "output_rtsp.mp4"
+        
+        # 设置最大处理时间为10秒，避免无限循环
+        import threading
+        
+        def stop_processing():
+            """10秒后停止处理"""
+            print("\n10秒处理时间已到，停止处理...")
+            # 这里我们无法直接停止 pipeline.process_video
+            # 但由于我们设置了输出文件，处理会在一段时间后自动停止
+        
+        # 启动定时器
+        timer = threading.Timer(10, stop_processing)
+        timer.start()
+        
+        # 开始处理
+        success = pipeline.process_video(
+            input_source=rtsp_url,
+            output_path=output_rtsp,
+            frame_callback=frame_callback,
+            use_pyav=True  # 启用 PyAV 处理 RTSP 流
+        )
+        
+        timer.cancel()
+        print(f"RTSP 流处理完成，成功: {success}")
+        
+        # 清理输出文件
+        if os.path.exists(output_rtsp):
+            os.remove(output_rtsp)
+            print(f"已清理: {output_rtsp}")
+            
+    except Exception as e:
+        print(f"错误: {e}")
+        print("请确保 RTSP 流地址正确且可访问")
+    finally:
+        # 清理管道
+        pipeline.cleanup()
+
+
+def main():
+    """主函数"""
+    print("=== VisionPipeline with PyAV 示例 ===")
+    
+    try:
+        # 测试 VisionPipeline 与 PyAV 集成
+        test_vision_pipeline_with_pyav()
+        
+        # 测试边缘情况
+        test_edge_cases()
+        
+        # 测试 RTSP 流处理
+        test_rtsp_stream_with_pyav()
+        
+        print("\n=== 示例完成 ===")
+        print("\n总结:")
+        print("1. VisionPipeline 现在支持通过 use_pyav 参数启用 PyAV 后端")
+        print("2. PyAV 通常比 OpenCV 提供更高的视频处理性能")
+        print("3. 当 PyAV 不可用时，系统会自动回退到 OpenCV")
+        print("4. 简化 API VisionPipeline.run_video() 也支持 use_pyav 参数")
+        print("5. PyAV 现在支持处理 RTSP 视频流")
+        
+    finally:
+        # 清理测试视频
+        test_videos = ["test_video.mp4", "test_pipeline.mp4", "test_edge_case.mp4"]
+        print("\n清理测试视频:")
+        for video in test_videos:
+            if os.path.exists(video):
+                os.remove(video)
+                print(f"   已清理: {video}")
+
+
 if __name__ == "__main__":
     main()
