@@ -12,6 +12,7 @@ from .base import BaseModule
 from ..data.detection import Detection
 from ..utils.monitoring.logger import get_logger
 from .segmenters import SAMSegmenter
+from ..utils import error_handler
 
 logger = get_logger(__name__)
 
@@ -239,7 +240,13 @@ class Detector(BaseModule):
                 rfdetr_config["model_name"] = self.config.get("rfdetr_model_name", None)
                 self.detector_impl = RFDETRDetector(rfdetr_config)
             else:
-                logger.error(f"Unsupported model_type: {self.model_type}. Supported: 'yolo', 'detr', 'rfdetr'")
+                from ..exceptions import ConfigurationError
+                error_handler.handle_error(
+                    ValueError(f"Unsupported model_type: {self.model_type}"),
+                    ConfigurationError,
+                    f"Unsupported model type",
+                    {"model_type": self.model_type, "supported_types": ["yolo", "detr", "rfdetr"]}
+                )
                 return False
             
             result = self.detector_impl.initialize()
@@ -259,13 +266,40 @@ class Detector(BaseModule):
                 self.is_initialized = True
             return result
         except ValueError as e:
-            logger.error(f"Invalid detector configuration: {e}", exc_info=True)
+            from ..exceptions import ConfigurationError
+            error_handler.handle_error(
+                e,
+                ConfigurationError,
+                "Invalid detector configuration",
+                {"model_type": self.model_type, "model_path": self.model_path}
+            )
             return False
-        except (ImportError, RuntimeError) as e:
-            logger.error(f"Failed to initialize detector ({self.model_type}): {e}", exc_info=True)
+        except ImportError as e:
+            from ..exceptions import DependencyError
+            error_handler.handle_error(
+                e,
+                DependencyError,
+                "Failed to import detector dependencies",
+                {"model_type": self.model_type}
+            )
+            return False
+        except RuntimeError as e:
+            from ..exceptions import DetectorInitializationError
+            error_handler.handle_error(
+                e,
+                DetectorInitializationError,
+                f"Failed to initialize detector",
+                {"model_type": self.model_type, "model_path": self.model_path}
+            )
             return False
         except Exception as e:
-            logger.error(f"Unexpected error initializing detector: {e}", exc_info=True)
+            from ..exceptions import DetectorInitializationError
+            error_handler.handle_error(
+                e,
+                DetectorInitializationError,
+                "Unexpected error initializing detector",
+                {"model_type": self.model_type, "model_path": self.model_path}
+            )
             return False
     
     def process(self, image: np.ndarray, categories: Optional[list] = None) -> List[Detection]:
@@ -296,26 +330,45 @@ class Detector(BaseModule):
         Raises:
             RuntimeError: If detector is not initialized and automatic initialization fails
             ValueError: If image is invalid (wrong format, shape, or data type)
-        
-        Example:
-            ```python
-            detector = Detector()
-            detector.initialize()
-            detections = detector.process(image)
-            for det in detections:
-                print(f"{det.class_name}: {det.confidence:.2f}")
-            ```
         """
         if not self.is_initialized:
             if not self.initialize():
-                logger.error("Detector not initialized and auto-initialization failed")
+                from ..exceptions import DetectorInitializationError
+                error_handler.handle_error(
+                    RuntimeError("Auto-initialization failed"),
+                    DetectorInitializationError,
+                    "Detector initialization failed",
+                    {"model_type": self.model_type, "model_path": self.model_path}
+                )
                 return []
         
         if self.detector_impl is None:
-            logger.warning("detector_impl is None, returning empty list")
+            from ..exceptions import DetectorInitializationError
+            error_handler.handle_error(
+                ValueError("Detector implementation is None"),
+                DetectorInitializationError,
+                "Detector implementation not initialized",
+                {"model_type": self.model_type}
+            )
             return []
         
         try:
+            # Validate input image
+            is_valid, error_msg = error_handler.validate_input(
+                image,
+                np.ndarray,
+                "image"
+            )
+            if not is_valid:
+                from ..exceptions import DataFormatError
+                error_handler.handle_error(
+                    ValueError(error_msg),
+                    DataFormatError,
+                    "Invalid input image",
+                    {"error": error_msg}
+                )
+                return []
+            
             detections = self.detector_impl.detect(image, categories=categories)
             
             # If segmenter is available, perform segmentation on detections
@@ -324,7 +377,13 @@ class Detector(BaseModule):
             
             return detections
         except Exception as e:
-            logger.error(f"Error during detection: {e}", exc_info=True)
+            from ..exceptions import DetectorInferenceError
+            error_handler.handle_error(
+                e,
+                DetectorInferenceError,
+                "Error during detection",
+                {"model_type": self.model_type, "input_shape": image.shape if hasattr(image, 'shape') else None}
+            )
             return []
     
     def process_batch(self, images: List[np.ndarray], categories: Optional[list] = None) -> List[List[Detection]]:
@@ -345,11 +404,23 @@ class Detector(BaseModule):
         """
         if not self.is_initialized:
             if not self.initialize():
-                logger.error("Detector not initialized and auto-initialization failed")
+                from ..exceptions import DetectorInitializationError
+                error_handler.handle_error(
+                    RuntimeError("Auto-initialization failed"),
+                    DetectorInitializationError,
+                    "Detector initialization failed",
+                    {"model_type": self.model_type, "model_path": self.model_path}
+                )
                 return [[] for _ in images]
         
         if self.detector_impl is None:
-            logger.warning("detector_impl is None, returning empty detections for all images")
+            from ..exceptions import DetectorInitializationError
+            error_handler.handle_error(
+                ValueError("Detector implementation is None"),
+                DetectorInitializationError,
+                "Detector implementation not initialized",
+                {"model_type": self.model_type}
+            )
             return [[] for _ in images]
         
         try:
@@ -372,7 +443,13 @@ class Detector(BaseModule):
             
             return all_detections
         except Exception as e:
-            logger.error(f"Error during batch detection: {e}", exc_info=True)
+            from ..exceptions import DetectorInferenceError
+            error_handler.handle_error(
+                e,
+                DetectorInferenceError,
+                "Error during batch detection",
+                {"model_type": self.model_type, "batch_size": len(images)}
+            )
             return [[] for _ in images]
     
     def get_model_info(self) -> Dict[str, Any]:

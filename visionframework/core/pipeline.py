@@ -235,7 +235,7 @@ class VisionPipeline(BaseModule):
             conf_threshold: Confidence threshold for detections (default: 0.25)
             batch_size: Batch size for processing (0 for non-batch processing, default: 0)
             use_pyav: Whether to use pyav for video processing (default: False, use OpenCV)
-                      Note: PyAV currently only supports video files, not cameras or streams
+                      Note: PyAV supports video files and streams, but not cameras
             **kwargs: Additional arguments passed to process_video
             
         Returns:
@@ -494,7 +494,7 @@ class VisionPipeline(BaseModule):
             logger.error(f"Error during pipeline processing: {e}", exc_info=True)
             return {"detections": [], "tracks": [], "poses": []}
     
-    def process_batch(self, images: List[np.ndarray], max_batch_size: Optional[int] = None, use_parallel: bool = False, max_workers: Optional[int] = None) -> List[Dict[str, Any]]:
+    def process_batch(self, images: List[np.ndarray], max_batch_size: Optional[int] = None, use_parallel: bool = False, max_workers: Optional[int] = None, enable_memory_optimization: bool = True) -> List[Dict[str, Any]]:
         """
         Process multiple images in a batch through detection and tracking pipeline
         
@@ -509,6 +509,7 @@ class VisionPipeline(BaseModule):
                            Useful for memory-constrained environments.
             use_parallel: Whether to use parallel processing for individual images
             max_workers: Maximum number of workers for parallel processing
+            enable_memory_optimization: Whether to enable memory optimization techniques
         
         Returns:
             List[Dict[str, Any]]: List of result dictionaries, one per image.
@@ -517,6 +518,7 @@ class VisionPipeline(BaseModule):
                 - "tracks": List[Track] - Tracked objects in that frame (if tracking enabled)
                 - "poses": List[Pose] - Pose estimations in that frame (if pose estimation enabled)
                 - "frame_idx": int - Index of the frame in the input list
+                - "processing_time": float - Processing time for this frame (seconds)
         
         Example:
             ```python
@@ -536,43 +538,114 @@ class VisionPipeline(BaseModule):
             # Process with parallel processing
             results = pipeline.process_batch(frames, use_parallel=True, max_workers=4)
             
+            # Process with memory optimization
+            results = pipeline.process_batch(frames, enable_memory_optimization=True)
+            
             for idx, result in enumerate(results):
-                print(f"Frame {idx}: {len(result['detections'])} detections, {len(result['tracks'])} tracks")
+                print(f"Frame {idx}: {len(result['detections'])} detections, {len(result['tracks'])} tracks, processed in {result['processing_time']:.4f}s")
             ```
         """
+        import time
+        from ..utils.monitoring.performance import PerformanceMonitor
+        from ..utils.memory import optimize_memory_usage
+        
         if not self.is_initialized:
             if not self.initialize():
                 logger.error("Pipeline not initialized and auto-initialization failed")
-                return [{"detections": [], "tracks": [], "poses": [], "frame_idx": i} for i in range(len(images))]
+                return [{"detections": [], "tracks": [], "poses": [], "frame_idx": i, "processing_time": 0.0} for i in range(len(images))]
         
         if self.detector is None:
             logger.error("Detector is None, cannot process")
-            return [{"detections": [], "tracks": [], "poses": [], "frame_idx": i} for i in range(len(images))]
+            return [{"detections": [], "tracks": [], "poses": [], "frame_idx": i, "processing_time": 0.0} for i in range(len(images))]
         
         if not images:
             logger.warning("Empty image list provided to process_batch")
             return []
         
+        # Performance monitoring
+        monitor = PerformanceMonitor()
+        monitor.start()
+        
         try:
+            # Optimize memory usage if enabled
+            if enable_memory_optimization:
+                optimize_memory_usage()
+            
+            # Dynamic batch size adjustment based on image size and count
+            if max_batch_size is None:
+                # Estimate optimal batch size based on image characteristics
+                if len(images) > 32:
+                    max_batch_size = 16
+                elif len(images) > 16:
+                    max_batch_size = 8
+                else:
+                    max_batch_size = len(images)
+                logger.debug(f"Auto-determined batch size: {max_batch_size}")
+            
             # Split into smaller batches if max_batch_size is specified
             if max_batch_size and len(images) > max_batch_size:
                 logger.debug(f"Splitting {len(images)} images into batches of {max_batch_size}")
                 # Process in chunks
                 chunk_results = []
+                total_processing_time = 0.0
+                
                 for i in range(0, len(images), max_batch_size):
                     chunk = images[i:i + max_batch_size]
-                    chunk_result = self._process_batch_chunk(chunk, i, use_parallel, max_workers)
+                    start_time = time.time()
+                    chunk_result = self._process_batch_chunk(chunk, i, use_parallel, max_workers, enable_memory_optimization)
+                    chunk_time = time.time() - start_time
+                    total_processing_time += chunk_time
                     chunk_results.extend(chunk_result)
+                    
+                    # Memory optimization between chunks
+                    if enable_memory_optimization:
+                        optimize_memory_usage()
+                    
+                    # Log chunk processing info
+                    logger.debug(f"Processed chunk {i//max_batch_size + 1}/{(len(images) + max_batch_size - 1)//max_batch_size} in {chunk_time:.4f}s")
+                
+                # Log total processing info
+                monitor.tick()
+                metrics = monitor.get_metrics()
+                logger.info(f"Batch processing completed: {len(images)} images in {total_processing_time:.4f}s, average {total_processing_time/len(images):.4f}s per image")
+                logger.debug(f"Performance metrics: {metrics}")
+                
                 return chunk_results
             else:
                 # Process all images in one batch
-                return self._process_batch_chunk(images, 0, use_parallel, max_workers)
+                start_time = time.time()
+                results = self._process_batch_chunk(images, 0, use_parallel, max_workers, enable_memory_optimization)
+                total_time = time.time() - start_time
+                
+                # Log processing info
+                monitor.tick()
+                metrics = monitor.get_metrics()
+                logger.info(f"Batch processing completed: {len(images)} images in {total_time:.4f}s, average {total_time/len(images):.4f}s per image")
+                logger.debug(f"Performance metrics: {metrics}")
+                
+                return results
         except Exception as e:
             from ..exceptions import BatchProcessingError
             logger.error(f"Error during batch pipeline processing: {e}", exc_info=True)
-            return [{"detections": [], "tracks": [], "poses": [], "frame_idx": i} for i in range(len(images))]
+            # Return empty results with error info
+            error_results = []
+            for i in range(len(images)):
+                result = {
+                    "detections": [], 
+                    "tracks": [], 
+                    "poses": [], 
+                    "frame_idx": i, 
+                    "processing_time": 0.0,
+                    "error": str(e)
+                }
+                error_results.append(result)
+            return error_results
+        finally:
+            # Ensure memory cleanup
+            if enable_memory_optimization:
+                optimize_memory_usage()
     
-    def _process_batch_chunk(self, images: List[np.ndarray], start_frame_idx: int = 0, use_parallel: bool = False, max_workers: Optional[int] = None) -> List[Dict[str, Any]]:
+    def _process_batch_chunk(self, images: List[np.ndarray], start_frame_idx: int = 0, use_parallel: bool = False, max_workers: Optional[int] = None, enable_memory_optimization: bool = True) -> List[Dict[str, Any]]:
         """
         Process a chunk of images in a batch
         
@@ -581,11 +654,13 @@ class VisionPipeline(BaseModule):
             start_frame_idx: Starting frame index for this chunk
             use_parallel: Whether to use parallel processing
             max_workers: Maximum number of workers for parallel processing
+            enable_memory_optimization: Whether to enable memory optimization techniques
             
         Returns:
             List of result dictionaries, one per image
         """
         results: List[Dict[str, Any]] = []
+        import time
         
         # Check if detector supports batch processing via batch_inference flag
         detector_impl = getattr(self.detector, 'detector_impl', None)
@@ -594,7 +669,10 @@ class VisionPipeline(BaseModule):
         if use_batch and len(images) > 1:
             # Use batch inference if supported and multiple images
             logger.debug(f"Using batch inference for {len(images)} images")
+            start_time = time.time()
             all_detections = self.detector.process(images)
+            batch_processing_time = time.time() - start_time
+            per_frame_time = batch_processing_time / len(images)
             
             # If detector returns detections for all images
             if isinstance(all_detections, list) and len(all_detections) > 0:
@@ -622,20 +700,29 @@ class VisionPipeline(BaseModule):
                 logger.debug(f"Using parallel processing with {max_workers or 'auto'} workers")
                 
                 def process_single_image(image):
-                    return self.detector.process(image)
+                    start_time = time.time()
+                    dets = self.detector.process(image)
+                    processing_time = time.time() - start_time
+                    return dets, processing_time
                 
-                detections_per_image = parallel_map(
+                results_with_time = parallel_map(
                     images, 
                     process_single_image, 
                     max_workers=max_workers,
                     use_processes=False  # Use threads for I/O-bound operations
                 )
+                detections_per_image = [result[0] for result in results_with_time]
+                processing_times = [result[1] for result in results_with_time]
             else:
                 # Process sequentially
                 detections_per_image = []
+                processing_times = []
                 for image in images:
+                    start_time = time.time()
                     dets = self.detector.process(image)
+                    processing_time = time.time() - start_time
                     detections_per_image.append(dets)
+                    processing_times.append(processing_time)
         
         # Process tracking and pose estimation for each frame
         if use_parallel and len(images) > 1 and not self.enable_tracking:
@@ -643,10 +730,11 @@ class VisionPipeline(BaseModule):
             logger.debug(f"Using parallel post-processing")
             
             def process_post(image_and_detections):
-                image, detections, frame_idx = image_and_detections
+                image, detections, frame_idx, processing_time = image_and_detections
                 frame_result: Dict[str, Any] = {
                     "detections": detections,
-                    "frame_idx": start_frame_idx + frame_idx
+                    "frame_idx": start_frame_idx + frame_idx,
+                    "processing_time": processing_time
                 }
                 
                 # Run pose estimation if enabled
@@ -659,7 +747,12 @@ class VisionPipeline(BaseModule):
                 return frame_result
             
             # Prepare data for parallel processing
-            data_for_parallel = [(img, dets, idx) for idx, (img, dets) in enumerate(zip(images, detections_per_image))]
+            if use_batch:
+                # For batch processing, use the same time for all frames
+                data_for_parallel = [(img, dets, idx, per_frame_time) for idx, (img, dets) in enumerate(zip(images, detections_per_image))]
+            else:
+                # For individual processing, use per-frame times
+                data_for_parallel = [(img, dets, idx, processing_times[idx]) for idx, (img, dets) in enumerate(zip(images, detections_per_image))]
             
             # Process in parallel
             parallel_results = parallel_map(
@@ -673,9 +766,16 @@ class VisionPipeline(BaseModule):
         else:
             # Process sequentially (required for tracking to maintain state)
             for frame_idx, (detections, image) in enumerate(zip(detections_per_image, images)):
+                # Get processing time for this frame
+                if use_batch:
+                    processing_time = per_frame_time
+                else:
+                    processing_time = processing_times[frame_idx] if frame_idx < len(processing_times) else 0.0
+                
                 frame_result: Dict[str, Any] = {
                     "detections": detections,
-                    "frame_idx": start_frame_idx + frame_idx
+                    "frame_idx": start_frame_idx + frame_idx,
+                    "processing_time": processing_time
                 }
                 
                 # Run tracking if enabled
@@ -705,7 +805,8 @@ class VisionPipeline(BaseModule):
         batch_size: int = 8,
         skip_frames: int = 0,
         frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None,
-        progress_callback: Optional[Callable[[float, int, int], None]] = None
+        progress_callback: Optional[Callable[[float, int, int], None]] = None,
+        use_pyav: bool = False
     ) -> bool:
         """
         Process video file, camera stream, or video stream with batch processing for improved performance
@@ -747,6 +848,15 @@ class VisionPipeline(BaseModule):
                 batch_size=16,  # Process 16 frames in each batch
                 progress_callback=lambda p, c, t: print(f"Progress: {p:.1%}")
             )
+            
+            # Process RTSP stream with PyAV for better performance
+            success = pipeline.process_video_batch(
+                input_source="rtsp://example.com/stream",
+                output_path="output_stream_pyav.mp4",
+                batch_size=16,
+                use_pyav=True,  # Enable PyAV for better performance
+                progress_callback=lambda p, c, t: print(f"Progress: {p:.1%}")
+            )
             ```
         """
         from ..utils.io.video_utils import VideoProcessor, VideoWriter, PyAVVideoProcessor, PyAVVideoWriter
@@ -764,11 +874,8 @@ class VisionPipeline(BaseModule):
         # Check if input is a video file (PyAV doesn't support cameras)
         if use_pyav_final:
             is_camera = isinstance(input_source, int) or (isinstance(input_source, str) and input_source == "0")
-            is_stream = isinstance(input_source, str) and (input_source.startswith("rtsp://") or \
-                                                         input_source.startswith("http://") or \
-                                                         input_source.startswith("https://"))
-            if is_camera or is_stream:
-                logger.info("PyAV only supports video files, not cameras or streams. Falling back to OpenCV.")
+            if is_camera:
+                logger.info("PyAV only supports video files and streams, not cameras. Falling back to OpenCV.")
                 use_pyav_final = False
         
         # Initialize video processor
@@ -811,28 +918,48 @@ class VisionPipeline(BaseModule):
             processed_count = 0
             batch_frames = []
             batch_frame_nums = []
+            max_batch_size = batch_size
             
             while True:
                 ret, frame = processor.read_frame()
                 if not ret:
                     # Process remaining frames in batch
                     if batch_frames:
-                        # Process batch
-                        batch_results = self.process_batch(batch_frames)
-                        
-                        # Handle each frame in batch
-                        for batch_idx, (frame_to_process, frame_num, result) in enumerate(zip(batch_frames, batch_frame_nums, batch_results)):
-                            # Apply frame callback if provided
-                            processed_frame = frame_to_process.copy()
-                            if frame_callback:
-                                processed_frame = frame_callback(processed_frame, frame_num, result)
+                        logger.debug(f"Processing final batch of {len(batch_frames)} frames")
+                        try:
+                            # Process batch
+                            batch_results = self.process_batch(batch_frames)
                             
-                            # Write frame to output video if writer is available
-                            if writer:
-                                writer.write(processed_frame)
-                        
-                        batch_frames.clear()
-                        batch_frame_nums.clear()
+                            # Handle each frame in batch
+                            for batch_idx, (frame_to_process, frame_num, result) in enumerate(zip(batch_frames, batch_frame_nums, batch_results)):
+                                # Apply frame callback if provided
+                                processed_frame = frame_to_process.copy()
+                                if frame_callback:
+                                    try:
+                                        processed_frame = frame_callback(processed_frame, frame_num, result)
+                                    except Exception as callback_error:
+                                        logger.error(f"Error in frame callback: {callback_error}")
+                                
+                                # Write frame to output video if writer is available
+                                if writer:
+                                    try:
+                                        writer.write(processed_frame)
+                                    except Exception as write_error:
+                                        logger.error(f"Error writing frame: {write_error}")
+                            
+                            processed_count += len(batch_frames)
+                            frame_count += len(batch_frames)
+                            
+                            # Update final progress
+                            if progress_callback and total_frames > 0:
+                                progress = min(1.0, processed_count / (total_frames - start_frame + 1))
+                                progress_callback(progress, processed_count, total_frames - start_frame + 1)
+                            
+                        except Exception as batch_error:
+                            logger.error(f"Error processing final batch: {batch_error}")
+                        finally:
+                            batch_frames.clear()
+                            batch_frame_nums.clear()
                     break
                 
                 current_frame = processor.current_frame_num
@@ -854,32 +981,43 @@ class VisionPipeline(BaseModule):
                 batch_frame_nums.append(current_frame)
                 
                 # Process batch when it reaches batch_size
-                if len(batch_frames) >= batch_size:
-                    # Process batch
-                    batch_results = self.process_batch(batch_frames)
-                    
-                    # Handle each frame in batch
-                    for batch_idx, (frame_to_process, frame_num, result) in enumerate(zip(batch_frames, batch_frame_nums, batch_results)):
-                        # Apply frame callback if provided
-                        processed_frame = frame_to_process.copy()
-                        if frame_callback:
-                            processed_frame = frame_callback(processed_frame, frame_num, result)
+                if len(batch_frames) >= max_batch_size:
+                    logger.debug(f"Processing batch of {len(batch_frames)} frames")
+                    try:
+                        # Process batch
+                        batch_results = self.process_batch(batch_frames)
                         
-                        # Write frame to output video if writer is available
-                        if writer:
-                            writer.write(processed_frame)
-                    
-                    processed_count += len(batch_frames)
-                    frame_count += len(batch_frames)
-                    
-                    # Update progress if callback is provided
-                    if progress_callback and total_frames > 0:
-                        progress = min(1.0, (current_frame - start_frame) / (total_frames - start_frame))
-                        progress_callback(progress, current_frame, total_frames)
-                    
-                    # Clear batch for next iteration
-                    batch_frames.clear()
-                    batch_frame_nums.clear()
+                        # Handle each frame in batch
+                        for batch_idx, (frame_to_process, frame_num, result) in enumerate(zip(batch_frames, batch_frame_nums, batch_results)):
+                            # Apply frame callback if provided
+                            processed_frame = frame_to_process.copy()
+                            if frame_callback:
+                                try:
+                                    processed_frame = frame_callback(processed_frame, frame_num, result)
+                                except Exception as callback_error:
+                                    logger.error(f"Error in frame callback: {callback_error}")
+                            
+                            # Write frame to output video if writer is available
+                            if writer:
+                                try:
+                                    writer.write(processed_frame)
+                                except Exception as write_error:
+                                    logger.error(f"Error writing frame: {write_error}")
+                        
+                        processed_count += len(batch_frames)
+                        frame_count += len(batch_frames)
+                        
+                        # Update progress if callback is provided
+                        if progress_callback and total_frames > 0:
+                            progress = min(1.0, processed_count / (total_frames - start_frame + 1))
+                            progress_callback(progress, processed_count, total_frames - start_frame + 1)
+                        
+                    except Exception as batch_error:
+                        logger.error(f"Error processing batch: {batch_error}")
+                    finally:
+                        # Clear batch for next iteration
+                        batch_frames.clear()
+                        batch_frame_nums.clear()
             
             logger.info(f"Video processing completed. Processed {processed_count} frames out of {frame_count} total frames.")
             return True
@@ -888,9 +1026,16 @@ class VisionPipeline(BaseModule):
             return False
         finally:
             # Cleanup resources
-            processor.close()
-            if writer:
-                writer.close()
+            try:
+                processor.close()
+            except Exception as close_error:
+                logger.error(f"Error closing processor: {close_error}")
+            
+            try:
+                if writer:
+                    writer.close()
+            except Exception as close_error:
+                logger.error(f"Error closing writer: {close_error}")
     
     def reset(self) -> None:
         """
@@ -982,7 +1127,100 @@ class VisionPipeline(BaseModule):
         """
         Initialize memory pools for efficient memory allocation and reuse
         """
-        pass
+        try:
+            # Create memory pools for different sizes of arrays
+            # This helps reduce memory fragmentation and allocation overhead
+            self._memory_pools = {
+                "small": create_memory_pool(size=1024 * 1024, count=10),  # 1MB * 10
+                "medium": create_memory_pool(size=4 * 1024 * 1024, count=5),  # 4MB * 5
+                "large": create_memory_pool(size=16 * 1024 * 1024, count=3)  # 16MB * 3
+            }
+            logger.debug("Memory pools initialized successfully")
+        except Exception as e:
+            logger.warning(f"Failed to initialize memory pools: {e}")
+            self._memory_pools = {}
+
+    def _acquire_memory(self, size: int) -> Optional[np.ndarray]:
+        """
+        Acquire memory from the appropriate pool
+
+        Args:
+            size: Required memory size in bytes
+
+        Returns:
+            Optional[np.ndarray]: Acquired memory buffer or None if no pool available
+        """
+        try:
+            if not hasattr(self, '_memory_pools'):
+                return None
+
+            # Determine which pool to use
+            if size <= 1024 * 1024:
+                pool_key = "small"
+            elif size <= 4 * 1024 * 1024:
+                pool_key = "medium"
+            elif size <= 16 * 1024 * 1024:
+                pool_key = "large"
+            else:
+                # For very large allocations, use direct allocation
+                return np.empty(size // 4, dtype=np.float32)  # Assuming float32
+
+            # Try to acquire from the pool
+            if pool_key in self._memory_pools:
+                buffer = acquire_memory(self._memory_pools[pool_key])
+                if buffer is not None:
+                    return buffer
+
+            # Fallback to direct allocation if pool is empty
+            return np.empty(size // 4, dtype=np.float32)
+        except Exception as e:
+            logger.warning(f"Failed to acquire memory: {e}")
+            return None
+
+    def _release_memory(self, buffer: np.ndarray) -> None:
+        """
+        Release memory back to the appropriate pool
+
+        Args:
+            buffer: Memory buffer to release
+        """
+        try:
+            if not hasattr(self, '_memory_pools'):
+                return
+
+            # Calculate buffer size
+            size = buffer.nbytes
+
+            # Determine which pool to return to
+            if size <= 1024 * 1024:
+                pool_key = "small"
+            elif size <= 4 * 1024 * 1024:
+                pool_key = "medium"
+            elif size <= 16 * 1024 * 1024:
+                pool_key = "large"
+            else:
+                # For very large buffers, just let them be garbage collected
+                return
+
+            # Try to release to the pool
+            if pool_key in self._memory_pools:
+                release_memory(self._memory_pools[pool_key], buffer)
+        except Exception as e:
+            logger.warning(f"Failed to release memory: {e}")
+
+    def _optimize_memory_usage(self) -> None:
+        """
+        Optimize memory usage by cleaning up unused buffers
+        """
+        try:
+            if hasattr(self, '_memory_pools'):
+                for pool_key, pool in self._memory_pools.items():
+                    try:
+                        optimize_memory_usage(pool)
+                    except Exception as e:
+                        logger.warning(f"Failed to optimize memory pool {pool_key}: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to optimize memory usage: {e}")
     
     def cleanup(self) -> None:
         """Cleanup resources held by pipeline components"""
@@ -1002,6 +1240,185 @@ class VisionPipeline(BaseModule):
             self.pose_estimator = None
             self.is_initialized = False
     
+    def _validate_batch_input(self, images: List[np.ndarray]) -> bool:
+        """
+        Validate batch input
+
+        Args:
+            images: List of input images
+
+        Returns:
+            bool: True if input is valid, False otherwise
+        """
+        if not self.is_initialized:
+            if not self.initialize():
+                logger.error("Pipeline not initialized and auto-initialization failed")
+                return False
+
+        if self.detector is None:
+            logger.error("Detector is None, cannot process")
+            return False
+
+        if not images:
+            logger.warning("Empty image list provided to process_batch")
+            return False
+
+        return True
+
+    def _create_performance_monitor(self):
+        """
+        Create performance monitor
+
+        Returns:
+            PerformanceMonitor: Performance monitor instance
+        """
+        from ..utils.monitoring.performance import PerformanceMonitor
+        return PerformanceMonitor()
+
+    def _determine_batch_size(self, num_images: int, max_batch_size: Optional[int]) -> int:
+        """
+        Determine optimal batch size based on image count and constraints
+
+        Args:
+            num_images: Number of images to process
+            max_batch_size: Maximum batch size specified by user
+
+        Returns:
+            int: Calculated batch size
+        """
+        if max_batch_size is not None:
+            return max_batch_size
+
+        # Auto-determine batch size based on image count
+        if num_images > 32:
+            batch_size = 16
+        elif num_images > 16:
+            batch_size = 8
+        else:
+            batch_size = num_images
+
+        logger.debug(f"Auto-determined batch size: {batch_size}")
+        return batch_size
+
+    def _create_empty_batch_results(self, count: int) -> List[Dict[str, Any]]:
+        """
+        Create empty batch results
+
+        Args:
+            count: Number of results to create
+
+        Returns:
+            List[Dict[str, Any]]: List of empty result dictionaries
+        """
+        return [{"detections": [], "tracks": [], "poses": [], "frame_idx": i, "processing_time": 0.0} for i in range(count)]
+
+    def _create_error_batch_results(self, count: int, error_msg: str) -> List[Dict[str, Any]]:
+        """
+        Create error batch results
+
+        Args:
+            count: Number of results to create
+            error_msg: Error message to include
+
+        Returns:
+            List[Dict[str, Any]]: List of error result dictionaries
+        """
+        error_results = []
+        for i in range(count):
+            result = {
+                "detections": [], 
+                "tracks": [], 
+                "poses": [], 
+                "frame_idx": i, 
+                "processing_time": 0.0,
+                "error": error_msg
+            }
+            error_results.append(result)
+        return error_results
+
+    def _process_in_chunks(self, images: List[np.ndarray], batch_size: int, use_parallel: bool, max_workers: Optional[int], 
+                          enable_memory_optimization: bool, monitor) -> List[Dict[str, Any]]:
+        """
+        Process images in chunks
+
+        Args:
+            images: List of input images
+            batch_size: Batch size per chunk
+            use_parallel: Whether to use parallel processing
+            max_workers: Maximum number of workers
+            enable_memory_optimization: Whether to enable memory optimization
+            monitor: Performance monitor
+
+        Returns:
+            List[Dict[str, Any]]: List of result dictionaries
+        """
+        import time
+        
+        logger.debug(f"Splitting {len(images)} images into batches of {batch_size}")
+        chunk_results = []
+        total_processing_time = 0.0
+        total_chunks = (len(images) + batch_size - 1) // batch_size
+
+        for i in range(0, len(images), batch_size):
+            chunk = images[i:i + batch_size]
+            start_time = time.time()
+            chunk_result = self._process_batch_chunk(chunk, i, use_parallel, max_workers, enable_memory_optimization)
+            chunk_time = time.time() - start_time
+            total_processing_time += chunk_time
+            chunk_results.extend(chunk_result)
+
+            # Memory optimization between chunks
+            if enable_memory_optimization:
+                optimize_memory_usage()
+
+            # Log chunk processing info
+            logger.debug(f"Processed chunk {i//batch_size + 1}/{total_chunks} in {chunk_time:.4f}s")
+
+        # Log total processing info
+        self._log_batch_processing_info(len(images), total_processing_time, monitor)
+        return chunk_results
+
+    def _process_single_batch(self, images: List[np.ndarray], start_frame_idx: int, use_parallel: bool, 
+                             max_workers: Optional[int], enable_memory_optimization: bool, monitor) -> List[Dict[str, Any]]:
+        """
+        Process a single batch of images
+
+        Args:
+            images: List of input images
+            start_frame_idx: Starting frame index
+            use_parallel: Whether to use parallel processing
+            max_workers: Maximum number of workers
+            enable_memory_optimization: Whether to enable memory optimization
+            monitor: Performance monitor
+
+        Returns:
+            List[Dict[str, Any]]: List of result dictionaries
+        """
+        import time
+        
+        start_time = time.time()
+        results = self._process_batch_chunk(images, start_frame_idx, use_parallel, max_workers, enable_memory_optimization)
+        total_time = time.time() - start_time
+
+        # Log processing info
+        self._log_batch_processing_info(len(images), total_time, monitor)
+        return results
+
+    def _log_batch_processing_info(self, num_images: int, total_time: float, monitor):
+        """
+        Log batch processing information
+
+        Args:
+            num_images: Number of images processed
+            total_time: Total processing time
+            monitor: Performance monitor
+        """
+        monitor.tick()
+        metrics = monitor.get_metrics()
+        avg_time_per_image = total_time / num_images if num_images > 0 else 0
+        logger.info(f"Batch processing completed: {num_images} images in {total_time:.4f}s, average {avg_time_per_image:.4f}s per image")
+        logger.debug(f"Performance metrics: {metrics}")
+
     def shutdown(self) -> None:
         """Shutdown pipeline and cleanup resources"""
         self.cleanup()
@@ -1036,7 +1453,7 @@ class VisionPipeline(BaseModule):
             progress_callback: Optional callback function(progress, current_frame, total_frames) -> None
                               Called periodically with processing progress
             use_pyav: Whether to use pyav for video processing (default: False, use OpenCV)
-                      Note: PyAV currently only supports video files, not cameras or streams
+                      Note: PyAV supports video files and streams, but not cameras
         
         Returns:
             bool: True if processing completed successfully, False otherwise

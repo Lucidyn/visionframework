@@ -34,7 +34,7 @@ class Task(Generic[T, R]):
     the input data and the function to apply to the data.
     """
     
-    def __init__(self, task_id: int, data: T, func: Callable[[T], R]):
+    def __init__(self, task_id: int, data: T, func: Callable[[T], R], priority: int = 0, max_retries: int = 0):
         """
         Initialize a task
         
@@ -42,14 +42,33 @@ class Task(Generic[T, R]):
             task_id: Unique task identifier
             data: Input data for the task
             func: Function to apply to the data
+            priority: Task priority (higher = more important)
+            max_retries: Maximum number of retry attempts on failure
         """
         self.task_id = task_id
         self.data = data
         self.func = func
+        self.priority = priority
+        self.max_retries = max_retries
+        self.retries = 0
         self.result: Optional[R] = None
         self.error: Optional[Exception] = None
         self.start_time: Optional[float] = None
         self.end_time: Optional[float] = None
+        self.cancelled = False
+        self.future: Optional[concurrent.futures.Future] = None
+    
+    def cancel(self) -> bool:
+        """
+        Cancel the task if it's not already running
+        
+        Returns:
+            bool: True if task was cancelled, False otherwise
+        """
+        if not self.start_time and self.future:
+            self.cancelled = True
+            return self.future.cancel()
+        return False
     
     def execute(self) -> Optional[R]:
         """
@@ -58,6 +77,10 @@ class Task(Generic[T, R]):
         Returns:
             Optional[R]: Result of the task execution, or None if an error occurred
         """
+        if self.cancelled:
+            self.error = Exception("Task cancelled")
+            return None
+        
         self.start_time = time.time()
         try:
             self.result = self.func(self.data)
@@ -65,9 +88,18 @@ class Task(Generic[T, R]):
         except Exception as e:
             self.error = e
             logger.error(f"Task {self.task_id} failed: {e}")
+            
+            # Retry if needed
+            if self.retries < self.max_retries:
+                self.retries += 1
+                logger.info(f"Retrying task {self.task_id} (attempt {self.retries}/{self.max_retries})")
+                return self.execute()
+            
             return None
         finally:
             self.end_time = time.time()
+    
+
     
     def get_duration(self) -> Optional[float]:
         """
@@ -101,6 +133,7 @@ class ThreadPoolProcessor:
         self.tasks: Dict[int, Task] = {}
         self.task_counter = 0
         self.lock = threading.RLock()
+        self.progress_callbacks: Dict[str, Callable[[int, int, float], None]] = {}
         
         logger.info(f"Created ThreadPoolProcessor with max_workers={max_workers}")
     
@@ -123,13 +156,16 @@ class ThreadPoolProcessor:
             self.executor = None
             logger.info("Thread pool stopped")
     
-    def submit_task(self, data: T, func: Callable[[T], R]) -> int:
+    def submit_task(self, data: T, func: Callable[[T], R], priority: int = 0, max_retries: int = 0, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> int:
         """
         Submit a task to the thread pool
         
         Args:
             data: Input data for the task
             func: Function to apply to the data
+            priority: Task priority (higher = more important)
+            max_retries: Maximum number of retry attempts on failure
+            progress_callback: Optional progress callback function
         
         Returns:
             int: Task identifier
@@ -138,13 +174,18 @@ class ThreadPoolProcessor:
             task_id = self.task_counter
             self.task_counter += 1
             
-            task = Task(task_id, data, func)
+            task = Task(task_id, data, func, priority=priority, max_retries=max_retries)
             self.tasks[task_id] = task
+            
+            if progress_callback:
+                callback_id = f"task_{task_id}"
+                self.progress_callbacks[callback_id] = progress_callback
             
             if self.executor is None:
                 self.start()
             
             future = self.executor.submit(task.execute)
+            task.future = future
             future.add_done_callback(lambda f: self._task_completed(task_id))
             
             return task_id
@@ -164,6 +205,22 @@ class ThreadPoolProcessor:
                     logger.debug(f"Task {task_id} completed with error in {duration:.4f}s")
                 else:
                     logger.debug(f"Task {task_id} completed successfully in {duration:.4f}s")
+            
+            # Call progress callback if registered
+            callback_id = f"task_{task_id}"
+            if callback_id in self.progress_callbacks:
+                # Calculate progress (simple implementation)
+                total_tasks = len(self.tasks)
+                completed_tasks = sum(1 for t in self.tasks.values() if t.end_time)
+                progress = completed_tasks / total_tasks if total_tasks > 0 else 0
+                
+                try:
+                    self.progress_callbacks[callback_id](task_id, completed_tasks, progress)
+                except Exception as e:
+                    logger.error(f"Progress callback failed: {e}")
+                
+                # Remove callback after use
+                del self.progress_callbacks[callback_id]
     
     def process_batch(self, data_list: List[T], func: Callable[[T], R]) -> List[R]:
         """
@@ -261,6 +318,133 @@ class ThreadPoolProcessor:
                     "error": "Task not found"
                 }
     
+    def cancel_task(self, task_id: int) -> bool:
+        """
+        Cancel a task
+        
+        Args:
+            task_id: Task identifier
+        
+        Returns:
+            bool: True if task was cancelled, False otherwise
+        """
+        with self.lock:
+            if task_id in self.tasks:
+                task = self.tasks[task_id]
+                return task.cancel()
+            return False
+    
+    def cancel_all_tasks(self) -> int:
+        """
+        Cancel all pending tasks
+        
+        Returns:
+            int: Number of tasks cancelled
+        """
+        with self.lock:
+            cancelled = 0
+            for task_id, task in self.tasks.items():
+                if task.cancel():
+                    cancelled += 1
+            return cancelled
+    
+    def process_batch(self, data_list: List[T], func: Callable[[T], R], priority: int = 0, max_retries: int = 0, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> List[R]:
+        """
+        Process a batch of data concurrently
+        
+        Args:
+            data_list: List of input data
+            func: Function to apply to each data item
+            priority: Task priority (higher = more important)
+            max_retries: Maximum number of retry attempts on failure
+            progress_callback: Optional progress callback function
+        
+        Returns:
+            List[R]: List of results in the same order as input data
+        """
+        if not data_list:
+            return []
+        
+        # Start executor if not already started
+        if self.executor is None:
+            self.start()
+        
+        # Submit all tasks
+        futures = []
+        for i, data in enumerate(data_list):
+            task = Task(i, data, func, priority=priority, max_retries=max_retries)
+            future = self.executor.submit(task.execute)
+            futures.append(future)
+        
+        # Collect results
+        results = []
+        completed = 0
+        total = len(data_list)
+        
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            results.append(result)
+            completed += 1
+            
+            # Call progress callback
+            if progress_callback:
+                try:
+                    progress = completed / total
+                    progress_callback(-1, completed, progress)
+                except Exception as e:
+                    logger.error(f"Progress callback failed: {e}")
+        
+        return results
+    
+    def process_batch_ordered(self, data_list: List[T], func: Callable[[T], R], priority: int = 0, max_retries: int = 0, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> List[R]:
+        """
+        Process a batch of data concurrently and return results in original order
+        
+        Args:
+            data_list: List of input data
+            func: Function to apply to each data item
+            priority: Task priority (higher = more important)
+            max_retries: Maximum number of retry attempts on failure
+            progress_callback: Optional progress callback function
+        
+        Returns:
+            List[R]: List of results in the same order as input data
+        """
+        if not data_list:
+            return []
+        
+        # Start executor if not already started
+        if self.executor is None:
+            self.start()
+        
+        # Submit all tasks with their indices
+        futures = {}
+        for i, data in enumerate(data_list):
+            task = Task(i, data, func, priority=priority, max_retries=max_retries)
+            future = self.executor.submit(task.execute)
+            futures[future] = i
+        
+        # Collect results in order
+        results = [None] * len(data_list)
+        completed = 0
+        total = len(data_list)
+        
+        for future in concurrent.futures.as_completed(futures):
+            idx = futures[future]
+            result = future.result()
+            results[idx] = result
+            completed += 1
+            
+            # Call progress callback
+            if progress_callback:
+                try:
+                    progress = completed / total
+                    progress_callback(-1, completed, progress)
+                except Exception as e:
+                    logger.error(f"Progress callback failed: {e}")
+        
+        return results
+    
     def get_stats(self) -> Dict[str, Any]:
         """
         Get processor statistics
@@ -271,6 +455,7 @@ class ThreadPoolProcessor:
         with self.lock:
             completed_tasks = 0
             failed_tasks = 0
+            cancelled_tasks = 0
             total_duration = 0.0
             
             for task in self.tasks.values():
@@ -281,6 +466,8 @@ class ThreadPoolProcessor:
                     duration = task.get_duration()
                     if duration:
                         total_duration += duration
+                elif task.cancelled:
+                    cancelled_tasks += 1
             
             avg_duration = total_duration / completed_tasks if completed_tasks > 0 else 0
             
@@ -289,6 +476,7 @@ class ThreadPoolProcessor:
                 "total_tasks": len(self.tasks),
                 "completed_tasks": completed_tasks,
                 "failed_tasks": failed_tasks,
+                "cancelled_tasks": cancelled_tasks,
                 "average_duration": avg_duration
             }
 
@@ -313,6 +501,7 @@ class ProcessPoolProcessor:
         self.tasks: Dict[int, Dict[str, Any]] = {}
         self.task_counter = 0
         self.lock = threading.RLock()
+        self.progress_callbacks: Dict[str, Callable[[int, int, float], None]] = {}
         
         logger.info(f"Created ProcessPoolProcessor with max_workers={max_workers}")
     
@@ -335,13 +524,16 @@ class ProcessPoolProcessor:
             self.executor = None
             logger.info("Process pool stopped")
     
-    def submit_task(self, data: T, func: Callable[[T], R]) -> int:
+    def submit_task(self, data: T, func: Callable[[T], R], priority: int = 0, max_retries: int = 0, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> int:
         """
         Submit a task to the process pool
         
         Args:
             data: Input data for the task (must be picklable)
             func: Function to apply to the data (must be picklable)
+            priority: Task priority (higher = more important)
+            max_retries: Maximum number of retry attempts on failure
+            progress_callback: Optional progress callback function
         
         Returns:
             int: Task identifier
@@ -352,13 +544,24 @@ class ProcessPoolProcessor:
             
             self.tasks[task_id] = {
                 "start_time": time.time(),
-                "status": "submitted"
+                "status": "submitted",
+                "priority": priority,
+                "max_retries": max_retries,
+                "retries": 0
             }
+            
+            if progress_callback:
+                callback_id = f"task_{task_id}"
+                self.progress_callbacks[callback_id] = progress_callback
             
             if self.executor is None:
                 self.start()
             
-            future = self.executor.submit(func, data)
+            # Use top-level retry wrapper for pickling
+            from functools import partial
+            retry_func = partial(_retry_wrapper, func, max_retries=max_retries)
+            
+            future = self.executor.submit(retry_func, data)
             future.add_done_callback(lambda f: self._task_completed(task_id, f))
             
             return task_id
@@ -388,14 +591,32 @@ class ProcessPoolProcessor:
                 task_info["status"] = "failed"
                 duration = task_info["end_time"] - task_info["start_time"]
                 logger.error(f"Task {task_id} failed in {duration:.4f}s: {e}")
+            
+            # Call progress callback if registered
+            callback_id = f"task_{task_id}"
+            if callback_id in self.progress_callbacks:
+                try:
+                    # Calculate progress (simple implementation)
+                    total_tasks = len(self.tasks)
+                    completed_tasks = sum(1 for t in self.tasks.values() if t.get("status") in ["completed", "failed"])
+                    progress = completed_tasks / total_tasks if total_tasks > 0 else 0
+                    
+                    self.progress_callbacks[callback_id](task_id, completed_tasks, progress)
+                    # Remove callback after use
+                    del self.progress_callbacks[callback_id]
+                except Exception as e:
+                    logger.error(f"Progress callback failed: {e}")
     
-    def process_batch(self, data_list: List[T], func: Callable[[T], R]) -> List[R]:
+    def process_batch(self, data_list: List[T], func: Callable[[T], R], priority: int = 0, max_retries: int = 0, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> List[R]:
         """
         Process a batch of data concurrently
         
         Args:
             data_list: List of input data (each must be picklable)
             func: Function to apply to each data item (must be picklable)
+            priority: Task priority (higher = more important)
+            max_retries: Maximum number of retry attempts on failure
+            progress_callback: Optional progress callback function
         
         Returns:
             List[R]: List of results in the same order as input data
@@ -407,14 +628,21 @@ class ProcessPoolProcessor:
         if self.executor is None:
             self.start()
         
+        # Use top-level retry wrapper for pickling
+        from functools import partial
+        retry_func = partial(_retry_wrapper, func, max_retries=max_retries)
+        
         # Submit all tasks
         futures = []
         for data in data_list:
-            future = self.executor.submit(func, data)
+            future = self.executor.submit(retry_func, data)
             futures.append(future)
         
         # Collect results
         results = []
+        completed = 0
+        total = len(data_list)
+        
         for future in concurrent.futures.as_completed(futures):
             try:
                 result = future.result()
@@ -422,16 +650,29 @@ class ProcessPoolProcessor:
             except Exception as e:
                 logger.error(f"Task failed: {e}")
                 results.append(None)
+            finally:
+                completed += 1
+                
+                # Call progress callback
+                if progress_callback:
+                    try:
+                        progress = completed / total
+                        progress_callback(-1, completed, progress)
+                    except Exception as e:
+                        logger.error(f"Progress callback failed: {e}")
         
         return results
     
-    def process_batch_ordered(self, data_list: List[T], func: Callable[[T], R]) -> List[R]:
+    def process_batch_ordered(self, data_list: List[T], func: Callable[[T], R], priority: int = 0, max_retries: int = 0, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> List[R]:
         """
         Process a batch of data concurrently and return results in original order
         
         Args:
             data_list: List of input data (each must be picklable)
             func: Function to apply to each data item (must be picklable)
+            priority: Task priority (higher = more important)
+            max_retries: Maximum number of retry attempts on failure
+            progress_callback: Optional progress callback function
         
         Returns:
             List[R]: List of results in the same order as input data
@@ -443,14 +684,21 @@ class ProcessPoolProcessor:
         if self.executor is None:
             self.start()
         
+        # Use top-level retry wrapper for pickling
+        from functools import partial
+        retry_func = partial(_retry_wrapper, func, max_retries=max_retries)
+        
         # Submit all tasks with their indices
         futures = {}
         for i, data in enumerate(data_list):
-            future = self.executor.submit(func, data)
+            future = self.executor.submit(retry_func, data)
             futures[future] = i
         
         # Collect results in order
         results = [None] * len(data_list)
+        completed = 0
+        total = len(data_list)
+        
         for future in concurrent.futures.as_completed(futures):
             idx = futures[future]
             try:
@@ -459,6 +707,16 @@ class ProcessPoolProcessor:
             except Exception as e:
                 logger.error(f"Task {idx} failed: {e}")
                 results[idx] = None
+            finally:
+                completed += 1
+                
+                # Call progress callback
+                if progress_callback:
+                    try:
+                        progress = completed / total
+                        progress_callback(-1, completed, progress)
+                    except Exception as e:
+                        logger.error(f"Progress callback failed: {e}")
         
         return results
     
@@ -814,9 +1072,33 @@ def shutdown_all_processors() -> None:
         logger.info("All processors shutdown")
 
 
+# Helper function for retry logic (must be top-level for pickling)
+def _retry_wrapper(func, data, max_retries):
+    """
+    Wrapper function to handle retries (must be top-level for pickling)
+    
+    Args:
+        func: Function to apply
+        data: Input data
+        max_retries: Maximum number of retries
+        
+    Returns:
+        Result of func(data)
+    """
+    retries = 0
+    while retries <= max_retries:
+        try:
+            return func(data)
+        except Exception as e:
+            if retries < max_retries:
+                retries += 1
+                continue
+            raise
+
+
 # Utility functions
 
-def parallel_map(data_list: List[T], func: Callable[[T], R], max_workers: Optional[int] = None, use_processes: bool = False) -> List[R]:
+def parallel_map(data_list: List[T], func: Callable[[T], R], max_workers: Optional[int] = None, use_processes: bool = False, priority: int = 0, max_retries: int = 0, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> List[R]:
     """
     Parallel map function
     
@@ -825,16 +1107,19 @@ def parallel_map(data_list: List[T], func: Callable[[T], R], max_workers: Option
         func: Function to apply to each data item
         max_workers: Maximum number of workers
         use_processes: Whether to use processes instead of threads
+        priority: Task priority (higher = more important)
+        max_retries: Maximum number of retry attempts on failure
+        progress_callback: Optional progress callback function
     
     Returns:
         List[R]: List of results
     """
     if use_processes:
         processor = get_process_pool_processor(max_workers=max_workers)
-        return processor.process_batch_ordered(data_list, func)
+        return processor.process_batch_ordered(data_list, func, priority=priority, max_retries=max_retries, progress_callback=progress_callback)
     else:
         processor = get_thread_pool_processor(max_workers=max_workers)
-        return processor.process_batch_ordered(data_list, func)
+        return processor.process_batch_ordered(data_list, func, priority=priority, max_retries=max_retries, progress_callback=progress_callback)
 
 
 async def async_map(data_list: List[T], func: Callable[[T], R]) -> List[R]:

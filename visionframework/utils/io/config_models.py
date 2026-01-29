@@ -5,7 +5,7 @@ This module defines Pydantic models for configuration validation and
 a configuration manager for loading/saving configurations from files.
 """
 
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Union, Callable
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 import json
 
@@ -19,12 +19,207 @@ except ImportError:
 
 
 class BaseConfig(BaseModel):
-    """Base configuration model with common validation"""
+    """Base configuration model with common validation and inheritance support"""
     model_config = ConfigDict(
         extra="allow",  # Allow additional fields not explicitly defined
         from_attributes=True,  # Support loading from objects
         arbitrary_types_allowed=True
     )
+    
+    @classmethod
+    def from_parent(cls, parent_config: Optional['BaseConfig'] = None, **overrides) -> 'BaseConfig':
+        """
+        Create a new configuration by inheriting from a parent configuration
+        
+        Args:
+            parent_config: Parent configuration to inherit from
+            **overrides: Configuration overrides
+            
+        Returns:
+            BaseConfig: New configuration with inherited values and overrides
+        """
+        # Start with empty dict
+        config_dict = {}
+        
+        # Inherit from parent if provided
+        if parent_config:
+            config_dict.update(parent_config.model_dump())
+        
+        # Apply overrides
+        config_dict.update(overrides)
+        
+        # Create new instance
+        return cls(**config_dict)
+    
+    def merge(self, other_config: 'BaseConfig') -> 'BaseConfig':
+        """
+        Merge another configuration into this one
+        
+        Args:
+            other_config: Configuration to merge
+            
+        Returns:
+            BaseConfig: New configuration with merged values
+        """
+        merged_dict = self.model_dump()
+        merged_dict.update(other_config.model_dump())
+        return self.__class__(**merged_dict)
+    
+    def validate_config(self) -> bool:
+        """
+        Validate the configuration
+        
+        Returns:
+            bool: True if configuration is valid, False otherwise
+        """
+        try:
+            # Pydantic already validates on creation, but we can add additional validation here
+            return True
+        except Exception:
+            return False
+    
+    def get_nested(self, key_path: str, default: Any = None) -> Any:
+        """
+        Get a nested configuration value using dot notation
+        
+        Args:
+            key_path: Dot-separated key path (e.g., "detector_config.conf_threshold")
+            default: Default value if key not found
+            
+        Returns:
+            Any: The value at the specified path
+        """
+        keys = key_path.split('.')
+        value = self.model_dump()
+        
+        for key in keys:
+            if isinstance(value, dict) and key in value:
+                value = value[key]
+            else:
+                return default
+        
+        return value
+    
+    def set_nested(self, key_path: str, value: Any) -> 'BaseConfig':
+        """
+        Set a nested configuration value using dot notation
+        
+        Args:
+            key_path: Dot-separated key path (e.g., "detector_config.conf_threshold")
+            value: Value to set
+            
+        Returns:
+            BaseConfig: New configuration with updated value
+        """
+        config_dict = self.model_dump()
+        keys = key_path.split('.')
+        
+        # Traverse to the parent of the target key
+        current = config_dict
+        for key in keys[:-1]:
+            if key not in current:
+                current[key] = {}
+            current = current[key]
+        
+        # Set the value
+        current[keys[-1]] = value
+        
+        return self.__class__(**config_dict)
+    
+    def inherit_from(self, parent_config: 'BaseConfig') -> 'BaseConfig':
+        """
+        Create a new configuration by inheriting from another configuration
+        
+        Args:
+            parent_config: Parent configuration to inherit from
+            
+        Returns:
+            BaseConfig: New configuration with inherited values
+        """
+        return self.from_parent(parent_config)
+    
+    def with_overrides(self, **overrides) -> 'BaseConfig':
+        """
+        Create a new configuration with specified overrides
+        
+        Args:
+            **overrides: Configuration overrides
+            
+        Returns:
+            BaseConfig: New configuration with overrides
+        """
+        return self.from_parent(self, **overrides)
+    
+    def get_config_path(self) -> Optional[str]:
+        """
+        Get the path to the configuration file
+        
+        Returns:
+            Optional[str]: Path to the configuration file if available
+        """
+        return getattr(self, '_config_path', None)
+    
+    def set_config_path(self, path: str) -> 'BaseConfig':
+        """
+        Set the path to the configuration file
+        
+        Args:
+            path: Path to the configuration file
+            
+        Returns:
+            BaseConfig: New configuration with updated path
+        """
+        config_dict = self.model_dump()
+        new_config = self.__class__(**config_dict)
+        new_config._config_path = path
+        return new_config
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert configuration to dictionary
+        
+        Returns:
+            Dict[str, Any]: Configuration as dictionary
+        """
+        return self.model_dump()
+    
+    @classmethod
+    def from_dict(cls, config_dict: Dict[str, Any]) -> 'BaseConfig':
+        """
+        Create configuration from dictionary
+        
+        Args:
+            config_dict: Configuration dictionary
+            
+        Returns:
+            BaseConfig: Configuration instance
+        """
+        return cls(**config_dict)
+    
+    def validate_and_get(self, key: str, default: Any = None, validator: Optional[Callable] = None) -> Any:
+        """
+        Validate and get a configuration value
+        
+        Args:
+            key: Configuration key
+            default: Default value if key not found
+            validator: Optional validation function
+            
+        Returns:
+            Any: Validated configuration value
+        """
+        value = getattr(self, key, default)
+        
+        # Apply validation if provided
+        if validator:
+            try:
+                if validator(value):
+                    return value
+                return default
+            except Exception:
+                return default
+        
+        return value
 
 
 class DetectorConfig(BaseConfig):
@@ -202,11 +397,158 @@ class Config:
     Configuration manager for loading/saving configurations
     
     This class provides utilities for loading and saving configurations
-    from files. It supports both JSON and YAML formats.
+    from files. It supports both JSON and YAML formats, and includes
+    support for configuration inheritance and advanced validation.
     """
     
     # Configuration version
     CONFIG_VERSION = "1.0"
+    
+    @staticmethod
+    def _deep_merge(dict1: Dict[str, Any], dict2: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Deep merge two dictionaries
+        
+        Args:
+            dict1: First dictionary (base)
+            dict2: Second dictionary (overrides)
+            
+        Returns:
+            Dict[str, Any]: Deep merged dictionary
+        """
+        result = dict1.copy()
+        
+        for key, value in dict2.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                # Recursively merge nested dictionaries
+                result[key] = Config._deep_merge(result[key], value)
+            else:
+                # Override with new value
+                result[key] = value
+        
+        return result
+    
+    @staticmethod
+    def load_with_inheritance(base_file: str, *override_files: str) -> Dict[str, Any]:
+        """
+        Load configuration with inheritance from multiple files
+        
+        Args:
+            base_file: Base configuration file
+            *override_files: Override configuration files
+            
+        Returns:
+            Dict[str, Any]: Merged configuration dictionary
+        """
+        # Load base config
+        config_dict = Config.load_from_file(base_file)
+        
+        # Apply overrides in order
+        for override_file in override_files:
+            override_dict = Config.load_from_file(override_file)
+            config_dict = Config._deep_merge(config_dict, override_dict)
+        
+        # Remove config_version if present
+        config_dict.pop('config_version', None)
+        
+        return config_dict
+    
+    @classmethod
+    def load_model_with_inheritance(cls, base_file: str, model_type, *override_files: str) -> BaseConfig:
+        """
+        Load configuration with inheritance and parse into a Pydantic model
+        
+        Args:
+            base_file: Base configuration file
+            model_type: Pydantic model class
+            *override_files: Override configuration files
+            
+        Returns:
+            BaseConfig: Merged configuration model
+        """
+        config_dict = cls.load_with_inheritance(base_file, *override_files)
+        model = model_type(**config_dict)
+        model._config_path = base_file
+        return model
+    
+    @staticmethod
+    def compare_configs(config1: Dict[str, Any], config2: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Compare two configurations and return differences
+        
+        Args:
+            config1: First configuration
+            config2: Second configuration
+            
+        Returns:
+            Dict[str, Any]: Differences between configurations
+        """
+        differences = {}
+        
+        # Check keys in config1 not in config2
+        for key in config1:
+            if key not in config2:
+                differences[key] = {"type": "removed", "old_value": config1[key]}
+            elif config1[key] != config2[key]:
+                if isinstance(config1[key], dict) and isinstance(config2[key], dict):
+                    # Recursively compare nested dictionaries
+                    nested_diff = Config.compare_configs(config1[key], config2[key])
+                    if nested_diff:
+                        differences[key] = {"type": "modified", "changes": nested_diff}
+                else:
+                    differences[key] = {"type": "modified", "old_value": config1[key], "new_value": config2[key]}
+        
+        # Check keys in config2 not in config1
+        for key in config2:
+            if key not in config1:
+                differences[key] = {"type": "added", "new_value": config2[key]}
+        
+        return differences
+    
+    @staticmethod
+    def validate_config_structure(config: Dict[str, Any], expected_structure: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate configuration structure against expected structure
+        
+        Args:
+            config: Configuration to validate
+            expected_structure: Expected structure with type hints
+            
+        Returns:
+            Dict[str, Any]: Validation results
+        """
+        validation_results = {
+            "valid": True,
+            "errors": []
+        }
+        
+        def _validate_recursive(config_part: Any, expected_part: Any, path: str = ""):
+            """Recursively validate configuration structure"""
+            if isinstance(expected_part, dict):
+                if not isinstance(config_part, dict):
+                    validation_results["valid"] = False
+                    validation_results["errors"].append(f"{path}: Expected dict, got {type(config_part).__name__}")
+                    return
+                
+                for key, expected_value in expected_part.items():
+                    current_path = f"{path}.{key}" if path else key
+                    if key not in config_part:
+                        validation_results["errors"].append(f"{current_path}: Missing required field")
+                    else:
+                        _validate_recursive(config_part[key], expected_value, current_path)
+            elif isinstance(expected_part, list):
+                if not isinstance(config_part, list):
+                    validation_results["valid"] = False
+                    validation_results["errors"].append(f"{path}: Expected list, got {type(config_part).__name__}")
+            elif expected_part is not None:
+                # Check type
+                expected_type = type(expected_part)
+                if not isinstance(config_part, expected_type):
+                    validation_results["valid"] = False
+                    validation_results["errors"].append(f"{path}: Expected {expected_type.__name__}, got {type(config_part).__name__}")
+        
+        _validate_recursive(config, expected_structure)
+        return validation_results
     
     @staticmethod
     def load_from_file(file_path: str, return_default_if_not_found: bool = False, default_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -311,11 +653,45 @@ class Config:
             config_dict = cls.load_from_file(file_path)
             # Remove config_version if present
             config_dict.pop('config_version', None)
-            return model_type(**config_dict)
+            model = model_type(**config_dict)
+            model._config_path = file_path
+            return model
         except FileNotFoundError:
             if return_default_if_not_found:
                 return model_type()
             raise
+    
+    @classmethod
+    def create_config_chain(cls, base_config: Union[str, Dict[str, Any]], *override_configs: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Create a configuration chain from multiple sources
+        
+        Args:
+            base_config: Base configuration (file path or dictionary)
+            *override_configs: Override configurations (file paths or dictionaries)
+            
+        Returns:
+            Dict[str, Any]: Merged configuration dictionary
+        """
+        # Load base config
+        if isinstance(base_config, str):
+            config_dict = cls.load_from_file(base_config)
+        else:
+            config_dict = base_config.copy()
+        
+        # Apply overrides
+        for override in override_configs:
+            if isinstance(override, str):
+                override_dict = cls.load_from_file(override)
+            else:
+                override_dict = override.copy()
+            
+            config_dict = cls._deep_merge(config_dict, override_dict)
+        
+        # Remove config_version if present
+        config_dict.pop('config_version', None)
+        
+        return config_dict
     
     @classmethod
     def save_model(cls, model: BaseConfig, file_path: str, format: Optional[str] = None):
@@ -409,6 +785,30 @@ class Config:
             return True
         except Exception:
             return False
+    
+    @classmethod
+    def get_config_schema(cls, config_type: str) -> Dict[str, Any]:
+        """
+        Get configuration schema for a specific config type
+        
+        Args:
+            config_type: Type of configuration ('detector', 'tracker', 'pipeline', 'visualizer', 'performance')
+            
+        Returns:
+            Dict[str, Any]: Configuration schema
+        """
+        if config_type == 'detector':
+            return DetectorConfig.model_json_schema()
+        elif config_type == 'tracker':
+            return TrackerConfig.model_json_schema()
+        elif config_type == 'pipeline':
+            return PipelineConfig.model_json_schema()
+        elif config_type == 'visualizer':
+            return VisualizerConfig.model_json_schema()
+        elif config_type == 'performance':
+            return PerformanceConfig.model_json_schema()
+        else:
+            return {}
 
 
 class ModelCache:

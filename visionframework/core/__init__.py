@@ -8,6 +8,23 @@ from .tracker import Tracker
 from .pipeline import VisionPipeline
 from .roi_detector import ROIDetector
 from .counter import Counter
+from .plugin_system import (
+    PluginRegistry,
+    ModelRegistry,
+    plugin_registry,
+    model_registry,
+    register_detector,
+    register_tracker,
+    register_segmenter,
+    register_model,
+    register_processor,
+    register_visualizer,
+    register_evaluator,
+    register_custom_component,
+    get_plugin_registry,
+    get_model_registry,
+    discover_plugins
+)
 
 # Feature processors (lazy load processors that import heavy libs)
 from .processors import FeatureExtractor
@@ -76,5 +93,22 @@ __all__ = [
     "RFDETRDetector",
     "IOUTracker",
     "ByteTracker",
+    "ReIDTracker",
+    # Plugin system
+    "PluginRegistry",
+    "ModelRegistry",
+    "plugin_registry",
+    "model_registry",
+    "register_detector",
+    "register_tracker",
+    "register_segmenter",
+    "register_model",
+    "register_processor",
+    "register_visualizer",
+    "register_evaluator",
+    "register_custom_component",
+    "get_plugin_registry",
+    "get_model_registry",
+    "discover_plugins",
 ]
 

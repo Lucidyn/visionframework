@@ -29,13 +29,18 @@ def test_config_loading():
     return config
 
 
-def test_pipeline_initialization(config):
+def test_pipeline_initialization():
     """
     测试管道初始化
     """
     print("\n=== 测试管道初始化 ===")
     
     try:
+        # 加载配置文件
+        config_path = "examples/my_config.json"
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
         pipeline_config = config.get("pipeline", {})
         pipeline = VisionPipeline(pipeline_config)
         print("✓ 管道对象创建成功")

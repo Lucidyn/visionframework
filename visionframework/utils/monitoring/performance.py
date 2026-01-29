@@ -11,7 +11,9 @@ from datetime import datetime
 
 @dataclass
 class PerformanceMetrics:
-    """Performance metrics container with extended metrics"""
+    """
+    Performance metrics container with extended metrics
+    """
     # FPS metrics
     fps: float = 0.0
     avg_fps: float = 0.0
@@ -32,15 +34,25 @@ class PerformanceMetrics:
     avg_memory_usage: float = 0.0  # in MB
     peak_memory_usage: float = 0.0  # in MB
     
+    # Disk I/O metrics
+    avg_disk_reads: float = 0.0  # in bytes
+    avg_disk_writes: float = 0.0  # in bytes
+    
+    # Network I/O metrics
+    avg_network_sent: float = 0.0  # in bytes
+    avg_network_recv: float = 0.0  # in bytes
+    
     # GPU metrics (if available)
     gpu_memory_usage: float = 0.0  # in MB
     gpu_utilization: float = 0.0  # in percent
 
 
 class PerformanceMonitor:
-    """Enhanced performance monitor with extended metrics and resource monitoring"""
+    """
+    Enhanced performance monitor with extended metrics and resource monitoring
+    """
     
-    def __init__(self, window_size: int = 30, enabled_metrics: Optional[List[str]] = None, enable_gpu_monitoring: bool = False):
+    def __init__(self, window_size: int = 30, enabled_metrics: Optional[List[str]] = None, enable_gpu_monitoring: bool = False, enable_disk_monitoring: bool = False, enable_network_monitoring: bool = False):
         """
         Initialize performance monitor
         
@@ -48,6 +60,8 @@ class PerformanceMonitor:
             window_size: Size of the sliding window for metrics calculation
             enabled_metrics: List of metrics to enable (None for all)
             enable_gpu_monitoring: Whether to enable GPU monitoring (default: False)
+            enable_disk_monitoring: Whether to enable disk I/O monitoring (default: False)
+            enable_network_monitoring: Whether to enable network I/O monitoring (default: False)
         """
         self.window_size = window_size
         self.enabled_metrics = enabled_metrics
@@ -59,11 +73,27 @@ class PerformanceMonitor:
             'pose_estimation': deque(maxlen=window_size),
             'clip_extraction': deque(maxlen=window_size),
             'reid': deque(maxlen=window_size),
+            'batch_processing': deque(maxlen=window_size),
+            'memory_management': deque(maxlen=window_size),
+            'io_operations': deque(maxlen=window_size),
+            'network_operations': deque(maxlen=window_size),
         }
         
         # Memory tracking
         self.memory_usages = deque(maxlen=window_size)
         self.peak_memory_usage = 0.0
+        self.memory_allocations = deque(maxlen=window_size)
+        self.memory_deallocations = deque(maxlen=window_size)
+        
+        # Disk I/O tracking
+        self.disk_reads = deque(maxlen=window_size)
+        self.disk_writes = deque(maxlen=window_size)
+        self.enable_disk_monitoring = enable_disk_monitoring
+        
+        # Network I/O tracking
+        self.network_bytes_sent = deque(maxlen=window_size)
+        self.network_bytes_recv = deque(maxlen=window_size)
+        self.enable_network_monitoring = enable_network_monitoring
         
         # GPU tracking (disabled by default)
         self.gpu_memory_usages = deque(maxlen=window_size)
@@ -76,6 +106,9 @@ class PerformanceMonitor:
         self.start_time = None
         self.last_frame_time = None
         self.frame_count = 0
+        
+        # Initialize system monitors
+        self._init_system_monitors()
     
     def start(self):
         """Start timing and resource monitoring"""
@@ -88,8 +121,26 @@ class PerformanceMonitor:
         if self.enable_gpu_monitoring:
             self._init_gpu_monitoring()
     
+    def _init_system_monitors(self):
+        """
+        Initialize system monitors
+        """
+        # Initialize GPU monitoring
+        if self.enable_gpu_monitoring:
+            self._init_gpu_monitoring()
+        
+        # Initialize disk monitoring
+        if self.enable_disk_monitoring:
+            self._init_disk_monitoring()
+        
+        # Initialize network monitoring
+        if self.enable_network_monitoring:
+            self._init_network_monitoring()
+    
     def _init_gpu_monitoring(self):
-        """Initialize GPU monitoring if available"""
+        """
+        Initialize GPU monitoring if available
+        """
         self.gpu_available = False
         self._nvml = False
         try:
@@ -113,6 +164,28 @@ class PerformanceMonitor:
         except Exception as e:
             # Any other error during GPU monitoring initialization
             self.gpu_available = False
+    
+    def _init_disk_monitoring(self):
+        """
+        Initialize disk monitoring
+        """
+        try:
+            import psutil
+            self._psutil_available = True
+            self._disk_io = psutil.disk_io_counters()
+        except ImportError:
+            self._psutil_available = False
+    
+    def _init_network_monitoring(self):
+        """
+        Initialize network monitoring
+        """
+        try:
+            import psutil
+            self._psutil_available = True
+            self._network_io = psutil.net_io_counters()
+        except ImportError:
+            self._psutil_available = False
     
     def _record_gpu_usage(self):
         """Record GPU memory and utilization"""
@@ -140,7 +213,9 @@ class PerformanceMonitor:
         self.peak_memory_usage = 0.0
     
     def tick(self):
-        """Mark a frame processing tick and record resource usage"""
+        """
+        Mark a frame processing tick and record resource usage
+        """
         current_time = time.time()
         
         if self.last_frame_time is not None:
@@ -153,12 +228,22 @@ class PerformanceMonitor:
         # Record memory usage
         self._record_memory_usage()
         
+        # Record disk usage if enabled
+        if self.enable_disk_monitoring:
+            self._record_disk_usage()
+        
+        # Record network usage if enabled
+        if self.enable_network_monitoring:
+            self._record_network_usage()
+        
         # Record GPU usage if available
         if self.gpu_available:
             self._record_gpu_usage()
     
     def _record_memory_usage(self):
-        """Record current memory usage"""
+        """
+        Record current memory usage
+        """
         try:
             import psutil
             process = psutil.Process()
@@ -168,6 +253,44 @@ class PerformanceMonitor:
             if memory_mb > self.peak_memory_usage:
                 self.peak_memory_usage = memory_mb
         except ImportError:
+            pass
+    
+    def _record_disk_usage(self):
+        """
+        Record current disk I/O usage
+        """
+        if not self.enable_disk_monitoring or not hasattr(self, '_psutil_available') or not self._psutil_available:
+            return
+        
+        try:
+            import psutil
+            disk_io = psutil.disk_io_counters()
+            if hasattr(self, '_disk_io'):
+                read_bytes = disk_io.read_bytes - self._disk_io.read_bytes
+                write_bytes = disk_io.write_bytes - self._disk_io.write_bytes
+                self.disk_reads.append(read_bytes)
+                self.disk_writes.append(write_bytes)
+            self._disk_io = disk_io
+        except Exception:
+            pass
+    
+    def _record_network_usage(self):
+        """
+        Record current network I/O usage
+        """
+        if not self.enable_network_monitoring or not hasattr(self, '_psutil_available') or not self._psutil_available:
+            return
+        
+        try:
+            import psutil
+            network_io = psutil.net_io_counters()
+            if hasattr(self, '_network_io'):
+                bytes_sent = network_io.bytes_sent - self._network_io.bytes_sent
+                bytes_recv = network_io.bytes_recv - self._network_io.bytes_recv
+                self.network_bytes_sent.append(bytes_sent)
+                self.network_bytes_recv.append(bytes_recv)
+            self._network_io = network_io
+        except Exception:
             pass
     
     def _record_gpu_usage(self):
@@ -194,7 +317,9 @@ class PerformanceMonitor:
             self.component_times[component].append(elapsed)
     
     def get_metrics(self) -> PerformanceMetrics:
-        """Get comprehensive performance metrics"""
+        """
+        Get comprehensive performance metrics
+        """
         if len(self.frame_times) == 0:
             return PerformanceMetrics()
         
@@ -223,6 +348,22 @@ class PerformanceMonitor:
         avg_memory_usage = 0.0
         if self.memory_usages:
             avg_memory_usage = sum(self.memory_usages) / len(self.memory_usages)
+        
+        # Calculate disk metrics
+        avg_disk_reads = 0.0
+        avg_disk_writes = 0.0
+        if self.disk_reads:
+            avg_disk_reads = sum(self.disk_reads) / len(self.disk_reads)
+        if self.disk_writes:
+            avg_disk_writes = sum(self.disk_writes) / len(self.disk_writes)
+        
+        # Calculate network metrics
+        avg_network_sent = 0.0
+        avg_network_recv = 0.0
+        if self.network_bytes_sent:
+            avg_network_sent = sum(self.network_bytes_sent) / len(self.network_bytes_sent)
+        if self.network_bytes_recv:
+            avg_network_recv = sum(self.network_bytes_recv) / len(self.network_bytes_recv)
         
         # Calculate GPU metrics
         gpu_memory_usage = 0.0
@@ -253,6 +394,14 @@ class PerformanceMonitor:
             avg_memory_usage=avg_memory_usage,
             peak_memory_usage=self.peak_memory_usage,
             
+            # Disk metrics
+            avg_disk_reads=avg_disk_reads,
+            avg_disk_writes=avg_disk_writes,
+            
+            # Network metrics
+            avg_network_sent=avg_network_sent,
+            avg_network_recv=avg_network_recv,
+            
             # GPU metrics
             gpu_memory_usage=gpu_memory_usage,
             gpu_utilization=gpu_utilization
@@ -261,7 +410,9 @@ class PerformanceMonitor:
         return metrics
     
     def get_detailed_report(self) -> Dict[str, Any]:
-        """Get detailed performance report as dictionary"""
+        """
+        Get detailed performance report as dictionary
+        """
         metrics = self.get_metrics()
         report = {
             'timestamp': time.time(),
@@ -281,6 +432,14 @@ class PerformanceMonitor:
                 'average_mb': metrics.avg_memory_usage,
                 'peak_mb': metrics.peak_memory_usage
             },
+            'disk_io': {
+                'avg_reads_bytes': metrics.avg_disk_reads,
+                'avg_writes_bytes': metrics.avg_disk_writes
+            },
+            'network_io': {
+                'avg_sent_bytes': metrics.avg_network_sent,
+                'avg_recv_bytes': metrics.avg_network_recv
+            },
             'general': {
                 'frame_count': metrics.frame_count,
                 'total_time': metrics.total_time
@@ -297,11 +456,19 @@ class PerformanceMonitor:
         return report
     
     def reset(self):
-        """Reset all metrics and resource tracking"""
+        """
+        Reset all metrics and resource tracking
+        """
         self.frame_times.clear()
         for deque_ in self.component_times.values():
             deque_.clear()
         self.memory_usages.clear()
+        self.memory_allocations.clear()
+        self.memory_deallocations.clear()
+        self.disk_reads.clear()
+        self.disk_writes.clear()
+        self.network_bytes_sent.clear()
+        self.network_bytes_recv.clear()
         self.gpu_memory_usages.clear()
         self.gpu_utilizations.clear()
         self.peak_memory_usage = 0.0

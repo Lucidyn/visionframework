@@ -6,12 +6,17 @@ implementation to reduce memory allocation overhead and improve performance.
 """
 
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any
-from collections import deque
+from typing import Dict, List, Optional, Tuple, Any, TypeVar, Generic, Callable
+from collections import deque, defaultdict
 import threading
 import logging
+import time
+import gc
 
 logger = logging.getLogger(__name__)
+
+
+T = TypeVar('T')
 
 
 class MemoryPool:
@@ -47,7 +52,10 @@ class MemoryPool:
                  block_shape: Tuple[int, ...],
                  dtype: np.dtype = np.uint8,
                  max_blocks: int = 10,
-                 name: Optional[str] = None):
+                 min_blocks: int = 0,
+                 name: Optional[str] = None,
+                 enable_dynamic_resizing: bool = False,
+                 resize_factor: float = 1.5):
         """
         Initialize memory pool
         
@@ -55,12 +63,18 @@ class MemoryPool:
             block_shape: Shape of each memory block
             dtype: Data type of memory blocks
             max_blocks: Maximum number of blocks to keep in the pool
+            min_blocks: Minimum number of blocks to keep in the pool
             name: Optional name for the pool (for logging)
+            enable_dynamic_resizing: Whether to enable dynamic pool resizing
+            resize_factor: Factor to resize the pool by when needed
         """
         self.block_shape = block_shape
         self.dtype = dtype
         self.max_blocks = max_blocks
+        self.min_blocks = min_blocks
         self.name = name or f"MemoryPool_{hex(id(self))[:8]}"
+        self.enable_dynamic_resizing = enable_dynamic_resizing
+        self.resize_factor = resize_factor
         
         # Create a queue to store memory blocks
         self._blocks: deque = deque(maxlen=max_blocks)
@@ -70,8 +84,28 @@ class MemoryPool:
         self.block_size = np.prod(block_shape) * np.dtype(dtype).itemsize
         self.total_size = 0
         
+        # Statistics
+        self.stats = {
+            "acquires": 0,
+            "releases": 0,
+            "hits": 0,  # Reused blocks
+            "misses": 0,  # New allocations
+            "overflows": 0,  # Blocks discarded due to pool full
+            "last_access": time.time()
+        }
+        
+        # Pre-allocate minimum blocks if specified
+        if min_blocks > 0:
+            with self._lock:
+                for _ in range(min_blocks):
+                    block = np.zeros(self.block_shape, dtype=self.dtype)
+                    self._blocks.append(block)
+                    self.total_size += self.block_size
+            logger.info(f"Pre-allocated {min_blocks} blocks for {self.name}")
+        
         logger.info(f"Created {self.name} with block shape {block_shape}, dtype {dtype},")
-        logger.info(f"  block size: {self.block_size / 1024:.2f} KB, max blocks: {max_blocks}")
+        logger.info(f"  block size: {self.block_size / 1024:.2f} KB, min blocks: {min_blocks}, max blocks: {max_blocks}")
+        logger.info(f"  Dynamic resizing: {enable_dynamic_resizing}, resize factor: {resize_factor}")
     
     def acquire(self) -> np.ndarray:
         """
@@ -84,15 +118,20 @@ class MemoryPool:
             np.ndarray: Memory block from the pool
         """
         with self._lock:
+            self.stats["acquires"] += 1
+            self.stats["last_access"] = time.time()
+            
             if self._blocks:
                 # Reuse an existing block
                 block = self._blocks.popleft()
+                self.stats["hits"] += 1
                 logger.debug(f"{self.name}: Acquired reused block, remaining: {len(self._blocks)}")
                 return block
             else:
                 # Allocate a new block
                 block = np.zeros(self.block_shape, dtype=self.dtype)
                 self.total_size += self.block_size
+                self.stats["misses"] += 1
                 logger.debug(f"{self.name}: Allocated new block, total allocated: {self.total_size / 1024:.2f} KB")
                 return block
     
@@ -104,6 +143,9 @@ class MemoryPool:
             block: Memory block to return to the pool
         """
         with self._lock:
+            self.stats["releases"] += 1
+            self.stats["last_access"] = time.time()
+            
             if len(self._blocks) < self.max_blocks:
                 # Reset the block to avoid data leakage
                 block.fill(0)
@@ -111,16 +153,45 @@ class MemoryPool:
                 logger.debug(f"{self.name}: Released block, pool size: {len(self._blocks)}")
             else:
                 # Pool is full, let the block be garbage collected
+                self.stats["overflows"] += 1
                 logger.debug(f"{self.name}: Pool full, discarding block")
     
     def clear(self) -> None:
         """
-        Clear all blocks in the pool
+        Clear all blocks in the pool, but keep at least min_blocks
         """
         with self._lock:
-            blocks_cleared = len(self._blocks)
-            self._blocks.clear()
-            logger.info(f"{self.name}: Cleared {blocks_cleared} blocks")
+            blocks_cleared = len(self._blocks) - max(0, self.min_blocks)
+            if blocks_cleared > 0:
+                # Keep at least min_blocks
+                while len(self._blocks) > self.min_blocks:
+                    self._blocks.popleft()
+                logger.info(f"{self.name}: Cleared {blocks_cleared} blocks, kept {self.min_blocks} blocks")
+            else:
+                logger.debug(f"{self.name}: No blocks cleared (at or below min_blocks)")
+    
+    def resize(self, new_max_blocks: int) -> None:
+        """
+        Resize the memory pool
+        
+        Args:
+            new_max_blocks: New maximum number of blocks
+        """
+        with self._lock:
+            if new_max_blocks < self.min_blocks:
+                logger.warning(f"{self.name}: Cannot resize below min_blocks ({self.min_blocks}), setting to min_blocks")
+                new_max_blocks = self.min_blocks
+            
+            old_max = self.max_blocks
+            self.max_blocks = new_max_blocks
+            
+            # Resize the deque
+            new_blocks = deque(maxlen=new_max_blocks)
+            while self._blocks and len(new_blocks) < new_max_blocks:
+                new_blocks.append(self._blocks.popleft())
+            self._blocks = new_blocks
+            
+            logger.info(f"{self.name}: Resized from {old_max} to {new_max_blocks} max blocks")
     
     def get_status(self) -> Dict[str, Any]:
         """
@@ -130,14 +201,19 @@ class MemoryPool:
             Dict[str, Any]: Pool status information
         """
         with self._lock:
+            hit_rate = (self.stats["hits"] / self.stats["acquires"] * 100) if self.stats["acquires"] > 0 else 0
             return {
                 "name": self.name,
                 "block_shape": self.block_shape,
-                "dtype": str(self.dtype),
+                "dtype": str(self.dtype).strip("<>'").split('.')[-1],
                 "block_size_kb": self.block_size / 1024,
+                "min_blocks": self.min_blocks,
                 "max_blocks": self.max_blocks,
                 "current_blocks": len(self._blocks),
-                "total_allocated_kb": self.total_size / 1024
+                "total_allocated_kb": self.total_size / 1024,
+                "statistics": self.stats,
+                "hit_rate": hit_rate,
+                "dynamic_resizing": self.enable_dynamic_resizing
             }
 
 
@@ -161,7 +237,10 @@ class MultiMemoryPool:
                     pool_name: str,
                     block_shape: Tuple[int, ...],
                     dtype: np.dtype = np.uint8,
-                    max_blocks: int = 10) -> MemoryPool:
+                    max_blocks: int = 10,
+                    min_blocks: int = 0,
+                    enable_dynamic_resizing: bool = False,
+                    resize_factor: float = 1.5) -> MemoryPool:
         """
         Create a new memory pool
         
@@ -170,6 +249,9 @@ class MultiMemoryPool:
             block_shape: Shape of each memory block
             dtype: Data type of memory blocks
             max_blocks: Maximum number of blocks to keep in the pool
+            min_blocks: Minimum number of blocks to keep in the pool
+            enable_dynamic_resizing: Whether to enable dynamic pool resizing
+            resize_factor: Factor to resize the pool by when needed
         
         Returns:
             MemoryPool: Created memory pool
@@ -183,7 +265,10 @@ class MultiMemoryPool:
                 block_shape=block_shape,
                 dtype=dtype,
                 max_blocks=max_blocks,
-                name=pool_name
+                min_blocks=min_blocks,
+                name=pool_name,
+                enable_dynamic_resizing=enable_dynamic_resizing,
+                resize_factor=resize_factor
             )
             self._pools[pool_name] = pool
             logger.info(f"Created pool '{pool_name}'")
@@ -255,6 +340,48 @@ class MultiMemoryPool:
                 pool.clear()
             logger.info("Cleared all memory pools")
     
+    def remove_pool(self, pool_name: str) -> bool:
+        """
+        Remove a memory pool completely
+        
+        Args:
+            pool_name: Name of the pool to remove
+            
+        Returns:
+            bool: True if pool was removed, False otherwise
+        """
+        with self._lock:
+            if pool_name in self._pools:
+                del self._pools[pool_name]
+                logger.info(f"Removed pool '{pool_name}'")
+                return True
+            else:
+                logger.error(f"Pool '{pool_name}' does not exist")
+                return False
+    
+    def remove_all_pools(self) -> None:
+        """
+        Remove all memory pools completely
+        """
+        with self._lock:
+            pool_count = len(self._pools)
+            self._pools.clear()
+            logger.info(f"Removed all {pool_count} memory pools")
+    
+    def resize_pool(self, pool_name: str, new_max_blocks: int) -> None:
+        """
+        Resize a specific memory pool
+        
+        Args:
+            pool_name: Name of the pool to resize
+            new_max_blocks: New maximum number of blocks
+        """
+        pool = self.get_pool(pool_name)
+        if pool:
+            pool.resize(new_max_blocks)
+        else:
+            logger.error(f"Pool '{pool_name}' does not exist")
+    
     def get_status(self) -> Dict[str, Any]:
         """
         Get status of all memory pools
@@ -295,7 +422,10 @@ def create_memory_pool(
     pool_name: str,
     block_shape: Tuple[int, ...],
     dtype: np.dtype = np.uint8,
-    max_blocks: int = 10) -> MemoryPool:
+    max_blocks: int = 10,
+    min_blocks: int = 0,
+    enable_dynamic_resizing: bool = False,
+    resize_factor: float = 1.5) -> MemoryPool:
     """
     Create a memory pool using the global manager
     
@@ -304,6 +434,9 @@ def create_memory_pool(
         block_shape: Shape of each memory block
         dtype: Data type of memory blocks
         max_blocks: Maximum number of blocks to keep in the pool
+        min_blocks: Minimum number of blocks to keep in the pool
+        enable_dynamic_resizing: Whether to enable dynamic pool resizing
+        resize_factor: Factor to resize the pool by when needed
     
     Returns:
         MemoryPool: Created memory pool
@@ -313,7 +446,10 @@ def create_memory_pool(
         pool_name=pool_name,
         block_shape=block_shape,
         dtype=dtype,
-        max_blocks=max_blocks
+        max_blocks=max_blocks,
+        min_blocks=min_blocks,
+        enable_dynamic_resizing=enable_dynamic_resizing,
+        resize_factor=resize_factor
     )
 
 
@@ -351,7 +487,7 @@ def clear_memory_pool(pool_name: str) -> None:
         pool_name: Name of the pool
     """
     manager = get_memory_pool_manager()
-    manager.clear_pool(pool_name)
+    manager.remove_pool(pool_name)
 
 
 def clear_all_memory_pools() -> None:
@@ -359,7 +495,19 @@ def clear_all_memory_pools() -> None:
     Clear all memory pools
     """
     manager = get_memory_pool_manager()
-    manager.clear_all()
+    manager.remove_all_pools()
+
+
+def resize_memory_pool(pool_name: str, new_max_blocks: int) -> None:
+    """
+    Resize a specific memory pool
+    
+    Args:
+        pool_name: Name of the pool to resize
+        new_max_blocks: New maximum number of blocks
+    """
+    manager = get_memory_pool_manager()
+    manager.resize_pool(pool_name, new_max_blocks)
 
 
 def get_memory_pool_status() -> Dict[str, Any]:
@@ -383,23 +531,34 @@ def create_shared_array(shape: Tuple[int, ...], dtype: np.dtype = np.uint8) -> n
         dtype: Data type of the array
     
     Returns:
-        np.ndarray: Shared memory array
+        np.ndarray: Shared memory array or regular numpy array if shared memory not available
     """
-    import multiprocessing as mp
-    
-    # Calculate size
-    size = np.prod(shape) * np.dtype(dtype).itemsize
-    
-    # Create shared memory
-    shared_mem = mp.shared_memory.SharedMemory(create=True, size=size)
-    
-    # Create numpy array backed by shared memory
-    array = np.ndarray(shape, dtype=dtype, buffer=shared_mem.buf)
-    
-    # Store shared memory handle in array's metadata
-    array.__shared_memory__ = shared_mem
-    
-    return array
+    try:
+        import multiprocessing as mp
+        
+        # Check if SharedMemory is available
+        if hasattr(mp, 'shared_memory'):
+            # Calculate size
+            size = np.prod(shape) * np.dtype(dtype).itemsize
+            
+            # Create shared memory
+            shared_mem = mp.shared_memory.SharedMemory(create=True, size=size)
+            
+            # Create numpy array backed by shared memory
+            array = np.ndarray(shape, dtype=dtype, buffer=shared_mem.buf)
+            
+            # Store shared memory handle in array's metadata
+            array.__shared_memory__ = shared_mem
+            
+            return array
+        else:
+            # Fallback to regular numpy array if SharedMemory not available
+            logger.warning("SharedMemory not available, falling back to regular numpy array")
+            return np.zeros(shape, dtype=dtype)
+    except Exception as e:
+        # Fallback to regular numpy array on any error
+        logger.warning(f"Error creating shared array: {e}, falling back to regular numpy array")
+        return np.zeros(shape, dtype=dtype)
 
 
 def free_shared_array(array: np.ndarray) -> None:
@@ -410,11 +569,15 @@ def free_shared_array(array: np.ndarray) -> None:
         array: Shared memory array to free
     """
     if hasattr(array, '__shared_memory__'):
-        shared_mem = array.__shared_memory__
-        shared_mem.close()
-        shared_mem.unlink()
-    else:
-        logger.warning("Array is not a shared memory array")
+        try:
+            shared_mem = array.__shared_memory__
+            shared_mem.close()
+            shared_mem.unlink()
+        except Exception as e:
+            logger.warning(f"Error freeing shared array: {e}")
+    # 对于常规numpy数组，不需要做任何事情
+    # else:
+    #     logger.warning("Array is not a shared memory array")
 
 
 def optimize_memory_usage() -> Dict[str, Any]:

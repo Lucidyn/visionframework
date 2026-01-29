@@ -20,9 +20,11 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 # 添加项目根目录到Python路径
 import sys
-sys.path.insert(0, str(Path(__file__).parents[1]))
+sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from visionframework import VisionPipeline, Visualizer
+from visionframework.utils.error_handling import ErrorHandler
+from visionframework.utils.dependency_manager import is_dependency_available, validate_dependency
 
 
 def create_test_video(output_path, duration=3.0, fps=30.0):
@@ -168,27 +170,51 @@ def process_video_with_simple_api(input_video, output_video):
 def main():
     print("=== 视频文件处理示例 ===")
     
-    # 测试视频路径
-    test_video = "test_video.mp4"
+    # 1. 依赖检查
+    print("\n1. 检查依赖...")
+    handler = ErrorHandler()
     
-    # 创建测试视频
-    create_test_video(test_video)
+    # 检查PyAV依赖（如果可用，将使用更高效的视频处理）
+    pyav_available = is_dependency_available("pyav")
+    print(f"PyAV依赖可用: {pyav_available}")
+    if pyav_available:
+        print("将使用PyAV进行更高效的视频处理")
+    else:
+        print("将使用OpenCV进行视频处理")
     
-    # 输出视频路径
-    output_video1 = "output_video_pipeline.mp4"
-    output_video2 = "output_video_simple.mp4"
-    
-    # 使用VisionPipeline处理视频
-    process_video_with_pipeline(test_video, output_video1)
-    
-    # 使用简化API处理视频
-    process_video_with_simple_api(test_video, output_video2)
-    
-    print("\n=== 示例完成 ===")
-    print("视频处理示例展示了两种处理视频的方式：")
-    print("  1. 使用VisionPipeline实例：适合需要精细控制的场景")
-    print("  2. 使用run_video()静态方法：适合快速开发，一行代码完成任务")
-    print("\n你可以替换test_video.mp4为自己的视频文件进行测试。")
+    try:
+        # 测试视频路径
+        test_video = "test_video.mp4"
+        
+        # 创建测试视频
+        create_test_video(test_video)
+        
+        # 输出视频路径
+        output_video1 = "output_video_pipeline.mp4"
+        output_video2 = "output_video_simple.mp4"
+        
+        # 使用VisionPipeline处理视频
+        process_video_with_pipeline(test_video, output_video1)
+        
+        # 使用简化API处理视频
+        process_video_with_simple_api(test_video, output_video2)
+        
+        print("\n=== 示例完成 ===")
+        print("视频处理示例展示了两种处理视频的方式：")
+        print("  1. 使用VisionPipeline实例：适合需要精细控制的场景")
+        print("  2. 使用run_video()静态方法：适合快速开发，一行代码完成任务")
+        print("\n你可以替换test_video.mp4为自己的视频文件进行测试。")
+        
+    except Exception as e:
+        # 统一错误处理
+        handler.handle_error(
+            error=e,
+            error_type=RuntimeError,
+            message="视频处理示例执行失败",
+            context={"stage": "video_processing"},
+            raise_error=False
+        )
+        print("示例执行过程中出现错误，但已被捕获和处理。")
 
 
 if __name__ == "__main__":

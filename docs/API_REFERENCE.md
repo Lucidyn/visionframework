@@ -39,22 +39,37 @@ VisionPipeline(
 #### `process_frame(image: np.ndarray) -> Dict[str, Any]`
 `process`方法的别名，用于视频帧处理。
 
-#### `process_batch(images: List[np.ndarray], max_batch_size: Optional[int] = None) -> List[Dict[str, Any]]`
+#### `process_batch(images: List[np.ndarray], max_batch_size: Optional[int] = None, use_parallel: bool = False, max_workers: Optional[int] = None, enable_memory_optimization: bool = True) -> List[Dict[str, Any]]`
 批量处理多张图像，支持自动分块以优化内存使用。
 
 **参数：**
 - `images`：要处理的图像列表
-- `max_batch_size`：最大批处理大小，超过此大小会自动分块处理，默认为None（使用模型默认批处理大小）
+- `max_batch_size`：最大批处理大小，超过此大小会自动分块处理，默认为None（自动根据图像数量调整）
+- `use_parallel`：是否使用并行处理
+- `max_workers`：并行处理的最大工作线程数
+- `enable_memory_optimization`：是否启用内存优化技术
+
+**返回值：**
+- 每个元素为包含以下键的字典：
+  - `detections`：检测结果列表
+  - `tracks`：跟踪结果列表（如果启用跟踪）
+  - `poses`：姿态估计结果列表（如果启用姿态估计）
+  - `frame_idx`：帧索引
+  - `processing_time`：处理时间（秒）
 
 #### `process_video(input_source: str or int, output_path: Optional[str] = None, start_frame: int = 0, end_frame: Optional[int] = None, skip_frames: int = 0, frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None, progress_callback: Optional[Callable[[float, int, int], None]] = None, use_pyav: bool = False) -> bool`
 处理视频文件或流。
 
 **参数：**
 - `use_pyav`：是否使用PyAV进行视频处理（默认False，使用OpenCV）
-  - 注意：PyAV仅支持视频文件，不支持摄像头或流
+  - 注意：PyAV支持视频文件和RTSP/HTTP流，但不支持摄像头
 
-#### `process_video_batch(input_source: str or int, output_path: Optional[str] = None, start_frame: int = 0, end_frame: Optional[int] = None, batch_size: int = 8, skip_frames: int = 0, frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None, progress_callback: Optional[Callable[[float, int, int], None]] = None) -> bool`
+#### `process_video_batch(input_source: str or int, output_path: Optional[str] = None, start_frame: int = 0, end_frame: Optional[int] = None, batch_size: int = 8, skip_frames: int = 0, frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None, progress_callback: Optional[Callable[[float, int, int], None]] = None, use_pyav: bool = False) -> bool`
 使用批量处理来处理视频，以提高性能。
+
+**参数：**
+- `use_pyav`：是否使用PyAV进行视频处理（默认False，使用OpenCV）
+  - 注意：PyAV支持视频文件和RTSP/HTTP流，但不支持摄像头
 
 ### 静态方法
 
@@ -66,7 +81,7 @@ VisionPipeline(
 
 **参数：**
 - `use_pyav`：是否使用PyAV进行视频处理（默认False，使用OpenCV）
-  - 注意：PyAV仅支持视频文件，不支持摄像头或流
+  - 注意：PyAV支持视频文件和RTSP/HTTP流，但不支持摄像头
 
 ### 类方法
 
@@ -488,13 +503,68 @@ PyAVVideoWriter(
 - `use_pyav`：是否使用PyAV进行视频处理（默认False，使用OpenCV）
   - 注意：PyAV支持视频文件和RTSP/HTTP流，但不支持摄像头
 
+### 内存管理工具
+
+#### `MemoryPool`
+内存池，用于高效内存分配和重用。
+
+```python
+MemoryPool(
+    block_shape: Tuple[int, ...],
+    dtype: np.dtype = np.uint8,
+    max_blocks: int = 10,
+    min_blocks: int = 0,
+    enable_dynamic_resizing: bool = False,
+    resize_factor: float = 1.5
+)
+```
+
+**方法：**
+- `acquire() -> np.ndarray`：从池中获取内存块
+- `release(block: np.ndarray) -> None`：将内存块返回池
+- `clear() -> None`：清空池中的内存块（保留至少min_blocks）
+- `resize(new_max_blocks: int) -> None`：调整池大小
+- `get_status() -> Dict[str, Any]`：获取池状态
+
+#### `MultiMemoryPool`
+多内存池管理器，用于管理多个不同类型的内存池。
+
+**方法：**
+- `create_pool(pool_name: str, block_shape: Tuple[int, ...], dtype: np.dtype = np.uint8, max_blocks: int = 10) -> MemoryPool`：创建内存池
+- `get_pool(pool_name: str) -> Optional[MemoryPool]`：获取内存池
+- `acquire(pool_name: str) -> Optional[np.ndarray]`：从特定池获取内存块
+- `release(pool_name: str, block: np.ndarray) -> None`：将内存块返回特定池
+- `resize_pool(pool_name: str, new_max_blocks: int) -> None`：调整特定池大小
+
+#### 内存管理函数
+
+- `create_memory_pool(pool_name: str, block_shape: Tuple[int, ...], dtype: np.dtype = np.uint8, max_blocks: int = 10) -> MemoryPool`：创建内存池
+- `acquire_memory(pool_name: str) -> Optional[np.ndarray]`：从池获取内存
+- `release_memory(pool_name: str, block: np.ndarray) -> None`：释放内存到池
+- `resize_memory_pool(pool_name: str, new_max_blocks: int) -> None`：调整内存池大小
+- `optimize_memory_usage() -> Dict[str, Any]`：优化内存使用
+
 ### 配置工具
 
-#### `load_config(config_path: str) -> Dict[str, Any]`
-从YAML文件加载配置。
+#### `Config` 类
+配置管理器，支持配置加载、保存和继承。
 
-#### `save_config(config: Dict[str, Any], config_path: str) -> None`
-将配置保存到YAML文件。
+**方法：**
+- `load_from_file(file_path: str, return_default_if_not_found: bool = False, default_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]`：从文件加载配置
+- `save_to_file(config: Dict[str, Any], file_path: str, format: Optional[str] = None)`：将配置保存到文件
+- `load_with_inheritance(base_file: str, *override_files: str) -> Dict[str, Any]`：加载配置并支持继承
+- `load_model_with_inheritance(base_file: str, model_type, *override_files: str) -> BaseConfig`：加载配置并解析为模型
+- `compare_configs(config1: Dict[str, Any], config2: Dict[str, Any]) -> Dict[str, Any]`：比较两个配置
+
+#### `BaseConfig` 类
+基础配置模型，支持配置继承和验证。
+
+**方法：**
+- `from_parent(parent_config: Optional[BaseConfig] = None, **overrides) -> BaseConfig`：从父配置创建新配置
+- `merge(other_config: BaseConfig) -> BaseConfig`：合并另一个配置
+- `validate_config() -> bool`：验证配置
+- `get_nested(key_path: str, default: Any = None) -> Any`：获取嵌套配置值
+- `set_nested(key_path: str, value: Any) -> BaseConfig`：设置嵌套配置值
 
 #### `DeviceManager`
 ```python
@@ -592,6 +662,140 @@ PoseEstimator(
 - `process(image: np.ndarray) -> List[Pose]`：处理图像，估计姿态
 - `initialize() -> bool`：初始化姿态估计器
 
+## 插件系统
+
+### PluginRegistry
+插件注册表，用于管理和发现插件组件。
+
+```python
+PluginRegistry()
+```
+
+**方法：**
+- `register_detector(name: str, detector_class: Type, **metadata)`：注册自定义检测器
+- `register_tracker(name: str, tracker_class: Type, **metadata)`：注册自定义跟踪器
+- `register_segmenter(name: str, segmenter_class: Type, **metadata)`：注册自定义分割器
+- `register_model(name: str, model_loader: Callable, **metadata)`：注册自定义模型
+- `register_processor(name: str, processor_class: Type, **metadata)`：注册自定义处理器
+- `register_visualizer(name: str, visualizer_class: Type, **metadata)`：注册自定义可视化器
+- `register_evaluator(name: str, evaluator_class: Type, **metadata)`：注册自定义评估器
+- `register_custom_component(name: str, component: Any, **metadata)`：注册自定义组件
+- `get_detector(name: str) -> Optional[Dict[str, Any]]`：获取注册的检测器
+- `get_tracker(name: str) -> Optional[Dict[str, Any]]`：获取注册的跟踪器
+- `get_segmenter(name: str) -> Optional[Dict[str, Any]]`：获取注册的分割器
+- `get_model(name: str) -> Optional[Dict[str, Any]]`：获取注册的模型
+- `get_processor(name: str) -> Optional[Dict[str, Any]]`：获取注册的处理器
+- `get_visualizer(name: str) -> Optional[Dict[str, Any]]`：获取注册的可视化器
+- `get_evaluator(name: str) -> Optional[Dict[str, Any]]`：获取注册的评估器
+- `get_custom_component(name: str) -> Optional[Dict[str, Any]]`：获取注册的自定义组件
+- `list_detectors() -> List[str]`：列出所有注册的检测器
+- `list_trackers() -> List[str]`：列出所有注册的跟踪器
+- `list_segmenters() -> List[str]`：列出所有注册的分割器
+- `list_models() -> List[str]`：列出所有注册的模型
+- `list_processors() -> List[str]`：列出所有注册的处理器
+- `list_visualizers() -> List[str]`：列出所有注册的可视化器
+- `list_evaluators() -> List[str]`：列出所有注册的评估器
+- `list_custom_components() -> List[str]`：列出所有注册的自定义组件
+- `add_plugin_path(path: str)`：添加插件路径
+- `load_plugins_from_path(path: str)`：从路径加载插件
+- `load_all_plugins()`：加载所有插件
+
+### ModelRegistry
+模型注册表，用于管理模型加载和缓存。
+
+```python
+ModelRegistry()
+```
+
+**方法：**
+- `register_model(name: str, model_info: Dict[str, Any])`：注册模型
+- `get_model(name: str) -> Optional[Dict[str, Any]]`：获取模型信息
+- `load_model(name: str, **kwargs) -> Any`：加载模型
+- `unload_model(name: str)`：卸载模型
+- `list_models() -> List[str]`：列出所有注册的模型
+- `clear_cache()`：清除模型缓存
+
+### 插件注册装饰器
+
+**register_detector(name: str, **metadata)**
+注册检测器类的装饰器。
+
+**register_tracker(name: str, **metadata)**
+注册跟踪器类的装饰器。
+
+**register_segmenter(name: str, **metadata)**
+注册分割器类的装饰器。
+
+**register_model(name: str, **metadata)**
+注册模型加载函数的装饰器。
+
+**register_processor(name: str, **metadata)**
+注册处理器类的装饰器。
+
+**register_visualizer(name: str, **metadata)**
+注册可视化器类的装饰器。
+
+**register_evaluator(name: str, **metadata)**
+注册评估器类的装饰器。
+
+**register_custom_component(name: str, **metadata)**
+注册自定义组件的装饰器。
+
+## 依赖管理
+
+### DependencyManager
+依赖管理器，用于管理可选依赖。
+
+```python
+DependencyManager()
+```
+
+**方法：**
+- `is_available(dependency: str) -> bool`：检查依赖是否可用
+- `import_dependency(dependency: str, package: str) -> Optional[ModuleType]`：导入依赖
+- `get_dependency_info(dependency: str) -> Optional[Dict[str, Any]]`：获取依赖信息
+- `get_install_command(dependency: str) -> Optional[str]`：获取安装命令
+- `get_dependency_status(dependency: str) -> Dict[str, Union[bool, str]]`：获取依赖状态
+- `get_all_dependency_status() -> Dict[str, Dict[str, Union[bool, str]]]`：获取所有依赖状态
+- `get_available_dependencies() -> List[str]`：获取可用的依赖
+- `get_missing_dependencies() -> List[str]`：获取缺失的依赖
+- `validate_dependency(dependency: str) -> bool`：验证依赖是否可用
+
+### 依赖管理函数
+
+**is_dependency_available(dependency: str) -> bool**
+检查依赖是否可用。
+
+**import_optional_dependency(dependency: str, package: str) -> Optional[ModuleType]**
+导入可选依赖。
+
+**get_available_dependencies() -> List[str]**
+获取可用的依赖。
+
+**get_missing_dependencies() -> List[str]**
+获取缺失的依赖。
+
+**validate_dependency(dependency: str) -> bool**
+验证依赖是否可用。
+
+**get_install_command(dependency: str) -> Optional[str]**
+获取依赖的安装命令。
+
+## 错误处理
+
+### ErrorHandler
+错误处理器，用于统一错误处理。
+
+```python
+ErrorHandler()
+```
+
+**方法：**
+- `handle_error(error: Exception, error_type: type, message: str, context: Optional[Dict[str, Any]] = None, raise_error: bool = False, log_traceback: bool = True) -> Optional[Exception]`：处理错误
+- `wrap_error(func, error_type: type, message: str, context: Optional[Dict[str, Any]] = None, default_return=None, raise_error: bool = False)`：包装函数，捕获和处理错误
+- `validate_input(input_value: Any, expected_type: type, param_name: str, context: Optional[Dict[str, Any]] = None) -> Tuple[bool, Optional[str]]`：验证输入参数
+- `format_error_message(message: str, error: Optional[Exception] = None, context: Optional[Dict[str, Any]] = None) -> str`：格式化错误消息
+
 ## 异常类
 
 ### VisionFrameworkError
@@ -608,6 +812,36 @@ PoseEstimator(
 
 ### VideoError
 当视频处理出现错误时引发。
+
+### VideoProcessingError
+视频处理错误的基类。
+
+### VideoReaderError
+视频读取错误。
+
+### VideoWriterError
+视频写入错误。
+
+### SegmenterInitializationError
+分割器初始化错误。
+
+### SegmentationError
+分割错误。
+
+### ConcurrentProcessingError
+并发处理错误。
+
+### MemoryAllocationError
+内存分配错误。
+
+### TimeoutError
+超时错误。
+
+### ROIProcessingError
+ROI处理错误。
+
+### BatchProcessingError
+批量处理错误。
 
 ## 配置示例
 
@@ -862,7 +1096,8 @@ import numpy as np
 pipeline = VisionPipeline({
     "detector_config": {
         "model_path": "yolov8n.pt",
-        "conf_threshold": 0.5
+        "conf_threshold": 0.5,
+        "batch_inference": True  # 启用批量推理
     }
 })
 
@@ -874,12 +1109,41 @@ for i in range(10):
     if image is not None:
         images.append(image)
 
-# 批量处理，设置最大批处理大小为4（自动分块）
-results = pipeline.process_batch(images, max_batch_size=4)
+# 批量处理，启用并行处理和内存优化
+results = pipeline.process_batch(
+    images,
+    max_batch_size=4,  # 最大批处理大小
+    use_parallel=True,  # 启用并行处理
+    max_workers=4,      # 4个工作线程
+    enable_memory_optimization=True  # 启用内存优化
+)
 
 # 处理结果
 for i, result in enumerate(results):
-    print(f"图像 {i+1} 检测到 {len(result['detections'])} 个目标")
+    print(f"图像 {i+1} 检测到 {len(result['detections'])} 个目标，处理时间: {result['processing_time']:.4f}秒")
+
+# 内存池使用示例
+from visionframework.utils.memory import create_memory_pool, acquire_memory, release_memory
+
+# 创建内存池
+pool = create_memory_pool(
+    "detection_pool",
+    block_shape=(640, 640, 3),
+    dtype=np.uint8,
+    max_blocks=10,
+    min_blocks=2
+)
+
+# 使用内存池
+for image in images:
+    # 从池获取内存
+    memory_block = acquire_memory("detection_pool")
+    
+    # 处理图像
+    memory_block[:] = image[:640, :640, :]  # 假设图像大小合适
+    
+    # 释放内存回池
+    release_memory("detection_pool", memory_block)
 ```
 
 ### ReID跟踪示例

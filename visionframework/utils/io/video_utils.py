@@ -46,8 +46,12 @@ Example usage:
 
 import cv2
 import numpy as np
+import logging
 from typing import Optional, Tuple, Callable, Any, Dict
 from pathlib import Path
+
+# Setup logger
+logger = logging.getLogger(__name__)
 
 # Try to import pyav, but keep it optional
 try:
@@ -144,6 +148,7 @@ class VideoProcessor:
                 self.cap = cv2.VideoCapture(self.video_path)
             
             if not self.cap.isOpened():
+                logger.error(f"Failed to open {'camera' if self.is_camera else 'video stream/file'}: {self.video_path}")
                 return False
             
             # Get video properties
@@ -156,9 +161,11 @@ class VideoProcessor:
             else:
                 self.total_frames = -1  # Unknown for camera
             
+            logger.info(f"Successfully opened {'camera' if self.is_camera else 'video stream/file'}: {self.video_path}")
+            logger.debug(f"Video properties: {self.width}x{self.height} @ {self.fps}fps")
             return True
         except Exception as e:
-            print(f"Failed to open video: {e}")
+            logger.error(f"Error opening {'camera' if self.is_camera else 'video stream/file'} {self.video_path}: {e}")
             return False
     
     def read_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
@@ -350,9 +357,15 @@ class VideoWriter:
                 size
             )
             
-            return self.writer.isOpened()
+            success = self.writer.isOpened()
+            if success:
+                logger.info(f"Successfully opened video writer: {self.output_path}")
+                logger.debug(f"Video writer properties: {size[0]}x{size[1]} @ {self.fps}fps")
+            else:
+                logger.error(f"Failed to open video writer: {self.output_path}")
+            return success
         except Exception as e:
-            print(f"Failed to open video writer: {e}")
+            logger.error(f"Error opening video writer {self.output_path}: {e}")
             return False
     
     def write(self, frame: np.ndarray) -> bool:
@@ -503,9 +516,11 @@ class PyAVVideoProcessor:
             # Create frame generator
             self.frame_generator = self.container.decode(video=0)
             
+            logger.info(f"Successfully opened {'stream' if self.is_stream else 'video file'}: {self.video_path}")
+            logger.debug(f"Video properties: {self.width}x{self.height} @ {self.fps}fps")
             return True
         except Exception as e:
-            print(f"Failed to open video with pyav: {e}")
+            logger.error(f"Failed to open video with pyav: {e}")
             return False
     
     def read_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
@@ -533,9 +548,10 @@ class PyAVVideoProcessor:
             return True, img
         except StopIteration:
             # End of video
+            logger.debug("End of video stream reached")
             return False, None
         except Exception as e:
-            print(f"Error reading frame: {e}")
+            logger.error(f"Error reading frame: {e}")
             return False, None
     
     def get_frame(self, frame_number: int) -> Optional[np.ndarray]:
@@ -560,9 +576,10 @@ class PyAVVideoProcessor:
             
             # Read the frame
             ret, frame = self.read_frame()
+            logger.debug(f"Successfully retrieved frame {frame_number}")
             return frame if ret else None
         except Exception as e:
-            print(f"Error seeking frame: {e}")
+            logger.error(f"Error seeking frame {frame_number}: {e}")
             return None
     
     def get_info(self) -> Dict[str, Any]:
@@ -588,11 +605,16 @@ class PyAVVideoProcessor:
         Close video file or stream
         """
         if self.container is not None:
-            self.container.close()
-            self.container = None
-            self.stream = None
-            self.decoder = None
-            self.frame_generator = None
+            try:
+                self.container.close()
+                logger.info(f"Successfully closed {'stream' if self.is_stream else 'video file'}: {self.video_path}")
+            except Exception as e:
+                logger.error(f"Error closing video container: {e}")
+            finally:
+                self.container = None
+                self.stream = None
+                self.decoder = None
+                self.frame_generator = None
     
     def __enter__(self):
         """Context manager entry point - opens the video"""
@@ -674,9 +696,11 @@ class PyAVVideoWriter:
             self.stream.height = size[1]
             self.stream.pix_fmt = "yuv420p"
             
+            logger.info(f"Successfully opened PyAV video writer: {self.output_path}")
+            logger.debug(f"PyAV writer properties: {size[0]}x{size[1]} @ {self.fps}fps, codec={self.codec}")
             return True
         except Exception as e:
-            print(f"Failed to open video writer with pyav: {e}")
+            logger.error(f"Failed to open video writer with pyav {self.output_path}: {e}")
             return False
     
     def write(self, frame: np.ndarray) -> bool:
@@ -693,6 +717,7 @@ class PyAVVideoWriter:
             # Auto-detect frame size on first write
             h, w = frame.shape[:2]
             if not self.open((w, h)):
+                logger.error(f"Failed to open PyAV writer for first frame write")
                 return False
         
         try:
@@ -707,9 +732,11 @@ class PyAVVideoWriter:
                 self.container.mux(packet)
             
             self.frame_count += 1
+            if self.frame_count % 100 == 0:
+                logger.debug(f"Written {self.frame_count} frames to {self.output_path}")
             return True
         except Exception as e:
-            print(f"Error writing frame: {e}")
+            logger.error(f"Error writing frame to {self.output_path}: {e}")
             return False
     
     def close(self):
@@ -758,7 +785,7 @@ def process_video(
         end_frame: Last frame to process (default: None, process all frames)
         skip_frames: Number of frames to skip between processing (default: 0, process every frame)
         use_pyav: Whether to use pyav for video processing (default: False, use OpenCV)
-            Note: PyAV currently only supports video files, not cameras or streams
+            Note: PyAV supports video files and streams, but not cameras
         
     Returns:
         bool: True if processing completed successfully, False otherwise
@@ -793,26 +820,31 @@ def process_video(
     if use_pyav:
         # Check if pyav is available
         if av is None:
-            print("PyAV is not installed. Falling back to OpenCV.")
+            logger.warning("PyAV is not installed. Falling back to OpenCV.")
+            logger.info("To use PyAV for better performance, install it with: pip install av")
             use_pyav = False
         # Check if input is a camera (PyAV doesn't support cameras)
         elif isinstance(input_path, int) or (isinstance(input_path, str) and input_path == "0"):
-            print("PyAV only supports video files and streams, not cameras. Falling back to OpenCV.")
+            logger.info("PyAV only supports video files and streams, not cameras. Falling back to OpenCV.")
             use_pyav = False
     
     if use_pyav:
         # Use PyAVVideoProcessor for video files
+        logger.info(f"Using PyAVVideoProcessor for: {input_path}")
         processor = PyAVVideoProcessor(input_path)
     else:
         # Use regular VideoProcessor
+        logger.info(f"Using VideoProcessor for: {input_path}")
         processor = VideoProcessor(input_path)
     
     if not processor.open():
+        logger.error(f"Failed to open processor for: {input_path}")
         return False
     
     writer = None
     if output_path:
         info = processor.get_info()
+        logger.info(f"Creating writer for output: {output_path}")
         if use_pyav:
             # Use PyAVVideoWriter
             writer = PyAVVideoWriter(output_path, fps=info["fps"], frame_size=(info["width"], info["height"]))
@@ -820,15 +852,19 @@ def process_video(
             # Use regular VideoWriter
             writer = VideoWriter(output_path, fps=info["fps"], frame_size=(info["width"], info["height"]))
         if not writer.open():
+            logger.warning(f"Failed to open writer, output will not be saved")
             writer = None
     
     try:
         frame_count = 0
         processed_count = 0
         
+        logger.info(f"Starting video processing: {input_path}")
+        
         while True:
             ret, frame = processor.read_frame()
             if not ret:
+                logger.info("End of video stream reached")
                 break
             
             # Skip frames
@@ -842,22 +878,33 @@ def process_video(
             
             # Process frame
             if frame_callback:
-                processed_frame = frame_callback(frame, frame_count)
+                try:
+                    processed_frame = frame_callback(frame, frame_count)
+                except Exception as callback_error:
+                    logger.error(f"Error in frame callback: {callback_error}")
+                    processed_frame = frame
             else:
                 processed_frame = frame
             
             # Write frame
             if writer:
-                writer.write(processed_frame)
+                if not writer.write(processed_frame):
+                    logger.warning(f"Failed to write frame {frame_count}")
             
             processed_count += 1
             frame_count += 1
+            
+            # Log progress every 100 frames
+            if processed_count % 100 == 0:
+                logger.info(f"Processed {processed_count} frames")
         
+        logger.info(f"Video processing completed: {processed_count} frames processed out of {frame_count} total frames")
         return True
     except Exception as e:
-        print(f"Error processing video: {e}")
+        logger.error(f"Error processing video {input_path}: {e}")
         return False
     finally:
+        logger.info("Cleaning up resources")
         processor.close()
         if writer:
             writer.close()

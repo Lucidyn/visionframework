@@ -147,35 +147,6 @@ def direct_pyav_example(video_path):
         print(f"错误: {e}")
 
 
-# 主函数
-def main():
-    """主函数"""
-    print("=== PyAV 视频处理示例 ===")
-    
-    # 创建测试视频
-    test_video_path = "test_video.mp4"
-    create_test_video(test_video_path)
-    
-    # 检查文件是否存在
-    if not os.path.exists(test_video_path):
-        print(f"错误: 测试视频不存在: {test_video_path}")
-        return
-    
-    # 运行性能测试
-    benchmark_video_processing(test_video_path)
-    
-    # 运行直接使用 PyAV 的示例
-    direct_pyav_example(test_video_path)
-    
-    # 清理输出文件
-    for file in ["opencv_output.mp4", "pyav_output.mp4"]:
-        if os.path.exists(file):
-            os.remove(file)
-            print(f"已清理输出文件: {file}")
-    
-    print("\n示例完成！")
-
-
 # RTSP流处理示例
 def rtsp_stream_example():
     """使用 PyAV 处理 RTSP 流"""

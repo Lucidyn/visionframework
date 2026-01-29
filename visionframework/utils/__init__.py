@@ -13,6 +13,13 @@ from .monitoring.performance import PerformanceMonitor, Timer
 from .io.video_utils import VideoProcessor, VideoWriter, process_video
 from .monitoring.logger import setup_logger, get_logger
 from .data.trajectory_analyzer import TrajectoryAnalyzer
+from .error_handling import ErrorHandler, error_handler
+from .dependency_manager import (
+    DependencyManager, dependency_manager,
+    is_dependency_available, get_available_dependencies,
+    get_missing_dependencies, validate_dependency,
+    get_install_command, import_optional_dependency, lazy_import
+)
 
 
 def __getattr__(name):
@@ -53,5 +60,16 @@ __all__ = [
     "PipelineConfig",
     "VisualizerConfig",
     "AutoLabelerConfig",
+    "ErrorHandler",
+    "error_handler",
+    "DependencyManager",
+    "dependency_manager",
+    "is_dependency_available",
+    "get_available_dependencies",
+    "get_missing_dependencies",
+    "validate_dependency",
+    "get_install_command",
+    "import_optional_dependency",
+    "lazy_import",
 ]
 

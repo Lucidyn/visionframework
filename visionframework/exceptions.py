@@ -338,3 +338,144 @@ class PipelineIntegrationError(VisionFrameworkError):
             context["stage"] = stage
         
         super().__init__(message, context, original_error)
+
+
+class VideoProcessingError(VisionFrameworkError):
+    """Raised when video processing fails"""
+    def __init__(self, message: str, video_path: str = None, 
+                 operation: str = None, frame_number: int = None, 
+                 original_error: Exception = None):
+        context = {}
+        if video_path:
+            context["video_path"] = video_path
+        if operation:
+            context["operation"] = operation
+        if frame_number is not None:
+            context["frame_number"] = frame_number
+        
+        super().__init__(message, context, original_error)
+
+
+class VideoReaderError(VideoProcessingError):
+    """Raised when video reading fails"""
+    def __init__(self, message: str, video_path: str = None, 
+                 backend: str = None, frame_number: int = None, 
+                 original_error: Exception = None):
+        context = {}
+        if video_path:
+            context["video_path"] = video_path
+        if backend:
+            context["backend"] = backend
+        if frame_number is not None:
+            context["frame_number"] = frame_number
+        
+        super().__init__(message, context, original_error)
+
+
+class VideoWriterError(VideoProcessingError):
+    """Raised when video writing fails"""
+    def __init__(self, message: str, output_path: str = None, 
+                 codec: str = None, frame_size: tuple = None, 
+                 original_error: Exception = None):
+        context = {}
+        if output_path:
+            context["output_path"] = output_path
+        if codec:
+            context["codec"] = codec
+        if frame_size:
+            context["frame_size"] = frame_size
+        
+        super().__init__(message, context, original_error)
+
+
+class SegmenterInitializationError(VisionFrameworkError):
+    """Raised when segmenter initialization fails"""
+    def __init__(self, message: str, segmenter_type: str = None, 
+                 model_path: str = None, device: str = None, 
+                 original_error: Exception = None):
+        context = {}
+        if segmenter_type:
+            context["segmenter_type"] = segmenter_type
+        if model_path:
+            context["model_path"] = model_path
+        if device:
+            context["device"] = device
+        
+        super().__init__(message, context, original_error)
+
+
+class SegmentationError(VisionFrameworkError):
+    """Raised when segmentation fails"""
+    def __init__(self, message: str, segmenter_type: str = None, 
+                 input_shape: tuple = None, device: str = None, 
+                 original_error: Exception = None):
+        context = {}
+        if segmenter_type:
+            context["segmenter_type"] = segmenter_type
+        if input_shape:
+            context["input_shape"] = input_shape
+        if device:
+            context["device"] = device
+        
+        super().__init__(message, context, original_error)
+
+
+class ConcurrentProcessingError(VisionFrameworkError):
+    """Raised when concurrent processing fails"""
+    def __init__(self, message: str, num_workers: int = None, 
+                 batch_size: int = None, operation: str = None, 
+                 original_error: Exception = None):
+        context = {}
+        if num_workers:
+            context["num_workers"] = num_workers
+        if batch_size:
+            context["batch_size"] = batch_size
+        if operation:
+            context["operation"] = operation
+        
+        super().__init__(message, context, original_error)
+
+
+class MemoryAllocationError(VisionFrameworkError):
+    """Raised when memory allocation fails"""
+    def __init__(self, message: str, requested_size: int = None, 
+                 available_memory: int = None, operation: str = None, 
+                 original_error: Exception = None):
+        context = {}
+        if requested_size:
+            context["requested_size"] = requested_size
+        if available_memory:
+            context["available_memory"] = available_memory
+        if operation:
+            context["operation"] = operation
+        
+        super().__init__(message, context, original_error)
+
+
+class TimeoutError(VisionFrameworkError):
+    """Raised when an operation times out"""
+    def __init__(self, message: str, operation: str = None, 
+                 timeout_seconds: float = None, original_error: Exception = None):
+        context = {}
+        if operation:
+            context["operation"] = operation
+        if timeout_seconds is not None:
+            context["timeout_seconds"] = timeout_seconds
+        
+        super().__init__(message, context, original_error)
+
+
+class ROIProcessingError(VisionFrameworkError):
+    """Raised when ROI (Region of Interest) processing fails"""
+    def __init__(self, message: str, roi_type: str = None, 
+                 roi_coordinates: list = None, operation: str = None, 
+                 original_error: Exception = None):
+        context = {}
+        if roi_type:
+            context["roi_type"] = roi_type
+        if roi_coordinates:
+            context["roi_coordinates"] = roi_coordinates
+        if operation:
+            context["operation"] = operation
+        
+        super().__init__(message, context, original_error)

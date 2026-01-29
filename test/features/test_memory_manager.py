@@ -17,6 +17,7 @@ from visionframework.utils.memory import (
     release_memory,
     clear_memory_pool,
     clear_all_memory_pools,
+    resize_memory_pool,
     get_memory_pool_status,
     create_shared_array,
     free_shared_array,
@@ -277,6 +278,134 @@ class TestMemoryManager(unittest.TestCase):
         block_large = pool_large.acquire()
         self.assertEqual(block_large.shape, (1000, 1000, 3))
         pool_large.release(block_large)
+    
+    def test_memory_pool_min_blocks(self):
+        """Test memory pool with min_blocks"""
+        # Create memory pool with min_blocks
+        pool = MemoryPool(
+            block_shape=(100, 100, 3),
+            dtype=np.uint8,
+            max_blocks=10,
+            min_blocks=2
+        )
+        
+        # Check initial status
+        status = pool.get_status()
+        self.assertEqual(status["min_blocks"], 2)
+        
+        # Acquire all blocks
+        blocks = []
+        for _ in range(5):
+            blocks.append(pool.acquire())
+        
+        # Release all blocks
+        for block in blocks:
+            pool.release(block)
+        
+        # Clear pool (should keep at least min_blocks)
+        pool.clear()
+        status = pool.get_status()
+        self.assertGreaterEqual(status["current_blocks"], 2)
+    
+    def test_memory_pool_resize(self):
+        """Test memory pool resizing"""
+        # Create memory pool
+        pool = MemoryPool(
+            block_shape=(100, 100, 3),
+            dtype=np.uint8,
+            max_blocks=5
+        )
+        
+        # Acquire some blocks
+        blocks = []
+        for _ in range(3):
+            blocks.append(pool.acquire())
+        
+        # Release blocks
+        for block in blocks:
+            pool.release(block)
+        
+        # Resize pool
+        pool.resize(8)
+        status = pool.get_status()
+        self.assertEqual(status["max_blocks"], 8)
+        
+        # Acquire more blocks
+        more_blocks = []
+        for _ in range(6):
+            more_blocks.append(pool.acquire())
+        
+        # Release blocks
+        for block in more_blocks:
+            pool.release(block)
+        
+        # Resize to smaller size
+        pool.resize(3)
+        status = pool.get_status()
+        self.assertEqual(status["max_blocks"], 3)
+    
+    def test_memory_pool_dynamic_resizing(self):
+        """Test memory pool with dynamic resizing"""
+        # Create memory pool with dynamic resizing enabled
+        pool = MemoryPool(
+            block_shape=(100, 100, 3),
+            dtype=np.uint8,
+            max_blocks=5,
+            enable_dynamic_resizing=True,
+            resize_factor=1.5
+        )
+        
+        # Check status
+        status = pool.get_status()
+        self.assertEqual(status["dynamic_resizing"], True)
+    
+    def test_memory_pool_stats(self):
+        """Test memory pool statistics"""
+        # Create memory pool
+        pool = MemoryPool(
+            block_shape=(100, 100, 3),
+            dtype=np.uint8,
+            max_blocks=5
+        )
+        
+        # Acquire and release blocks
+        block1 = pool.acquire()
+        pool.release(block1)
+        
+        # Acquire again (should be a hit)
+        block2 = pool.acquire()
+        pool.release(block2)
+        
+        # Get status and check stats
+        status = pool.get_status()
+        self.assertIn("statistics", status)
+        stats = status["statistics"]
+        self.assertGreaterEqual(stats["acquires"], 2)
+        self.assertGreaterEqual(stats["releases"], 2)
+        self.assertGreaterEqual(stats["hits"], 1)
+    
+    def test_resize_memory_pool_function(self):
+        """Test resize_memory_pool function"""
+        # Create memory pool
+        create_memory_pool(
+            pool_name="test_resize_pool",
+            block_shape=(100, 100, 3),
+            dtype=np.uint8,
+            max_blocks=5
+        )
+        
+        # Resize the pool
+        resize_memory_pool("test_resize_pool", 10)
+        
+        # Check status
+        status = get_memory_pool_status()
+        self.assertIn("test_resize_pool", status["pools"])
+        pool_status = status["pools"]["test_resize_pool"]
+        # Note: We can't check max_blocks directly as it's not exposed in the status
+        # This test just ensures the function doesn't throw an error
+        
+        # Clean up
+        clear_memory_pool("test_resize_pool")
 
 
 if __name__ == "__main__":

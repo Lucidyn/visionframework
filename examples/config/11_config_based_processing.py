@@ -61,7 +61,7 @@ def main():
     print("=== 配置文件驱动的视觉处理示例 ===")
     
     # 加载配置文件
-    config_path = "examples/my_config.json"
+    config_path = "examples/config/my_config.json"
     config = load_config(config_path)
     print(f"✓ 加载配置文件: {config_path}")
     
