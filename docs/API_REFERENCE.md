@@ -43,45 +43,169 @@ VisionPipeline(
 批量处理多张图像，支持自动分块以优化内存使用。
 
 **参数：**
-- `images`：要处理的图像列表
+- `images`：要处理的图像列表（BGR格式，OpenCV标准）
 - `max_batch_size`：最大批处理大小，超过此大小会自动分块处理，默认为None（自动根据图像数量调整）
-- `use_parallel`：是否使用并行处理
-- `max_workers`：并行处理的最大工作线程数
-- `enable_memory_optimization`：是否启用内存优化技术
+- `use_parallel`：是否使用并行处理，适用于独立图像处理场景
+- `max_workers`：并行处理的最大工作线程数，默认为None（自动选择）
+- `enable_memory_optimization`：是否启用内存优化技术，包括内存池和垃圾回收优化
 
 **返回值：**
-- 每个元素为包含以下键的字典：
-  - `detections`：检测结果列表
-  - `tracks`：跟踪结果列表（如果启用跟踪）
-  - `poses`：姿态估计结果列表（如果启用姿态估计）
-  - `frame_idx`：帧索引
-  - `processing_time`：处理时间（秒）
+- `List[Dict[str, Any]]`：处理结果列表，每个元素为包含以下键的字典：
+  - `detections`：检测结果列表（`List[Detection]`）
+  - `tracks`：跟踪结果列表（`List[Track]`，如果启用跟踪）
+  - `poses`：姿态估计结果列表（`List[Pose]`，如果启用姿态估计）
+  - `frame_idx`：帧索引（int）
+  - `processing_time`：处理时间（秒，float）
 
-#### `process_video(input_source: str or int, output_path: Optional[str] = None, start_frame: int = 0, end_frame: Optional[int] = None, skip_frames: int = 0, frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None, progress_callback: Optional[Callable[[float, int, int], None]] = None, use_pyav: bool = False) -> bool`
-处理视频文件或流。
+**示例：**
+```python
+# 批量处理图像
+results = pipeline.process_batch(
+    images,
+    max_batch_size=4,  # 每批处理4张图像
+    use_parallel=True,  # 启用并行处理
+    max_workers=4,  # 使用4个工作线程
+    enable_memory_optimization=True  # 启用内存优化
+)
+```
+
+#### `process_video(input_source: Union[str, int], output_path: Optional[str] = None, use_pyav: bool = False) -> bool`
+处理视频文件、摄像头或视频流。
 
 **参数：**
+- `input_source`：视频源，可以是：
+  - 视频文件路径（字符串）
+  - RTSP/HTTP流URL（字符串）
+  - 摄像头索引（整数，0为默认摄像头）
+- `output_path`：输出视频文件路径（可选），如果为None则不保存视频
 - `use_pyav`：是否使用PyAV进行视频处理（默认False，使用OpenCV）
   - 注意：PyAV支持视频文件和RTSP/HTTP流，但不支持摄像头
+  - PyAV提供比OpenCV更高的视频处理性能
 
-#### `process_video_batch(input_source: str or int, output_path: Optional[str] = None, start_frame: int = 0, end_frame: Optional[int] = None, batch_size: int = 8, skip_frames: int = 0, frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None, progress_callback: Optional[Callable[[float, int, int], None]] = None, use_pyav: bool = False) -> bool`
-使用批量处理来处理视频，以提高性能。
+**返回值：**
+- `bool`：处理是否成功完成
+
+**示例：**
+```python
+# 处理视频文件
+pipeline.process_video("input.mp4", "output.mp4")
+
+# 处理RTSP流（使用PyAV）
+pipeline.process_video("rtsp://example.com/stream", "output.mp4", use_pyav=True)
+
+# 处理摄像头
+pipeline.process_video(0, "output.mp4")
+```
+
+#### `process_video_batch(input_source: Union[str, int], output_path: Optional[str] = None, start_frame: int = 0, end_frame: Optional[int] = None, batch_size: int = 8, skip_frames: int = 0, frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None, progress_callback: Optional[Callable[[float, int, int], None]] = None, use_pyav: bool = False) -> bool`
+使用批量处理来处理视频，以提高性能。该方法将视频帧分批处理，充分利用GPU的批处理能力。
 
 **参数：**
+- `input_source`：视频源，可以是：
+  - 视频文件路径（字符串）
+  - RTSP/HTTP流URL（字符串）
+  - 摄像头索引（整数，0为默认摄像头）
+- `output_path`：输出视频文件路径（可选），如果为None则不保存视频
+- `start_frame`：开始处理的帧号（默认0）
+- `end_frame`：结束处理的帧号（None表示处理到结尾，仅对视频文件有效）
+- `batch_size`：每批处理的帧数（默认8），较大的批次可以提高GPU利用率但需要更多内存
+- `skip_frames`：跳过的帧数（默认0），用于降低处理帧率
+- `frame_callback`：可选的帧回调函数 `(frame, frame_number, results) -> processed_frame`，用于自定义帧处理
+- `progress_callback`：可选的进度回调函数 `(progress, current_frame, total_frames) -> None`，用于显示处理进度
 - `use_pyav`：是否使用PyAV进行视频处理（默认False，使用OpenCV）
   - 注意：PyAV支持视频文件和RTSP/HTTP流，但不支持摄像头
+  - PyAV提供比OpenCV更高的视频处理性能
+
+**返回值：**
+- `bool`：处理是否成功完成
+
+**示例：**
+```python
+# 批量处理视频文件
+pipeline.process_video_batch(
+    "input.mp4", 
+    "output.mp4",
+    batch_size=16,  # 每批处理16帧
+    use_pyav=True  # 使用PyAV后端
+)
+
+# 处理RTSP流并显示进度
+def progress_cb(progress, current, total):
+    print(f"进度: {progress:.1%} ({current}/{total})")
+
+pipeline.process_video_batch(
+    "rtsp://example.com/stream",
+    "output.mp4",
+    batch_size=8,
+    progress_callback=progress_cb,
+    use_pyav=True
+)
+```
 
 ### 静态方法
 
 #### `VisionPipeline.process_image(image: np.ndarray, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]`
-无需初始化管道即可快速处理图像。
-
-#### `VisionPipeline.run_video(input_source: str or int, output_path: Optional[str] = None, model_path: str = "yolov8n.pt", enable_tracking: bool = False, conf_threshold: float = 0.25, batch_size: int = 0, use_pyav: bool = False, **kwargs) -> bool`
-使用简单API运行视频处理。
+无需初始化管道即可快速处理图像。这是一个静态方法，适合一次性处理。
 
 **参数：**
+- `image`：输入图像（numpy数组，BGR格式）
+- `config`：配置字典（可选），包含检测器、跟踪器等配置
+
+**返回值：**
+- `Dict[str, Any]`：处理结果，包含：
+  - `detections`：检测结果列表
+  - `tracks`：跟踪结果列表（如果启用跟踪）
+  - `poses`：姿态估计结果列表（如果启用姿态估计）
+
+**示例：**
+```python
+import cv2
+from visionframework import VisionPipeline
+
+image = cv2.imread("test.jpg")
+results = VisionPipeline.process_image(
+    image,
+    {
+        "detector_config": {"model_path": "yolov8n.pt"},
+        "enable_tracking": True
+    }
+)
+```
+
+#### `VisionPipeline.run_video(input_source: Union[str, int], output_path: Optional[str] = None, model_path: str = "yolov8n.pt", enable_tracking: bool = False, enable_segmentation: bool = False, enable_pose_estimation: bool = False, conf_threshold: float = 0.25, batch_size: int = 0, use_pyav: bool = False, **kwargs) -> bool`
+使用简单API运行视频处理。这是一个静态方法，无需创建管道实例即可使用。
+
+**参数：**
+- `input_source`：视频源（视频文件路径、RTSP/HTTP流URL或摄像头索引）
+- `output_path`：输出视频文件路径（可选）
+- `model_path`：检测模型路径（默认"yolov8n.pt"）
+- `enable_tracking`：是否启用跟踪（默认False）
+- `enable_segmentation`：是否启用分割（默认False）
+- `enable_pose_estimation`：是否启用姿态估计（默认False）
+- `conf_threshold`：置信度阈值（默认0.25）
+- `batch_size`：批处理大小（0表示不使用批处理，默认0）
 - `use_pyav`：是否使用PyAV进行视频处理（默认False，使用OpenCV）
   - 注意：PyAV支持视频文件和RTSP/HTTP流，但不支持摄像头
+- `**kwargs`：其他配置参数
+
+**返回值：**
+- `bool`：处理是否成功完成
+
+**示例：**
+```python
+# 简单视频处理
+VisionPipeline.run_video("input.mp4", "output.mp4", model_path="yolov8n.pt")
+
+# 带跟踪和批处理
+VisionPipeline.run_video(
+    "input.mp4", 
+    "output.mp4",
+    model_path="yolov8n.pt",
+    enable_tracking=True,
+    batch_size=8,
+    use_pyav=True
+)
+```
 
 ### 类方法
 
@@ -93,12 +217,12 @@ VisionPipeline(
 
 ## 检测器
 
-### Detector
+### BaseDetector
 
 统一检测器接口，支持多种检测模型和SAM分割器集成。
 
 ```python
-Detector(
+BaseDetector(
     config: Optional[Dict[str, Any]] = None
 )
 ```
@@ -356,23 +480,60 @@ TrackingEvaluator(iou_threshold: float = 0.5)
 
 #### PerformanceMonitor 类
 
-性能监控器，用于监控和分析性能指标。
+性能监控器，用于监控和分析性能指标。支持多种监控模式，包括GPU、磁盘I/O和网络I/O监控。
 
 ```python
-PerformanceMonitor(window_size: int = 30)
+PerformanceMonitor(
+    window_size: int = 30,
+    enabled_metrics: Optional[List[str]] = None,
+    enable_gpu_monitoring: bool = False,
+    enable_disk_monitoring: bool = False,
+    enable_network_monitoring: bool = False
+)
 ```
 
 **参数：**
 - `window_size`：滑动窗口大小，用于计算 FPS 和其他指标，默认为 30
+- `enabled_metrics`：要启用的指标列表（None表示启用所有）
+- `enable_gpu_monitoring`：是否启用GPU监控（默认False）
+- `enable_disk_monitoring`：是否启用磁盘I/O监控（默认False）
+- `enable_network_monitoring`：是否启用网络I/O监控（默认False）
 
 **方法：**
 - `start()`：开始性能监控
 - `tick()`：记录一帧处理完成
 - `record_component_time(component: str, elapsed: float)`：记录组件处理时间
-  - `component`：组件名称（"detection"、"tracking"、"visualization"）
+  - `component`：组件名称（"detection"、"tracking"、"visualization"、"pose_estimation"、"clip_extraction"、"reid"、"batch_processing"、"memory_management"、"io_operations"、"network_operations"）
   - `elapsed`：处理时间（秒）
 - `get_metrics() -> PerformanceMetrics`：获取综合性能指标
+- `get_detailed_report() -> Dict[str, Any]`：获取详细的性能报告
 - `reset()`：重置性能监控器
+
+**示例：**
+```python
+from visionframework import PerformanceMonitor
+
+# 创建性能监控器
+monitor = PerformanceMonitor(
+    window_size=60,
+    enable_gpu_monitoring=True,
+    enable_disk_monitoring=True
+)
+
+monitor.start()
+# ... 处理代码 ...
+monitor.tick()
+monitor.record_component_time("detection", 0.05)
+
+# 获取指标
+metrics = monitor.get_metrics()
+print(f"FPS: {metrics.fps:.2f}")
+print(f"平均帧时间: {metrics.avg_time_per_frame*1000:.2f}ms")
+
+# 获取详细报告
+report = monitor.get_detailed_report()
+print(f"GPU内存使用: {report['gpu']['memory_usage_mb']:.2f}MB")
+```
 
 #### Timer 类
 
@@ -505,44 +666,60 @@ PyAVVideoWriter(
 
 ### 内存管理工具
 
-#### `MemoryPool`
-内存池，用于高效内存分配和重用。
+#### `MemoryManager` 和 `MemoryPool`
+内存管理器，用于高效内存分配和重用。支持全局内存池和多内存池管理。
 
 ```python
-MemoryPool(
-    block_shape: Tuple[int, ...],
-    dtype: np.dtype = np.uint8,
-    max_blocks: int = 10,
-    min_blocks: int = 0,
-    enable_dynamic_resizing: bool = False,
-    resize_factor: float = 1.5
+from visionframework.utils.memory import MemoryManager
+
+# 获取全局内存池
+memory_pool = MemoryManager.get_global_memory_pool()
+memory_pool.initialize(
+    min_blocks=4,  # 最小内存块数量
+    block_size=(480, 640, 3),  # 每个内存块的形状
+    max_blocks=10  # 最大内存块数量
 )
 ```
 
-**方法：**
+**MemoryPool 方法：**
+- `initialize(min_blocks: int, block_size: Tuple[int, ...], max_blocks: int) -> None`：初始化内存池
 - `acquire() -> np.ndarray`：从池中获取内存块
 - `release(block: np.ndarray) -> None`：将内存块返回池
 - `clear() -> None`：清空池中的内存块（保留至少min_blocks）
 - `resize(new_max_blocks: int) -> None`：调整池大小
 - `get_status() -> Dict[str, Any]`：获取池状态
-
-#### `MultiMemoryPool`
-多内存池管理器，用于管理多个不同类型的内存池。
-
-**方法：**
-- `create_pool(pool_name: str, block_shape: Tuple[int, ...], dtype: np.dtype = np.uint8, max_blocks: int = 10) -> MemoryPool`：创建内存池
-- `get_pool(pool_name: str) -> Optional[MemoryPool]`：获取内存池
-- `acquire(pool_name: str) -> Optional[np.ndarray]`：从特定池获取内存块
-- `release(pool_name: str, block: np.ndarray) -> None`：将内存块返回特定池
-- `resize_pool(pool_name: str, new_max_blocks: int) -> None`：调整特定池大小
+- `get_stats() -> Dict[str, Any]`：获取池统计信息
+- `optimize() -> None`：优化内存池
 
 #### 内存管理函数
 
-- `create_memory_pool(pool_name: str, block_shape: Tuple[int, ...], dtype: np.dtype = np.uint8, max_blocks: int = 10) -> MemoryPool`：创建内存池
+- `create_memory_pool(pool_name: str, block_shape: Tuple[int, ...], dtype: np.dtype = np.uint8, max_blocks: int = 10, min_blocks: int = 0) -> MemoryPool`：创建内存池
 - `acquire_memory(pool_name: str) -> Optional[np.ndarray]`：从池获取内存
 - `release_memory(pool_name: str, block: np.ndarray) -> None`：释放内存到池
 - `resize_memory_pool(pool_name: str, new_max_blocks: int) -> None`：调整内存池大小
 - `optimize_memory_usage() -> Dict[str, Any]`：优化内存使用
+
+**示例：**
+```python
+from visionframework.utils.memory import (
+    MemoryManager, create_memory_pool, 
+    acquire_memory, release_memory
+)
+import numpy as np
+
+# 方法1：使用全局内存池
+pool = MemoryManager.get_global_memory_pool()
+pool.initialize(min_blocks=4, block_size=(480, 640, 3), max_blocks=10)
+memory = pool.acquire()
+# 使用内存...
+pool.release(memory)
+
+# 方法2：使用命名内存池
+create_memory_pool("detection_pool", (640, 640, 3), max_blocks=10)
+memory = acquire_memory("detection_pool")
+# 使用内存...
+release_memory("detection_pool", memory)
+```
 
 ### 配置工具
 
@@ -796,6 +973,238 @@ ErrorHandler()
 - `validate_input(input_value: Any, expected_type: type, param_name: str, context: Optional[Dict[str, Any]] = None) -> Tuple[bool, Optional[str]]`：验证输入参数
 - `format_error_message(message: str, error: Optional[Exception] = None, context: Optional[Dict[str, Any]] = None) -> str`：格式化错误消息
 
+## 模型优化工具
+
+### 量化 (Quantization)
+
+#### `quantize_model(model: torch.nn.Module, config: QuantizationConfig) -> torch.nn.Module`
+量化PyTorch模型以减少模型大小和提高推理速度。
+
+**参数：**
+- `model`: 要量化的PyTorch模型
+- `config`: 量化配置（`QuantizationConfig`）
+  - `quantization_type`: 量化类型（"dynamic"、"static"、"aware"）
+  - `backend`: 量化后端（"qnnpack"、"fbgemm"、"onednn"）
+  - `dtype`: 量化数据类型（`torch.quint8`、`torch.qint8`）
+
+**示例：**
+```python
+from visionframework.utils.model_optimization import quantize_model, QuantizationConfig
+import torch
+
+config = QuantizationConfig(
+    quantization_type="dynamic",
+    backend="fbgemm"
+)
+quantized_model = quantize_model(model, config)
+```
+
+### 剪枝 (Pruning)
+
+#### `prune_model(model: nn.Module, config: PruningConfig) -> nn.Module`
+剪枝PyTorch模型以减少模型大小。
+
+**参数：**
+- `model`: 要剪枝的PyTorch模型
+- `config`: 剪枝配置（`PruningConfig`）
+  - `pruning_type`: 剪枝类型（"l1_unstructured"、"l2_unstructured"、"random_unstructured"、"ln_structured"）
+  - `amount`: 剪枝比例（0.0到1.0）
+  - `target_modules`: 要剪枝的模块类型列表
+
+**示例：**
+```python
+from visionframework.utils.model_optimization import prune_model, PruningConfig
+import torch.nn as nn
+
+config = PruningConfig(
+    pruning_type="l1_unstructured",
+    amount=0.2,
+    target_modules=[nn.Linear, nn.Conv2d]
+)
+pruned_model = prune_model(model, config)
+```
+
+### 知识蒸馏 (Distillation)
+
+#### `distill_model(teacher_model: nn.Module, student_model: nn.Module, train_data: DataLoader, config: DistillationConfig) -> nn.Module`
+从教师模型向学生模型进行知识蒸馏。
+
+**参数：**
+- `teacher_model`: 教师模型
+- `student_model`: 学生模型
+- `train_data`: 训练数据加载器
+- `config`: 蒸馏配置（`DistillationConfig`）
+  - `temperature`: 软化logits的温度
+  - `alpha`: 蒸馏损失的权重
+  - `epochs`: 蒸馏轮数
+
+**示例：**
+```python
+from visionframework.utils.model_optimization import distill_model, DistillationConfig
+from torch.utils.data import DataLoader
+
+config = DistillationConfig(
+    temperature=3.0,
+    alpha=0.7,
+    epochs=10
+)
+distilled_model = distill_model(teacher_model, student_model, train_loader, config)
+```
+
+## 模型训练工具
+
+### ModelFineTuner
+
+模型微调器，用于在自定义数据集上微调模型。
+
+```python
+from visionframework.utils.model_training import ModelFineTuner, FineTuningConfig
+
+config = FineTuningConfig(
+    strategy="freeze",  # 或 "full", "lora", "qlora"
+    epochs=10,
+    batch_size=32,
+    learning_rate=1e-4
+)
+
+fine_tuner = ModelFineTuner(config)
+fine_tuned_model = fine_tuner.fine_tune(
+    model=base_model,
+    train_data=train_loader,
+    val_data=val_loader
+)
+```
+
+## 模型转换工具
+
+### ModelConverter
+
+模型转换器，用于在不同模型格式之间转换。
+
+```python
+from visionframework.utils.model_conversion import ModelConverter, ConversionConfig, ModelFormat
+
+config = ConversionConfig(
+    input_format=ModelFormat.PYTORCH,
+    output_format=ModelFormat.ONNX,
+    input_path="model.pth",
+    output_path="model.onnx"
+)
+
+converter = ModelConverter()
+converter.convert(config)
+```
+
+## 模型部署工具
+
+### ModelDeployer
+
+模型部署器，用于将模型部署到不同平台。
+
+```python
+from visionframework.utils.model_deployment import ModelDeployer, DeploymentConfig, DeploymentPlatform
+
+config = DeploymentConfig(
+    platform=DeploymentPlatform.TENSORRT,
+    model_path="model.onnx",
+    model_format="onnx",
+    output_path="deployed_model"
+)
+
+deployer = ModelDeployer()
+deployer.deploy(config)
+```
+
+## 模型管理工具
+
+### AutoSelector
+
+自动模型选择器，根据硬件配置和任务需求自动选择最合适的模型。
+
+```python
+from visionframework.utils.model_management import AutoSelector, ModelRequirement, HardwareTier
+
+requirement = ModelRequirement(
+    model_type="detection",
+    accuracy=80,
+    speed=70,
+    memory=1000
+)
+
+selector = AutoSelector()
+recommended_model = selector.select_model(requirement, HardwareTier.MID_RANGE)
+```
+
+## 多模态融合工具
+
+### MultimodalFusion
+
+多模态融合器，用于融合不同模态的信息。
+
+```python
+from visionframework.utils.multimodal import MultimodalFusion, FusionConfig, FusionType
+
+config = FusionConfig(
+    fusion_type=FusionType.ATTENTION,
+    input_dims=[512, 768],  # 视觉和文本特征维度
+    hidden_dim=256,
+    output_dim=512
+)
+
+fusion = MultimodalFusion(config)
+fused_features = fusion.forward([vision_features, text_features])
+```
+
+## 数据增强工具
+
+### ImageAugmenter
+
+图像增强器，用于训练数据的增强。
+
+```python
+from visionframework.utils.data_augmentation import ImageAugmenter, AugmentationConfig, AugmentationType
+
+config = AugmentationConfig(
+    augmentations=[
+        AugmentationType.FLIP,
+        AugmentationType.ROTATE,
+        AugmentationType.BRIGHTNESS,
+        AugmentationType.CONTRAST
+    ],
+    flip_prob=0.5,
+    rotate_range=(-15, 15),
+    brightness_range=(0.8, 1.2)
+)
+
+augmenter = ImageAugmenter(config)
+augmented_image = augmenter.augment(image)
+```
+
+## 轨迹分析工具
+
+### TrajectoryAnalyzer
+
+轨迹分析器，用于分析目标轨迹。
+
+```python
+from visionframework.utils import TrajectoryAnalyzer
+from visionframework import Track
+
+analyzer = TrajectoryAnalyzer(fps=30.0, pixel_to_meter=0.1)
+
+# 计算速度
+speed_x, speed_y = analyzer.calculate_speed(track, use_real_world=True)
+
+# 计算方向
+direction = analyzer.calculate_direction(track)
+
+# 预测未来位置
+future_pos = analyzer.predict_future_position(track, frames_ahead=10)
+
+# 计算轨迹统计
+stats = analyzer.analyze_trajectory(track)
+```
+
 ## 异常类
 
 ### VisionFrameworkError
@@ -904,7 +1313,7 @@ config = {
 ### 基本检测
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 import cv2
 
 # 初始化管道
@@ -933,7 +1342,7 @@ cv2.waitKey(0)
 ### 带跟踪的视频处理
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 
 # 初始化带跟踪的管道
 pipeline = VisionPipeline.with_tracking({
@@ -956,7 +1365,7 @@ pipeline.process_video(
 ### 简化API
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 import cv2
 
 # 使用静态方法快速处理
@@ -986,15 +1395,13 @@ cv2.waitKey(0)
 ### SAM分割示例
 
 ```python
-from visionframework.core.detector import Detector
+from visionframework import YOLODetector
 import cv2
 
 # 初始化带SAM分割器的检测器
-detector = Detector({
+detector = YOLODetector({
     "model_path": "yolov8n.pt",
     "conf_threshold": 0.3,
-    "segmenter_type": "sam",
-    "sam_model_type": "vit_b",
     "device": "cuda"
 })
 detector.initialize()
@@ -1004,18 +1411,11 @@ image = cv2.imread("test.jpg")
 
 # 检测+分割联合推理
 detections = detector.detect(image)
-print(f"检测到 {len(detections)} 个目标，其中 {sum(1 for d in detections if hasattr(d, 'mask') and d.mask is not None)} 个带有分割掩码")
+print(f"检测到 {len(detections)} 个目标")
 
-# 绘制带有掩码的检测结果
+# 绘制检测结果
 result = image.copy()
 for det in detections:
-    if hasattr(det, 'mask') and det.mask is not None:
-        # 绘制掩码
-        mask = det.mask.astype(np.uint8) * 255
-        colored_mask = np.zeros_like(image)
-        colored_mask[mask > 128] = (0, 255, 0)
-        result = cv2.addWeighted(result, 0.7, colored_mask, 0.3, 0)
-    
     # 绘制边界框和标签
     x1, y1, x2, y2 = det.bbox
     cv2.rectangle(result, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
@@ -1023,13 +1423,13 @@ for det in detections:
                 (int(x1), int(y1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
 # 保存结果
-cv2.imwrite("sam_segmentation_result.jpg", result)
+cv2.imwrite("detection_result.jpg", result)
 ```
 
 ### CLIP零样本分类示例
 
 ```python
-from visionframework.core.clip import CLIPExtractor
+from visionframework import CLIPExtractor
 import cv2
 
 # 初始化CLIP提取器
@@ -1054,7 +1454,7 @@ for label, score in zip(candidate_labels, scores):
 ### 姿态估计示例
 
 ```python
-from visionframework.core.pose_estimator import PoseEstimator
+from visionframework import PoseEstimator
 import cv2
 
 # 初始化姿态估计器（使用MediaPipe）
@@ -1088,7 +1488,7 @@ cv2.imwrite("pose_estimation_result.jpg", result)
 ### 批量处理优化示例
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 import cv2
 import numpy as np
 
@@ -1149,7 +1549,7 @@ for image in images:
 ### ReID跟踪示例
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 import cv2
 
 # 初始化带ReID跟踪的管道
@@ -1176,7 +1576,7 @@ pipeline.process_video(
 ### PyAV视频处理示例
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 
 # 初始化管道
 pipeline = VisionPipeline({

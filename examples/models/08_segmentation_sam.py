@@ -17,7 +17,7 @@ import argparse
 import cv2
 import numpy as np
 from typing import List
-from visionframework import Detector, SAMSegmenter, VisionFrameworkError
+from visionframework import Detector, SAMSegmenter, VisionFrameworkError, Visualizer, Detection
 
 
 def parse_args():
@@ -35,9 +35,6 @@ def parse_args():
 
 def draw_masks(frame: np.ndarray, masks: List[dict], alpha: float = 0.5) -> np.ndarray:
     """Draw segmentation masks on the frame"""
-    from visionframework import Visualizer
-    from visionframework.data.detection import Detection
-    
     # Convert masks to Detection objects
     detections = []
     for i, mask in enumerate(masks):
@@ -62,7 +59,6 @@ def draw_masks(frame: np.ndarray, masks: List[dict], alpha: float = 0.5) -> np.n
 
 def draw_detections_with_masks(frame: np.ndarray, detections: List, alpha: float = 0.5) -> np.ndarray:
     """Draw detections with segmentation masks"""
-    from visionframework import Visualizer
     viz = Visualizer()
     # Use the integrated Visualizer to draw detections with masks
     return viz.draw_detections(frame, detections)

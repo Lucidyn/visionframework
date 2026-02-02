@@ -3,7 +3,7 @@
 """
 
 import json
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 
 
 def test_config_loading():
@@ -13,7 +13,8 @@ def test_config_loading():
     print("=== 测试配置文件加载 ===")
     
     # 加载配置文件
-    config_path = "examples/my_config.json"
+    import os
+    config_path = os.path.join("examples", "config", "my_config.json")
     with open(config_path, 'r', encoding='utf-8') as f:
         config = json.load(f)
     print(f"✓ 配置文件加载成功: {config_path}")
@@ -37,7 +38,8 @@ def test_pipeline_initialization():
     
     try:
         # 加载配置文件
-        config_path = "examples/my_config.json"
+        import os
+        config_path = os.path.join("examples", "config", "my_config.json")
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         
@@ -59,5 +61,5 @@ def test_pipeline_initialization():
 
 if __name__ == "__main__":
     config = test_config_loading()
-    test_pipeline_initialization(config)
+    test_pipeline_initialization()
     print("\n=== 测试完成 ===")

@@ -54,8 +54,9 @@ def test_performance_monitor_record_component_time():
     assert len(monitor.component_times["visualization"]) == 1
     
     # 测试记录无效组件时间（应该被忽略）
+    initial_component_count = len(monitor.component_times)
     monitor.record_component_time("invalid_component", 0.999)
-    assert len(monitor.component_times) == 6  # 不应该增加新的组件，默认有6个组件
+    assert len(monitor.component_times) == initial_component_count  # 不应该增加新的组件
 
 
 def test_performance_monitor_get_metrics():

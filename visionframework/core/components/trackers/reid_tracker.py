@@ -6,11 +6,11 @@ import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from scipy.spatial.distance import cdist
 from .base_tracker import BaseTracker
-from ...data.track import STrack
-from ...data.detection import Detection
-from ..processors.reid_extractor import ReIDExtractor
-from ...utils.monitoring.logger import get_logger
-from ...utils.io.config import Config
+from visionframework.data.track import STrack
+from visionframework.data.detection import Detection
+from visionframework.core.components.processors.reid_extractor import ReIDExtractor
+from visionframework.utils.monitoring.logger import get_logger
+from visionframework.utils.io.config_models import Config
 
 logger = get_logger(__name__)
 

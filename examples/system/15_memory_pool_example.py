@@ -20,8 +20,8 @@ import time
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from visionframework.utils.memory.memory_manager import MemoryManager, MemoryPool
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
+from visionframework.utils import MemoryManager, MemoryPool
 
 
 def test_basic_memory_pool():

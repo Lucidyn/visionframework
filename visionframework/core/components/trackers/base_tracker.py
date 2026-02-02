@@ -3,9 +3,9 @@ Base tracker interface
 """
 
 from typing import List, Dict, Any, Optional, Tuple
-from ..base import BaseModule
-from ...data.detection import Detection
-from ...data.track import Track
+from visionframework.core.base import BaseModule
+from visionframework.data.detection import Detection
+from visionframework.data.track import Track
 
 
 class BaseTracker(BaseModule):

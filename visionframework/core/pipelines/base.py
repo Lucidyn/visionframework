@@ -73,9 +73,7 @@ class BasePipeline(BaseModule):
             # Initialize performance monitor if enabled
             if self.config.get("enable_performance_monitoring", False):
                 logger.info("Initializing performance monitor...")
-                self.performance_monitor = PerformanceMonitor(
-                    metrics=self.config.get("performance_metrics", [])
-                )
+                self.performance_monitor = PerformanceMonitor()
             
             # Initialize memory pools
             self._initialize_memory_pools()

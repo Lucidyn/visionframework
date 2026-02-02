@@ -22,12 +22,11 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from visionframework.core.plugin_system import (
+from visionframework import (
     register_detector, register_tracker, register_model,
-    plugin_registry, model_registry
+    plugin_registry, model_registry,
+    VisionPipeline, Detection
 )
-from visionframework.core.pipeline import VisionPipeline
-from visionframework.data.detection import Detection
 
 
 # 1. 注册自定义检测器

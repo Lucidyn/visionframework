@@ -6,8 +6,8 @@ ByteTrack: Multi-Object Tracking by Associating Every Detection Box
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from .base_tracker import BaseTracker
-from ...data.track import STrack
-from ...data.detection import Detection
+from visionframework.data.track import STrack
+from visionframework.data.detection import Detection
 
 try:
     from scipy.optimize import linear_sum_assignment

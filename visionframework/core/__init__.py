@@ -70,6 +70,9 @@ def __getattr__(name):
     elif name == "ReIDExtractor":
         from .components.processors.reid_extractor import ReIDExtractor
         return ReIDExtractor
+    elif name == "PoseEstimator":
+        from .components.processors.pose_estimator import PoseEstimator
+        return PoseEstimator
     
     # Plugin system
     elif name == "plugin_registry":
@@ -136,6 +139,7 @@ __all__ = [
     "ReIDTracker",
     "CLIPExtractor",
     "ReIDExtractor",
+    "PoseEstimator",
     
     # Plugin system
     "plugin_registry",

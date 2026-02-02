@@ -58,9 +58,7 @@ def create_test_video(output_path, duration=3, fps=30, width=640, height=480):
 
 def frame_callback(frame, frame_number, results):
     """帧回调函数：绘制检测和跟踪结果"""
-    from visionframework import Visualizer
-    from visionframework.data.detection import Detection
-    from visionframework.data.track import Track
+    from visionframework import Visualizer, Detection, Track
     
     # Convert results to Detection and Track objects
     detections = []

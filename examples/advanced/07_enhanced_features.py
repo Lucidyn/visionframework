@@ -18,10 +18,8 @@ import argparse
 import cv2
 import numpy as np
 from typing import List
-from visionframework.core.pipeline import VisionPipeline
-from visionframework.data.track import Track
-from visionframework.utils.monitoring.performance import PerformanceMonitor
-from visionframework.exceptions import VisionFrameworkError
+from visionframework import VisionPipeline, Track, Visualizer, VisionFrameworkError
+from visionframework.utils import PerformanceMonitor
 
 
 def parse_args():
@@ -78,8 +76,6 @@ def setup_performance_monitor():
 
 def draw_analysis_results(frame: np.ndarray, tracks: List[Track], pipeline: VisionPipeline):
     """Draw trajectory analysis results on frame"""
-    from visionframework import Visualizer
-    
     # Use the integrated Visualizer to draw tracks
     viz = Visualizer()
     frame = viz.draw_tracks(frame, tracks, draw_history=True)

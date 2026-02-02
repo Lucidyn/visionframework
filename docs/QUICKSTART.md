@@ -61,7 +61,7 @@
 ### 示例 1: 基本目标检测
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 import cv2
 
 # 使用配置字典初始化管道
@@ -90,7 +90,7 @@ cv2.destroyAllWindows()
 ### 示例 2: 简化 API
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 import cv2
 import numpy as np
 
@@ -114,7 +114,7 @@ cv2.waitKey(0)
 ### 示例 3: 视频处理
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 
 # 使用配置字典处理视频文件
 pipeline = VisionPipeline({
@@ -129,7 +129,7 @@ VisionPipeline.run_video("input.mp4", "output.mp4", model_path="yolov8n.pt")
 ### 示例 4: 视频流处理
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 
 # 使用配置字典处理 RTSP 流
 pipeline = VisionPipeline({
@@ -144,7 +144,7 @@ VisionPipeline.run_video("rtsp://example.com/stream", "output.mp4", model_path="
 ### 示例 5: 姿态估计
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline, Visualizer
 import cv2
 
 # 初始化带姿态估计的管道
@@ -161,7 +161,6 @@ image = cv2.imread("person.jpg")
 results = pipeline.process(image)
 
 # 绘制姿态关键点和骨骼
-from visionframework.utils.visualization import Visualizer
 viz = Visualizer()
 result_image = viz.draw_poses(image.copy(), results["poses"])
 
@@ -174,7 +173,7 @@ cv2.destroyAllWindows()
 ### 示例 6: 批处理（提高性能）
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 import cv2
 import numpy as np
 
@@ -182,7 +181,7 @@ import numpy as np
 pipeline = VisionPipeline({
     "detector_config": {
         "model_path": "yolov8n.pt",
-        "batch_inference": True
+        "batch_inference": True  # 启用批量推理
     }
 })
 
@@ -194,18 +193,25 @@ images = [
     cv2.imread("image4.jpg")
 ]
 
-# 批处理图像
-results = pipeline.process_batch(images)
+# 批处理图像，支持多种优化选项
+results = pipeline.process_batch(
+    images,
+    max_batch_size=4,  # 最大批处理大小
+    use_parallel=True,  # 启用并行处理
+    max_workers=4,  # 工作线程数
+    enable_memory_optimization=True  # 启用内存优化
+)
 
 # 处理结果
 for i, result in enumerate(results):
-    print(f"Image {i+1}: {len(result['detections'])} detections")
+    print(f"Image {i+1}: {len(result['detections'])} detections, "
+          f"处理时间: {result['processing_time']:.4f}秒")
 ```
 
 ### 示例 7: SAM 分割
 
 ```python
-from visionframework.core.segmenters.sam_segmenter import SAMSegmenter
+from visionframework import SAMSegmenter, Visualizer
 import cv2
 
 # 初始化 SAM 分割器
@@ -219,7 +225,6 @@ image = cv2.imread("object.jpg")
 results = segmenter.segment(image)
 
 # 绘制分割结果
-from visionframework.utils.visualization import Visualizer
 viz = Visualizer()
 result_image = viz.draw_segmentations(image.copy(), results)
 
@@ -232,7 +237,7 @@ cv2.destroyAllWindows()
 ### 示例 8: CLIP 特征
 
 ```python
-from visionframework.core.processors.clip_extractor import CLIPExtractor
+from visionframework import CLIPExtractor
 import cv2
 
 # 初始化 CLIP 提取器
@@ -257,7 +262,7 @@ for text, sim in zip(texts, similarities):
 ### 示例 9: PyAV 视频处理
 
 ```python
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 
 # 使用配置字典处理视频文件（使用PyAV）
 pipeline = VisionPipeline({
@@ -268,17 +273,37 @@ pipeline.process_video("input.mp4", "output.mp4", use_pyav=True)
 # 处理RTSP流（使用PyAV）
 pipeline.process_video("rtsp://example.com/stream", "output_rtsp.mp4", use_pyav=True)
 
+# 批量处理视频（使用PyAV，提高性能）
+pipeline.process_video_batch(
+    "input.mp4",
+    "output_batch.mp4",
+    batch_size=16,  # 每批处理16帧
+    use_pyav=True
+)
+
 # 或者使用静态方法（使用PyAV）
 VisionPipeline.run_video("input.mp4", "output.mp4", model_path="yolov8n.pt", use_pyav=True)
 
 # 使用静态方法处理RTSP流（使用PyAV）
 VisionPipeline.run_video("rtsp://example.com/stream", "output_rtsp.mp4", model_path="yolov8n.pt", use_pyav=True)
+
+# 使用简化API处理视频（支持批处理和PyAV）
+from visionframework import process_video
+
+process_video(
+    "input.mp4",
+    "output.mp4",
+    model_path="yolov8n.pt",
+    enable_tracking=True,
+    batch_size=8,  # 启用批处理
+    use_pyav=True  # 使用PyAV后端
+)
 ```
 
 ### 示例 10: 内存池管理
 
 ```python
-from visionframework.utils.memory.memory_manager import MemoryManager
+from visionframework.utils.memory import MemoryManager
 import numpy as np
 import cv2
 
@@ -320,11 +345,10 @@ print(f"内存池统计信息: {stats}")
 ### 示例 11: 插件系统
 
 ```python
-from visionframework.core.plugin_system import (
+from visionframework import (
     register_detector, register_tracker, plugin_registry,
-    register_segmenter, register_model
+    VisionPipeline, Detection
 )
-from visionframework.core.pipeline import VisionPipeline
 import cv2
 import numpy as np
 
@@ -341,7 +365,6 @@ class SimpleDetector:
     
     def detect(self, image):
         # 简单的检测实现
-        from visionframework.data.detection import Detection
         detections = []
         # 模拟检测结果
         height, width = image.shape[:2]
@@ -401,7 +424,7 @@ for detection in results['detections']:
 ### 示例 12: 统一错误处理
 
 ```python
-from visionframework.utils.error_handling import ErrorHandler
+from visionframework.utils import ErrorHandler
 
 # 创建错误处理器
 handler = ErrorHandler()
@@ -466,7 +489,7 @@ print(f"格式化的错误消息: {error_message}")
 ### 示例 13: 依赖管理
 
 ```python
-from visionframework.utils.dependency_manager import (
+from visionframework.utils import (
     DependencyManager, is_dependency_available, 
     import_optional_dependency, get_available_dependencies,
     get_missing_dependencies
@@ -549,6 +572,87 @@ python examples/system/16_error_handling_example.py
 
 # 运行依赖管理示例
 python examples/system/17_dependency_management_example.py
+```
+
+### 示例 14: 轨迹分析
+
+```python
+from visionframework import VisionPipeline
+from visionframework.utils import TrajectoryAnalyzer
+import cv2
+
+# 初始化带跟踪的管道
+pipeline = VisionPipeline({
+    "detector_config": {"model_path": "yolov8n.pt"},
+    "enable_tracking": True
+})
+
+# 创建轨迹分析器
+analyzer = TrajectoryAnalyzer(fps=30.0, pixel_to_meter=0.1)
+
+# 处理视频并分析轨迹
+cap = cv2.VideoCapture("input.mp4")
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+    
+    results = pipeline.process(frame)
+    
+    # 分析每个跟踪目标的轨迹
+    for track in results["tracks"]:
+        # 计算速度
+        speed_x, speed_y = analyzer.calculate_speed(track, use_real_world=True)
+        print(f"Track {track.track_id}: Speed = ({speed_x:.2f}, {speed_y:.2f}) m/s")
+        
+        # 计算方向
+        direction = analyzer.calculate_direction(track)
+        print(f"Track {track.track_id}: Direction = {direction:.2f} degrees")
+        
+        # 预测未来位置
+        if len(track.history) >= 5:
+            future_pos = analyzer.predict_future_position(track, frames_ahead=10)
+            print(f"Track {track.track_id}: Predicted position = {future_pos}")
+
+cap.release()
+```
+
+### 示例 15: 数据增强
+
+```python
+from visionframework.utils.data_augmentation import ImageAugmenter, AugmentationConfig, AugmentationType
+import cv2
+
+# 创建增强配置
+config = AugmentationConfig(
+    augmentations=[
+        AugmentationType.FLIP,
+        AugmentationType.ROTATE,
+        AugmentationType.BRIGHTNESS,
+        AugmentationType.CONTRAST,
+        AugmentationType.BLUR
+    ],
+    flip_prob=0.5,
+    rotate_range=(-15, 15),
+    brightness_range=(0.8, 1.2),
+    contrast_range=(0.8, 1.2)
+)
+
+# 创建增强器
+augmenter = ImageAugmenter(config)
+
+# 加载图像
+image = cv2.imread("train_image.jpg")
+
+# 增强图像
+augmented_image = augmenter.augment(image)
+
+# 批量增强
+images = [cv2.imread(f"image_{i}.jpg") for i in range(10)]
+augmented_images = augmenter.augment_batch(images)
+
+# 保存增强后的图像
+cv2.imwrite("augmented_image.jpg", augmented_image)
 ```
 
 ## 下一步

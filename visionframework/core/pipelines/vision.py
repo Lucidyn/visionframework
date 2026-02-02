@@ -234,12 +234,16 @@ class VisionPipeline(BasePipeline):
             logger.error(f"Error during pipeline processing: {e}")
             return {"detections": [], "tracks": [], "poses": []}
     
-    def process_batch(self, images: List[np.ndarray]) -> List[Dict[str, Any]]:
+    def process_batch(self, images: List[np.ndarray], max_batch_size: Optional[int] = None, use_parallel: bool = False, max_workers: Optional[int] = None, enable_memory_optimization: bool = True) -> List[Dict[str, Any]]:
         """
         Process multiple images in batch
         
         Args:
             images: List of input images
+            max_batch_size: Maximum batch size for processing. If None, use all images in one batch.
+            use_parallel: Whether to use parallel processing for individual images
+            max_workers: Maximum number of workers for parallel processing
+            enable_memory_optimization: Whether to enable memory optimization techniques
         
         Returns:
             List[Dict[str, Any]]: List of processing results
@@ -247,7 +251,7 @@ class VisionPipeline(BasePipeline):
         from .batch import BatchPipeline
         batch_pipeline = BatchPipeline(self.config)
         batch_pipeline.initialize()
-        return batch_pipeline.process_batch(images)
+        return batch_pipeline.process_batch(images, max_batch_size=max_batch_size, use_parallel=use_parallel, max_workers=max_workers, enable_memory_optimization=enable_memory_optimization)
     
     def process_video(self, input_source: Any, output_path: Optional[str] = None) -> bool:
         """
@@ -264,6 +268,51 @@ class VisionPipeline(BasePipeline):
         video_pipeline = VideoPipeline(self.config)
         video_pipeline.initialize()
         return video_pipeline.process_video(input_source, output_path)
+    
+    def process_video_batch(
+        self, 
+        input_source: Union[str, int], 
+        output_path: Optional[str] = None, 
+        start_frame: int = 0, 
+        end_frame: Optional[int] = None, 
+        batch_size: int = 8,
+        skip_frames: int = 0,
+        frame_callback: Optional[Callable[[np.ndarray, int, Dict[str, Any]], np.ndarray]] = None,
+        progress_callback: Optional[Callable[[float, int, int], None]] = None,
+        use_pyav: bool = False
+    ) -> bool:
+        """
+        Process video file, camera stream, or video stream with batch processing for improved performance
+        
+        Args:
+            input_source: Path to video file, video stream URL, or camera index (0 for default webcam)
+            output_path: Optional path to save processed video. If None, video is not saved.
+            start_frame: Start frame number (default: 0)
+            end_frame: End frame number (None for all frames, useful for video files only)
+            batch_size: Number of frames to process in each batch (default: 8)
+            skip_frames: Number of frames to skip between processing (default: 0)
+            frame_callback: Optional callback function(frame, frame_number, results) -> processed_frame
+            progress_callback: Optional callback function(progress, current_frame, total_frames) -> None
+            use_pyav: Whether to use PyAV for video processing (default: False)
+        
+        Returns:
+            bool: True if processing completed successfully, False otherwise
+        """
+        from .video import VideoPipeline
+        video_pipeline = VideoPipeline(self.config)
+        video_pipeline.initialize()
+        # VideoPipeline.process_video supports batch_size parameter
+        return video_pipeline.process_video(
+            input_source, 
+            output_path, 
+            batch_size=batch_size,
+            use_pyav=use_pyav,
+            start_frame=start_frame,
+            end_frame=end_frame,
+            skip_frames=skip_frames,
+            frame_callback=frame_callback,
+            progress_callback=progress_callback
+        )
     
     def reset(self) -> None:
         """

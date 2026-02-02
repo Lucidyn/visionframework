@@ -5,8 +5,8 @@ IoU-based tracker implementation
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from .base_tracker import BaseTracker
-from ...data.detection import Detection
-from ...data.track import Track
+from visionframework.data.detection import Detection
+from visionframework.data.track import Track
 
 try:
     from scipy.optimize import linear_sum_assignment

@@ -4,7 +4,7 @@
 
 import pytest
 import numpy as np
-from visionframework.core.pipelines import VisionPipeline
+from visionframework import VisionPipeline
 
 
 def test_vision_pipeline_initialization():

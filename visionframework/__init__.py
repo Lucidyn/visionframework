@@ -2,9 +2,12 @@
 Vision Framework - A comprehensive computer vision framework
 """
 
+# Version
+__version__ = "0.1.0"
+
 from .api import (
     # Core functionality
-    Detector, Tracker, VisionPipeline,
+    BaseDetector, BaseTracker, VisionPipeline,
     ROIDetector, Counter,
     SAMSegmenter,
     
@@ -40,19 +43,16 @@ from .api import (
     
     # Simplified API functions
     create_detector, create_pipeline,
-    process_image, create_visualizer,
+    process_image, process_video, create_visualizer,
     
     # Pipeline classes
-    BasePipeline, BatchPipeline,
-    
-    # Version
-    __version__
+    BasePipeline, BatchPipeline, VideoPipeline
 )
 
 # Export all symbols
 __all__ = [
     # Core functionality
-    "Detector", "Tracker", "VisionPipeline",
+    "BaseDetector", "BaseTracker", "VisionPipeline",
     "ROIDetector", "Counter",
     "SAMSegmenter",
     

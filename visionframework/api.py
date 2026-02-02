@@ -11,7 +11,7 @@ import numpy as np
 # Core functionality, processors, implementations, and plugin system
 from .core import (
     # Core classes
-    Detector, Tracker, VisionPipeline,
+    BaseDetector, BaseTracker, VisionPipeline,
     ROIDetector, Counter, SAMSegmenter,
     
     # Processors
@@ -60,9 +60,6 @@ from .exceptions import (
     ProcessingError
 )
 
-# Version
-from . import __version__
-
 
 # Simplified API functions
 def create_detector(
@@ -71,7 +68,7 @@ def create_detector(
     device: str = "auto",
     conf_threshold: float = 0.25,
     **kwargs
-) -> Detector:
+) -> BaseDetector:
     """
     Create a detector with simplified parameters
     
@@ -94,16 +91,13 @@ def create_detector(
     }
     
     if model_type == "yolo":
-        from .core import YOLODetector
         detector = YOLODetector(config)
     elif model_type == "detr":
-        from .core import DETRDetector
         detector = DETRDetector(config)
     elif model_type == "rfdetr":
-        from .core import RFDETRDetector
         detector = RFDETRDetector(config)
     else:
-        detector = Detector(config)
+        detector = BaseDetector(config)
     
     detector.initialize()
     return detector
@@ -249,8 +243,8 @@ def create_visualizer(
 # Export all symbols to make them available directly from visionframework.api
 __all__ = [
     # Core
-    "Detector",
-    "Tracker",
+    "BaseDetector",
+    "BaseTracker",
     "VisionPipeline",
     "ROIDetector",
     "Counter",
@@ -327,5 +321,5 @@ __all__ = [
     "create_visualizer",
     
     # Version
-    "__version__",
+    # "__version__",  # Defined in visionframework/__init__.py
 ]

@@ -15,8 +15,8 @@ except ImportError:
     YOLO_AVAILABLE = False
 
 from .feature_extractor import FeatureExtractor
-from ...data.pose import Pose, KeyPoint
-from ...utils.monitoring.logger import get_logger
+from visionframework.data.pose import Pose, KeyPoint
+from visionframework.utils.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 

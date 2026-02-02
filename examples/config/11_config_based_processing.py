@@ -8,8 +8,7 @@
 import json
 import cv2
 import numpy as np
-from visionframework.core.pipeline import VisionPipeline
-from visionframework.utils.visualization import Visualizer
+from visionframework import VisionPipeline, Visualizer
 
 
 def load_config(config_path):

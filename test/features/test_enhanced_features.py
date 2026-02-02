@@ -11,7 +11,7 @@ from types import ModuleType
 from visionframework.core.plugin_system import PluginRegistry, ModelRegistry, register_detector, register_tracker
 from visionframework.utils.dependency_manager import DependencyManager, is_dependency_available, import_optional_dependency
 from visionframework.utils.error_handling import ErrorHandler
-from visionframework.core.pipeline import VisionPipeline
+from visionframework import VisionPipeline
 from visionframework.utils.monitoring.logger import get_logger
 import numpy as np
 import cv2

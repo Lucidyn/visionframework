@@ -24,8 +24,7 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from visionframework import VisionPipeline, Visualizer
-from visionframework.utils.error_handling import ErrorHandler
-from visionframework.utils.dependency_manager import is_dependency_available, validate_dependency
+from visionframework.utils import ErrorHandler, is_dependency_available, validate_dependency
 
 
 def main():

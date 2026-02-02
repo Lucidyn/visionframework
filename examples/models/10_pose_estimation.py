@@ -18,7 +18,7 @@ import argparse
 import cv2
 import numpy as np
 from typing import List, Dict, Any
-from visionframework import PoseEstimator, VisionFrameworkError
+from visionframework import PoseEstimator, VisionFrameworkError, Visualizer, Pose
 
 
 def parse_args():
@@ -39,9 +39,6 @@ def parse_args():
 
 def draw_poses(frame: np.ndarray, poses: List[Dict[str, Any]], model_type: str) -> np.ndarray:
     """Draw pose keypoints and connections on the frame"""
-    from visionframework import Visualizer
-    from visionframework.data.pose import Pose
-    
     # Convert poses to Pose objects
     pose_objects = []
     for i, pose_data in enumerate(poses):
