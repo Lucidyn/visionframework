@@ -17,8 +17,7 @@ import argparse
 import cv2
 import numpy as np
 from typing import List, Tuple
-from visionframework.core.clip import CLIPExtractor
-from visionframework.exceptions import VisionFrameworkError
+from visionframework import CLIPExtractor, VisionFrameworkError
 
 
 def parse_args():

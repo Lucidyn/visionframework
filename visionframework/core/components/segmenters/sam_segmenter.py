@@ -8,10 +8,10 @@ It supports both automatic segmentation and interactive segmentation with prompt
 
 from typing import List, Optional, Tuple, Any, Dict
 import numpy as np
-from ..base import BaseModule
-from ...data.detection import Detection
-from ...utils.monitoring.logger import get_logger
-from ...utils.io.config_models import ModelCache
+from visionframework.core.base import BaseModule
+from visionframework.data.detection import Detection
+from visionframework.utils.monitoring.logger import get_logger
+from visionframework.utils.io.config_models import ModelCache
 
 logger = get_logger(__name__)
 

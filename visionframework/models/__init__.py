@@ -56,6 +56,26 @@ class ModelManager:
         "fasterrcnn": {
             "base_url": "https://download.pytorch.org/models/",
             "file_extension": ".pth"
+        },
+        "clip": {
+            "base_url": "https://openaipublic.azureedge.net/clip/models/",
+            "file_extension": ".pt"
+        },
+        "detr": {
+            "base_url": "https://dl.fbaipublicfiles.com/detr/",
+            "file_extension": ".pth"
+        },
+        "sam": {
+            "base_url": "https://dl.fbaipublicfiles.com/segment_anything/",
+            "file_extension": ".pth"
+        },
+        "reid": {
+            "base_url": "https://github.com/michuanhaohao/reid-strong-baseline/releases/download/v1.0/",
+            "file_extension": ".pth"
+        },
+        "face": {
+            "base_url": "https://github.com/deepinsight/insightface/releases/download/v0.1/",
+            "file_extension": ".pth"
         }
     }
     
@@ -116,6 +136,105 @@ class ModelManager:
             self.register_model(
                 name=model_name,
                 source="fasterrcnn",
+                config={"file_name": f"{model_name}.pth"}
+            )
+        
+        # Register CLIP models
+        clip_models = [
+            "clip-vit-base-patch32",
+            "clip-vit-base-patch16",
+            "clip-vit-large-patch14"
+        ]
+        
+        for model_name in clip_models:
+            self.register_model(
+                name=model_name,
+                source="clip",
+                config={"file_name": f"{model_name}.pt"}
+            )
+        
+        # Register DETR models
+        detr_models = [
+            "detr-resnet50",
+            "detr-resnet101",
+            "detr-resnet50-dc5",
+            "detr-resnet101-dc5"
+        ]
+        
+        for model_name in detr_models:
+            self.register_model(
+                name=model_name,
+                source="detr",
+                config={"file_name": f"{model_name}.pth"}
+            )
+        
+        # Register RFDETR models
+        rfdetr_models = [
+            "rfdetr-resnet50",
+            "rfdetr-resnet101"
+        ]
+        
+        for model_name in rfdetr_models:
+            self.register_model(
+                name=model_name,
+                source="detr",
+                config={"file_name": f"{model_name}.pth"}
+            )
+        
+        # Register SAM models
+        sam_models = [
+            "sam-vit-base",
+            "sam-vit-large",
+            "sam-vit-huge"
+        ]
+        
+        for model_name in sam_models:
+            self.register_model(
+                name=model_name,
+                source="sam",
+                config={"file_name": f"{model_name}.pth"}
+            )
+        
+        # Register pose estimation models
+        pose_models = [
+            "yolov8n-pose",
+            "yolov8s-pose",
+            "yolov8m-pose",
+            "yolov8l-pose",
+            "yolov8x-pose"
+        ]
+        
+        for model_name in pose_models:
+            self.register_model(
+                name=model_name,
+                source="yolo",
+                config={"file_name": f"{model_name}.pt"}
+            )
+        
+        # Register ReID models
+        reid_models = [
+            "reid-resnet50",
+            "reid-resnet101",
+            "reid-ibn-resnet50"
+        ]
+        
+        for model_name in reid_models:
+            self.register_model(
+                name=model_name,
+                source="reid",
+                config={"file_name": f"{model_name}.pth"}
+            )
+        
+        # Register face recognition models
+        face_models = [
+            "arcface-r100",
+            "arcface-r50"
+        ]
+        
+        for model_name in face_models:
+            self.register_model(
+                name=model_name,
+                source="face",
                 config={"file_name": f"{model_name}.pth"}
             )
     
@@ -353,6 +472,50 @@ class ModelManager:
                     return models.detection.fasterrcnn_mobilenet_v3_small_fpn(pretrained=False)
                 else:
                     raise ValueError(f"Unknown Faster R-CNN model: {name}")
+            elif source == "clip":
+                # CLIP model loading
+                import torch
+                import clip
+                model, preprocess = clip.load(str(model_path), device="cpu")
+                return {"model": model, "preprocess": preprocess}
+            elif source == "detr":
+                # DETR model loading
+                import torch
+                from transformers import DetrForObjectDetection
+                
+                # Create model based on name
+                if "rfdetr" in name:
+                    from transformers import RFDetrForObjectDetection
+                    return RFDetrForObjectDetection.from_pretrained("microsoft/rfdetr-resnet50")
+                else:
+                    return DetrForObjectDetection.from_pretrained("facebook/detr-resnet50")
+            elif source == "sam":
+                # SAM model loading
+                import torch
+                from segment_anything import sam_model_registry
+                
+                # Determine model type
+                if "base" in name:
+                    model_type = "vit_b"
+                elif "large" in name:
+                    model_type = "vit_l"
+                elif "huge" in name:
+                    model_type = "vit_h"
+                else:
+                    model_type = "vit_b"
+                
+                model = sam_model_registry[model_type](checkpoint=str(model_path))
+                return model
+            elif source == "reid":
+                # ReID model loading
+                import torch
+                model = torch.load(str(model_path))
+                return model
+            elif source == "face":
+                # Face recognition model loading
+                import torch
+                model = torch.load(str(model_path))
+                return model
             else:
                 raise ValueError(f"Unsupported model source: {source}")
         except Exception as e:
@@ -502,13 +665,11 @@ class ModelManager:
         """
         return list(self._model_registry.keys())
     
-    def download_all_registered_models(self, verify_hash: bool = True, 
-                                      progress: bool = True) -> int:
+    def download_all_registered_models(self, progress: bool = True) -> int:
         """
         Download all registered models.
         
         Args:
-            verify_hash: Verify file hashes after download
             progress: Show progress bars
             
         Returns:
@@ -518,7 +679,7 @@ class ModelManager:
         
         for name in self._model_registry:
             if not self._model_registry[name]["cached"]:
-                if self.get_model_path(name, download=True, verify_hash=verify_hash, progress=progress):
+                if self.get_model_path(name, download=True, progress=progress):
                     downloaded += 1
         
         return downloaded

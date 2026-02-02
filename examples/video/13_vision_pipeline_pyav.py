@@ -58,19 +58,41 @@ def create_test_video(output_path, duration=3, fps=30, width=640, height=480):
 
 def frame_callback(frame, frame_number, results):
     """帧回调函数：绘制检测和跟踪结果"""
-    # 绘制检测结果
-    for detection in results.get('detections', []):
-        x1, y1, x2, y2 = detection['bbox']
-        cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-        cv2.putText(frame, f"{detection['class_name']}: {detection['confidence']:.2f}", 
-                    (int(x1), int(y1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    from visionframework import Visualizer
+    from visionframework.data.detection import Detection
+    from visionframework.data.track import Track
     
-    # 绘制跟踪结果
-    for track in results.get('tracks', []):
-        x1, y1, x2, y2 = track['bbox']
-        cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
-        cv2.putText(frame, f"ID: {track['track_id']}", 
-                    (int(x1), int(y1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+    # Convert results to Detection and Track objects
+    detections = []
+    for det in results.get('detections', []):
+        x1, y1, x2, y2 = det['bbox']
+        detection = Detection(
+            class_id=0,
+            class_name=det['class_name'],
+            confidence=det['confidence'],
+            x=x1,
+            y=y1,
+            width=x2-x1,
+            height=y2-y1
+        )
+        detections.append(detection)
+    
+    tracks = []
+    for trk in results.get('tracks', []):
+        x1, y1, x2, y2 = trk['bbox']
+        track = Track(
+            track_id=trk['track_id'],
+            class_id=0,
+            class_name=trk.get('class_name', 'object'),
+            confidence=trk.get('confidence', 1.0),
+            bbox=[x1, y1, x2, y2],
+            history=[]
+        )
+        tracks.append(track)
+    
+    # Use the integrated Visualizer to draw results
+    viz = Visualizer()
+    frame = viz.draw_results(frame, detections, tracks)
     
     return frame
 

@@ -35,9 +35,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from visionframework.core.detector import Detector
-from visionframework.core.tracker import Tracker
-from visionframework.core.pipeline import VisionPipeline
+# Detector, Tracker, and Pipeline imports are now handled via components
+from visionframework.core import VisionPipeline
 from visionframework.data.detection import Detection
 from visionframework.data.track import Track
 from .export import ResultExporter
@@ -71,8 +70,8 @@ class AutoLabeler:
                 - class_names: 类别名称列表，默认使用检测器自带类别
         """
         self.config = config or {}
-        self.detector: Optional[Detector] = None
-        self.tracker: Optional[Tracker] = None
+        self.detector: Optional[Any] = None
+        self.tracker: Optional[Any] = None
         self.pipeline: Optional[VisionPipeline] = None
         self.exporter: Optional[ResultExporter] = None
         
@@ -97,32 +96,25 @@ class AutoLabeler:
         if self.category_thresholds:
             detector_config["category_thresholds"] = self.category_thresholds
         
-        # 初始化检测器
-        self.detector = Detector(detector_config)
+        # 初始化视觉管道
+        pipeline_config = {
+            "detector_config": detector_config,
+            "enable_tracking": self.enable_tracking
+        }
         
-        if not self.detector.initialize():
-            raise RuntimeError("Failed to initialize detector for auto labeling")
-        
-        # 初始化跟踪器（如果启用）
         if self.enable_tracking:
             tracker_config = self.config.get("tracker_config", {})
-            self.tracker = Tracker(tracker_config)
-            
-            if not self.tracker.initialize():
-                logger.warning("Failed to initialize tracker, disabling tracking")
-                self.enable_tracking = False
-                self.tracker = None
-            else:
-                # 初始化视觉管道
-                pipeline_config = {
-                    "detector_config": detector_config,
-                    "tracker_config": tracker_config,
-                    "enable_tracking": True
-                }
-                self.pipeline = VisionPipeline(pipeline_config)
-                if not self.pipeline.initialize():
-                    logger.warning("Failed to initialize pipeline, using separate detector and tracker")
-                    self.pipeline = None
+            pipeline_config["tracker_config"] = tracker_config
+        
+        self.pipeline = VisionPipeline(pipeline_config)
+        
+        if not self.pipeline.initialize():
+            raise RuntimeError("Failed to initialize pipeline for auto labeling")
+        
+        # 获取检测器和跟踪器实例
+        self.detector = self.pipeline.get_detector()
+        if self.enable_tracking:
+            self.tracker = self.pipeline.get_tracker()
         
         # 初始化结果导出器
         self.exporter = ResultExporter()
@@ -146,7 +138,13 @@ class AutoLabeler:
             raise ValueError(f"无法读取图像: {image_path}")
         
         # 执行检测
-        detections = self.detector.detect(image)
+        if self.pipeline:
+            results = self.pipeline.process(image)
+            detections = results.get("detections", [])
+        elif self.detector:
+            detections = self.detector.detect(image)
+        else:
+            detections = []
         
         # 过滤检测结果（根据类别特定阈值）
         if self.category_thresholds:
@@ -228,19 +226,19 @@ class AutoLabeler:
         def process_frame(frame: np.ndarray, frame_idx: int) -> bool:
             nonlocal all_detections, all_tracks, frame_count
             
-            if self.enable_tracking and self.pipeline:
+            if self.pipeline:
                 # 使用管道进行检测和跟踪
-                tracks = self.pipeline.process(frame)
-                all_tracks.append(tracks)
-            elif self.enable_tracking and self.tracker:
-                # 先检测，再跟踪
-                detections = self.detector.detect(frame)
+                results = self.pipeline.process(frame)
+                detections = results.get("detections", [])
+                tracks = results.get("tracks", [])
+                
                 if self.category_thresholds:
                     detections = self._filter_detections_by_category_threshold(detections)
-                tracks = self.tracker.process(detections, frame)
-                all_tracks.append(tracks)
+                
                 all_detections.append(detections)
-            else:
+                if tracks:
+                    all_tracks.append(tracks)
+            elif self.detector:
                 # 仅检测
                 detections = self.detector.detect(frame)
                 if self.category_thresholds:
@@ -355,7 +353,22 @@ class AutoLabeler:
                 continue
             
             # 执行批量检测
-            batch_detections = self.detector.detect_batch(batch_images)
+            if self.pipeline:
+                batch_results = self.pipeline.process_batch(batch_images)
+                batch_detections = [result.get("detections", []) for result in batch_results]
+            elif self.detector and hasattr(self.detector, 'detect_batch'):
+                batch_detections = self.detector.detect_batch(batch_images)
+            else:
+                # 逐帧处理
+                batch_detections = []
+                for img in batch_images:
+                    if self.pipeline:
+                        results = self.pipeline.process(img)
+                        batch_detections.append(results.get("detections", []))
+                    elif self.detector:
+                        batch_detections.append(self.detector.detect(img))
+                    else:
+                        batch_detections.append([])
             
             # 处理每个图像的检测结果
             for j, (img_path, detections) in enumerate(zip(valid_paths, batch_detections)):

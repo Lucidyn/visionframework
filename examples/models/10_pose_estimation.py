@@ -18,8 +18,7 @@ import argparse
 import cv2
 import numpy as np
 from typing import List, Dict, Any
-from visionframework.core.pose_estimator import PoseEstimator
-from visionframework.exceptions import VisionFrameworkError
+from visionframework import PoseEstimator, VisionFrameworkError
 
 
 def parse_args():
@@ -40,101 +39,47 @@ def parse_args():
 
 def draw_poses(frame: np.ndarray, poses: List[Dict[str, Any]], model_type: str) -> np.ndarray:
     """Draw pose keypoints and connections on the frame"""
-    frame = frame.copy()
-    h, w = frame.shape[:2]
+    from visionframework import Visualizer
+    from visionframework.data.pose import Pose
     
-    # Define keypoint colors based on body parts
-    keypoint_colors = {
-        # Face
-        'nose': (0, 255, 0),
-        'left_eye': (0, 255, 0),
-        'right_eye': (0, 255, 0),
-        'left_ear': (0, 255, 0),
-        'right_ear': (0, 255, 0),
+    # Convert poses to Pose objects
+    pose_objects = []
+    for i, pose_data in enumerate(poses):
+        keypoints = pose_data.get('keypoints', {})
+        confidence = pose_data.get('confidence', 0.0)
         
-        # Torso
-        'left_shoulder': (255, 0, 0),
-        'right_shoulder': (255, 0, 0),
-        'left_elbow': (255, 0, 0),
-        'right_elbow': (255, 0, 0),
-        'left_wrist': (255, 0, 0),
-        'right_wrist': (255, 0, 0),
-        
-        # Lower body
-        'left_hip': (0, 0, 255),
-        'right_hip': (0, 0, 255),
-        'left_knee': (0, 0, 255),
-        'right_knee': (0, 0, 255),
-        'left_ankle': (0, 0, 255),
-        'right_ankle': (0, 0, 255),
-    }
-    
-    # Define connections between keypoints
-    connections = [
-        # Face
-        ('left_eye', 'nose'),
-        ('right_eye', 'nose'),
-        ('left_eye', 'left_ear'),
-        ('right_eye', 'right_ear'),
-        
-        # Torso
-        ('left_shoulder', 'right_shoulder'),
-        ('left_shoulder', 'left_elbow'),
-        ('right_shoulder', 'right_elbow'),
-        ('left_elbow', 'left_wrist'),
-        ('right_elbow', 'right_wrist'),
-        
-        # Body
-        ('left_shoulder', 'left_hip'),
-        ('right_shoulder', 'right_hip'),
-        ('left_hip', 'right_hip'),
-        
-        # Legs
-        ('left_hip', 'left_knee'),
-        ('right_hip', 'right_knee'),
-        ('left_knee', 'left_ankle'),
-        ('right_knee', 'right_ankle'),
-    ]
-    
-    # Draw each pose
-    for i, pose in enumerate(poses):
-        keypoints = pose.get('keypoints', {})
-        confidence = pose.get('confidence', 0.0)
-        
-        # Draw bounding box if available
-        if 'bbox' in pose:
-            x, y, width, height = pose['bbox']
-            cv2.rectangle(frame, (int(x), int(y)), (int(x + width), int(y + height)),
-                        (0, 255, 0), 2, cv2.LINE_AA)
-            
-            # Draw confidence score
-            cv2.putText(frame, f"Pose {i+1}: {confidence:.2f}", 
-                       (int(x), int(y - 10)), cv2.FONT_HERSHEY_SIMPLEX,
-                       0.5, (0, 255, 0), 2, cv2.LINE_AA)
-        
-        # Draw keypoints
+        # Create keypoint dictionary in the format expected by Pose class
+        keypoint_dict = {}
         for kp_name, kp in keypoints.items():
             x, y, conf = kp
-            if conf >= 0.5:  # Only draw keypoints with high confidence
-                color = keypoint_colors.get(kp_name, (255, 255, 255))
-                cv2.circle(frame, (int(x), int(y)), 5, color, -1, cv2.LINE_AA)
-                
-                # Draw keypoint name
-                cv2.putText(frame, kp_name[:3], (int(x) + 10, int(y) + 5),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.3, color, 1, cv2.LINE_AA)
+            keypoint_dict[kp_name] = {
+                'x': x,
+                'y': y,
+                'confidence': conf
+            }
         
-        # Draw connections
-        for conn_start, conn_end in connections:
-            if conn_start in keypoints and conn_end in keypoints:
-                start_x, start_y, start_conf = keypoints[conn_start]
-                end_x, end_y, end_conf = keypoints[conn_end]
-                
-                if start_conf >= 0.5 and end_conf >= 0.5:
-                    color = (255, 255, 0)  # Yellow connections
-                    cv2.line(frame, (int(start_x), int(start_y)),
-                            (int(end_x), int(end_y)), color, 2, cv2.LINE_AA)
+        # Create Pose object
+        pose = Pose(
+            pose_id=i,
+            confidence=confidence,
+            keypoints=keypoint_dict
+        )
+        
+        # Add bounding box if available
+        if 'bbox' in pose_data:
+            x, y, width, height = pose_data['bbox']
+            pose.bbox = {
+                'x': x,
+                'y': y,
+                'width': width,
+                'height': height
+            }
+        
+        pose_objects.append(pose)
     
-    return frame
+    # Use the integrated Visualizer to draw poses
+    viz = Visualizer()
+    return viz.draw_poses(frame, pose_objects, draw_skeleton=True, draw_keypoints=True, draw_bbox=True)
 
 
 def draw_model_info(frame: np.ndarray, model_type: str, device: str) -> np.ndarray:

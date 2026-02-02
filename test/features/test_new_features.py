@@ -86,7 +86,7 @@ def test_clip_extractor():
     print(f"\n=== {test_name} ===")
     
     try:
-        from visionframework.core.clip import CLIPExtractor
+        from visionframework.core.components.processors.clip_extractor import CLIPExtractor
         
         # 创建测试图像
         test_image = np.zeros((224, 224, 3), dtype=np.uint8)
@@ -146,7 +146,7 @@ def test_pose_estimator():
     print(f"\n=== {test_name} ===")
     
     try:
-        from visionframework.core.pose_estimator import PoseEstimator
+        from visionframework.core.components.processors.pose_estimator import PoseEstimator
         
         # 创建测试图像（一个简单的人形轮廓）
         test_image = np.zeros((400, 300, 3), dtype=np.uint8)
@@ -210,16 +210,15 @@ def test_detector_sam_integration():
     print(f"\n=== {test_name} ===")
     
     try:
-        from visionframework.core.detector import Detector
+        from visionframework.core.components.detectors.yolo_detector import YOLODetector
         
         # 创建测试图像
         test_image = np.zeros((400, 400, 3), dtype=np.uint8)
         cv2.rectangle(test_image, (100, 100), (300, 300), (255, 255, 255), -1)
         
         # 初始化带SAM的检测器
-        detector = Detector({
+        detector = YOLODetector({
             "model_path": "yolov8n.pt",
-            "model_type": "yolo",
             "conf_threshold": 0.1,
             "device": "cpu",
             "segmenter_type": "sam",

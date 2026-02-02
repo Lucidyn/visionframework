@@ -8,8 +8,8 @@ All detectors must inherit from BaseDetector and implement the detect() method.
 from abc import ABC, abstractmethod
 from typing import List, Optional, Union
 import numpy as np
-from ...data.detection import Detection
-from ..base import BaseModule
+from visionframework.core.base import BaseModule
+from visionframework.data.detection import Detection
 
 
 class BaseDetector(BaseModule, ABC):

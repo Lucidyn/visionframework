@@ -6,6 +6,9 @@
 import os
 import sys
 
+# Set environment variable to handle OpenMP duplicate library issue
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -24,23 +27,23 @@ def test_module_imports():
     
     try:
         # 测试SAM分割器导入
-        from visionframework.core.segmenters.sam_segmenter import SAMSegmenter
+        from visionframework.core.components.segmenters.sam_segmenter import SAMSegmenter
         print("✓ SAMSegmenter 导入成功")
         
         # 测试检测器导入
-        from visionframework.core.detector import Detector
-        print("✓ Detector 导入成功")
+        from visionframework.core.components.detectors.yolo_detector import YOLODetector
+        print("✓ YOLODetector 导入成功")
         
         # 测试CLIP提取器导入
-        from visionframework.core.clip import CLIPExtractor
+        from visionframework.core.components.processors.clip_extractor import CLIPExtractor
         print("✓ CLIPExtractor 导入成功")
         
         # 测试姿态估计器导入
-        from visionframework.core.pose_estimator import PoseEstimator
+        from visionframework.core.components.processors.pose_estimator import PoseEstimator
         print("✓ PoseEstimator 导入成功")
         
         # 测试分割器包导入
-        from visionframework.core.segmenters import SAMSegmenter
+        from visionframework.core.components.segmenters import SAMSegmenter
         print("✓ segmenters 包导入成功")
         
         test_results["passed"].append(test_name)
@@ -59,7 +62,7 @@ def test_class_instantiation():
     
     try:
         # 测试SAM分割器实例化
-        from visionframework.core.segmenters.sam_segmenter import SAMSegmenter
+        from visionframework.core.components.segmenters.sam_segmenter import SAMSegmenter
         sam = SAMSegmenter({
             "model_type": "vit_b",
             "device": "cpu",
@@ -68,20 +71,19 @@ def test_class_instantiation():
         print("✓ SAMSegmenter 实例化成功")
         
         # 测试检测器实例化
-        from visionframework.core.detector import Detector
-        detector = Detector({
+        from visionframework.core.components.detectors.yolo_detector import YOLODetector
+        detector = YOLODetector({
             "model_path": "yolov8n.pt",
-            "model_type": "yolo",
             "conf_threshold": 0.1,
             "device": "cpu",
             "segmenter_type": "sam",
             "sam_model_type": "vit_b",
             "sam_use_fp16": False
         })
-        print("✓ Detector 实例化成功")
+        print("✓ YOLODetector 实例化成功")
         
         # 测试CLIP提取器实例化
-        from visionframework.core.clip import CLIPExtractor
+        from visionframework.core.components.processors.clip_extractor import CLIPExtractor
         clip = CLIPExtractor({
             "model_name": "openai/clip-vit-base-patch32",
             "device": "cpu",
@@ -90,7 +92,7 @@ def test_class_instantiation():
         print("✓ CLIPExtractor 实例化成功")
         
         # 测试姿态估计器实例化
-        from visionframework.core.pose_estimator import PoseEstimator
+        from visionframework.core.components.processors.pose_estimator import PoseEstimator
         pose_estimator = PoseEstimator({
             "model_type": "yolo_pose",
             "model_path": "yolov8n-pose.pt",
@@ -117,7 +119,7 @@ def test_config_validation():
     
     try:
         # 测试检测器配置验证
-        from visionframework.core.detector import Detector
+        from visionframework.core.components.detectors.yolo_detector import YOLODetector
         
         # 测试有效配置
         valid_config = {
@@ -129,13 +131,12 @@ def test_config_validation():
             "sam_model_type": "vit_b"
         }
         
-        detector = Detector(valid_config)
+        detector = YOLODetector(valid_config)
         print("✓ 检测器有效配置验证成功")
         
         # 测试无效配置（无效的sam_model_type）
         invalid_config = {
             "model_path": "yolov8n.pt",
-            "model_type": "yolo",
             "conf_threshold": 0.7,
             "device": "cpu",
             "segmenter_type": "sam",
@@ -143,7 +144,7 @@ def test_config_validation():
         }
         
         try:
-            detector = Detector(invalid_config)
+            detector = YOLODetector(invalid_config)
             print("⚠ 检测器无效配置没有引发预期的异常")
         except Exception as e:
             print("✓ 检测器无效配置正确引发异常")
@@ -165,12 +166,11 @@ def test_detector_segmenter_integration():
     print(f"\n=== {test_name} ===")
     
     try:
-        from visionframework.core.detector import Detector
+        from visionframework.core.components.detectors.yolo_detector import YOLODetector
         
         # 创建带SAM分割器的检测器
-        detector = Detector({
+        detector = YOLODetector({
             "model_path": "yolov8n.pt",
-            "model_type": "yolo",
             "conf_threshold": 0.1,
             "device": "cpu",
             "segmenter_type": "sam",
@@ -181,9 +181,8 @@ def test_detector_segmenter_integration():
         print("✓ 检测器与SAM分割器集成配置成功")
         
         # 测试分割器类型为None的情况
-        detector = Detector({
+        detector = YOLODetector({
             "model_path": "yolov8n.pt",
-            "model_type": "yolo",
             "conf_threshold": 0.1,
             "device": "cpu",
             "segmenter_type": None
@@ -208,7 +207,7 @@ def test_pose_estimator_models():
     print(f"\n=== {test_name} ===")
     
     try:
-        from visionframework.core.pose_estimator import PoseEstimator
+        from visionframework.core.components.processors.pose_estimator import PoseEstimator
         
         # 测试YOLO Pose配置
         yolo_pose = PoseEstimator({

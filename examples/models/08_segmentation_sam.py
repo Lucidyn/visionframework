@@ -17,9 +17,7 @@ import argparse
 import cv2
 import numpy as np
 from typing import List
-from visionframework.core.detector import Detector
-from visionframework.core.segmenters.sam_segmenter import SAMSegmenter
-from visionframework.exceptions import VisionFrameworkError
+from visionframework import Detector, SAMSegmenter, VisionFrameworkError
 
 
 def parse_args():
@@ -37,63 +35,37 @@ def parse_args():
 
 def draw_masks(frame: np.ndarray, masks: List[dict], alpha: float = 0.5) -> np.ndarray:
     """Draw segmentation masks on the frame"""
-    frame = frame.copy()
+    from visionframework import Visualizer
+    from visionframework.data.detection import Detection
     
-    # Generate random colors for masks
-    colors = []
-    for i in range(len(masks)):
-        colors.append((np.random.randint(0, 255), np.random.randint(0, 255), np.random.randint(0, 255)))
-    
-    # Draw each mask
+    # Convert masks to Detection objects
+    detections = []
     for i, mask in enumerate(masks):
         if 'segmentation' in mask:
-            seg = mask['segmentation']
-            color = colors[i % len(colors)]
-            
-            # Apply mask with color overlay
-            seg_uint8 = (seg * 255).astype(np.uint8)
-            colored_mask = np.zeros_like(frame)
-            colored_mask[seg_uint8 > 128] = color
-            frame = cv2.addWeighted(frame, 1 - alpha, colored_mask, alpha, 0)
-            
-            # Draw bounding box
-            if 'bbox' in mask:
-                x, y, w, h = mask['bbox']
-                cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
-            
-            # Draw mask area text
-            area = int(mask.get('area', 0))
-            cv2.putText(frame, f"Mask {i+1} ({area}px)", 
-                       (10, 30 + i * 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+            x, y, w, h = mask.get('bbox', [0, 0, 0, 0])
+            detection = Detection(
+                class_id=i,
+                class_name=f"Mask {i+1}",
+                confidence=1.0,
+                x=x,
+                y=y,
+                width=w,
+                height=h,
+                mask=mask['segmentation']
+            )
+            detections.append(detection)
     
-    return frame
+    # Use the integrated Visualizer to draw detections with masks
+    viz = Visualizer()
+    return viz.draw_detections(frame, detections)
 
 
 def draw_detections_with_masks(frame: np.ndarray, detections: List, alpha: float = 0.5) -> np.ndarray:
     """Draw detections with segmentation masks"""
-    frame = frame.copy()
-    
-    for i, det in enumerate(detections):
-        if hasattr(det, 'mask') and det.mask is not None:
-            # Generate random color for each detection
-            color = (np.random.randint(0, 255), np.random.randint(0, 255), np.random.randint(0, 255))
-            
-            # Draw mask
-            seg = det.mask.astype(np.uint8) * 255
-            colored_mask = np.zeros_like(frame)
-            colored_mask[seg > 128] = color
-            frame = cv2.addWeighted(frame, 1 - alpha, colored_mask, alpha, 0)
-        
-        # Draw bounding box and label
-        x1, y1, x2, y2 = det.bbox
-        cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-        label = f"{det.class_name}: {det.confidence:.2f}"
-        if hasattr(det, 'mask_score'):
-            label += f" (Mask: {det.mask_score:.2f})"
-        cv2.putText(frame, label, (int(x1), int(y1) - 10), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-    
-    return frame
+    from visionframework import Visualizer
+    viz = Visualizer()
+    # Use the integrated Visualizer to draw detections with masks
+    return viz.draw_detections(frame, detections)
 
 
 def automatic_segmentation_example(image: np.ndarray, args):

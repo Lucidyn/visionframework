@@ -9,8 +9,7 @@ import cv2
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple, Callable, Union
 from .base import BaseModule
-from .detector import Detector
-from .tracker import Tracker
+# Detector and Tracker imports are now handled via components
 from ..data.detection import Detection
 from ..data.track import Track
 from ..utils.monitoring.logger import get_logger
@@ -111,8 +110,8 @@ class VisionPipeline(BaseModule):
                 self.config["pose_estimator_config"].update(config["pose_estimator_config"])
         
         # Initialize core attributes
-        self.detector: Optional[Detector] = None
-        self.tracker: Optional[Tracker] = None
+        self.detector: Optional[Any] = None
+        self.tracker: Optional[Any] = None
         self.pose_estimator: Optional[Any] = None
         self.enable_tracking: bool = self.config["enable_tracking"]
         self.enable_pose_estimation: bool = self.config["enable_pose_estimation"]
@@ -359,25 +358,27 @@ class VisionPipeline(BaseModule):
         try:
             # Initialize detector
             logger.info("Initializing detector...")
-            self.detector = Detector(self.detector_config)
-            if not self.detector.initialize():
+            from ..components.detectors.yolo_detector import YOLODetector
+            self.detector = YOLODetector(self.detector_config)
+            if not hasattr(self.detector, 'initialize') or not self.detector.initialize():
                 logger.error("Failed to initialize detector in pipeline")
                 return False
             
             # Initialize tracker if enabled
             if self.enable_tracking:
                 logger.info("Initializing tracker...")
-                self.tracker = Tracker(self.tracker_config)
-                if not self.tracker.initialize():
+                from ..components.trackers.byte_tracker import ByteTracker
+                self.tracker = ByteTracker(self.tracker_config)
+                if not hasattr(self.tracker, 'initialize') or not self.tracker.initialize():
                     logger.error("Failed to initialize tracker in pipeline")
                     return False
             
             # Initialize pose estimator if enabled
             if self.enable_pose_estimation:
                 logger.info("Initializing pose estimator...")
-                from .pose_estimator import PoseEstimator
+                from ..components.processors.pose_estimator import PoseEstimator
                 self.pose_estimator = PoseEstimator(self.pose_estimator_config)
-                if not self.pose_estimator.initialize():
+                if not hasattr(self.pose_estimator, 'initialize') or not self.pose_estimator.initialize():
                     logger.error("Failed to initialize pose estimator in pipeline")
                     return False
             
@@ -1054,21 +1055,21 @@ class VisionPipeline(BaseModule):
             self.tracker.reset()
         # Pose estimator doesn't have a reset method yet, but we can add one if needed in the future
     
-    def get_detector(self) -> Optional[Detector]:
+    def get_detector(self) -> Optional[Any]:
         """
         Get detector instance
-        
+
         Returns the internal detector instance, allowing direct access to
         detector methods and properties if needed.
-        
+
         Returns:
-            Optional[Detector]: Detector instance if initialized, None otherwise.
-        
+            Optional[Any]: Detector instance if initialized, None otherwise.
+
         Example:
             ```python
             pipeline = VisionPipeline()
             pipeline.initialize()
-            
+
             detector = pipeline.get_detector()
             if detector:
                 info = detector.get_model_info()
@@ -1077,21 +1078,21 @@ class VisionPipeline(BaseModule):
         """
         return self.detector
     
-    def get_tracker(self) -> Optional[Tracker]:
+    def get_tracker(self) -> Optional[Any]:
         """
         Get tracker instance
-        
+
         Returns the internal tracker instance, allowing direct access to
         tracker methods and properties if needed.
-        
+
         Returns:
-            Optional[Tracker]: Tracker instance if initialized, None otherwise.
-        
+            Optional[Any]: Tracker instance if initialized, None otherwise.
+
         Example:
             ```python
             pipeline = VisionPipeline()
             pipeline.initialize()
-            
+
             tracker = pipeline.get_tracker()
             if tracker:
                 active_tracks = tracker.get_tracks()

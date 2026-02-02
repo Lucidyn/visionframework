@@ -78,6 +78,13 @@ def setup_performance_monitor():
 
 def draw_analysis_results(frame: np.ndarray, tracks: List[Track], pipeline: VisionPipeline):
     """Draw trajectory analysis results on frame"""
+    from visionframework import Visualizer
+    
+    # Use the integrated Visualizer to draw tracks
+    viz = Visualizer()
+    frame = viz.draw_tracks(frame, tracks, draw_history=True)
+    
+    # Add additional analysis information
     for track in tracks:
         if len(track.history) < 2:
             continue
@@ -87,16 +94,8 @@ def draw_analysis_results(frame: np.ndarray, tracks: List[Track], pipeline: Visi
         if not analysis:
             continue
         
-        # Draw bounding box
-        x1, y1, x2, y2 = track.bbox
-        cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-        
-        # Draw track ID and class
-        label = f"ID: {track.track_id} ({track.class_name})"
-        cv2.putText(frame, label, (int(x1), int(y1) - 30), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        
         # Draw speed information
+        x1, y1, x2, y2 = track.bbox
         speed_mag = analysis["speed"]["magnitude"]
         speed_text = f"Speed: {speed_mag:.2f} px/frame"
         cv2.putText(frame, speed_text, (int(x1), int(y1) - 15), 
@@ -113,18 +112,6 @@ def draw_analysis_results(frame: np.ndarray, tracks: List[Track], pipeline: Visi
         end_y = int(center_y + arrow_length * np.sin(np.radians(direction)))
         cv2.arrowedLine(frame, (center_x, center_y), (end_x, end_y), 
                        (255, 0, 0), 2, tipLength=0.3)
-        
-        # Draw trajectory history (last 5 points)
-        history_points = []
-        for bbox in track.history[-5:]:
-            hx = int((bbox[0] + bbox[2]) / 2)
-            hy = int((bbox[1] + bbox[3]) / 2)
-            history_points.append((hx, hy))
-        
-        if len(history_points) >= 2:
-            for i in range(1, len(history_points)):
-                cv2.line(frame, history_points[i-1], history_points[i], 
-                        (0, 255, 0), 2, cv2.LINE_AA)
         
         # Predict next position
         predicted_bbox = pipeline.tracker.predict_next_position(track, frames_ahead=2)
