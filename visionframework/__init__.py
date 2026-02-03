@@ -12,7 +12,7 @@ from .api import (
     SAMSegmenter,
     
     # Processors
-    PoseEstimator, CLIPExtractor, ReIDExtractor,
+    PoseEstimator, CLIPExtractor, ReIDExtractor, BaseProcessor,
     
     # Implementations
     YOLODetector, DETRDetector, RFDETRDetector,
@@ -25,6 +25,14 @@ from .api import (
     Visualizer, Config, ResultExporter,
     PerformanceMonitor, Timer,
     VideoProcessor, VideoWriter, process_video,
+    
+    # Model tools
+    TrajectoryAnalyzer,
+    ImageAugmenter, AugmentationConfig, AugmentationType,
+    QuantizationConfig, PruningConfig, quantize_model, prune_model,
+    FineTuningConfig,
+    select_model,
+    fuse_features,
     
     # Plugin system
     plugin_registry, model_registry,
@@ -57,7 +65,7 @@ __all__ = [
     "SAMSegmenter",
     
     # Processors
-    "PoseEstimator", "CLIPExtractor", "ReIDExtractor",
+    "PoseEstimator", "CLIPExtractor", "ReIDExtractor", "BaseProcessor",
     
     # Implementations
     "YOLODetector", "DETRDetector", "RFDETRDetector",
@@ -70,6 +78,14 @@ __all__ = [
     "Visualizer", "Config", "ResultExporter",
     "PerformanceMonitor", "Timer",
     "VideoProcessor", "VideoWriter", "process_video",
+    
+    # Model tools
+    "TrajectoryAnalyzer",
+    "ImageAugmenter", "AugmentationConfig", "AugmentationType",
+    "QuantizationConfig", "PruningConfig", "quantize_model", "prune_model",
+    "FineTuningConfig",
+    "select_model",
+    "fuse_features",
     
     # Plugin system
     "plugin_registry", "model_registry",

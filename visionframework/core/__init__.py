@@ -64,6 +64,9 @@ def __getattr__(name):
     elif name == "FeatureExtractor":
         from .components.processors import FeatureExtractor
         return FeatureExtractor
+    elif name == "BaseProcessor":
+        from .components.processors import BaseProcessor
+        return BaseProcessor
     elif name == "CLIPExtractor":
         from .components.processors.clip_extractor import CLIPExtractor
         return CLIPExtractor
@@ -129,6 +132,7 @@ __all__ = [
     "BaseTracker",
     "BaseSegmenter",
     "FeatureExtractor",
+    "BaseProcessor",
     
     # Implementations
     "YOLODetector",

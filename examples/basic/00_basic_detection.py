@@ -1,112 +1,55 @@
 """
 00_basic_detection.py
-基础目标检测示例
 
-这个示例展示了如何使用VisionFramework进行基础的目标检测，包括：
-1. 创建VisionPipeline实例
-2. 初始化检测器
-3. 处理图像
-4. 可视化检测结果
+基础目标检测示例：
+- 使用 YOLODetector 对单张图片进行检测
+- 代码尽量简单，便于快速上手
 
-用法:
-  python examples/00_basic_detection.py
+注意：
+- 需要提前准备 YOLO 权重（如 yolov8n.pt），并放在当前工作目录或指定路径。
 """
-import os
-import sys
+
 import cv2
-import numpy as np
-from pathlib import Path
 
-# 修复OpenMP库冲突
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
-
-# 添加项目根目录到Python路径
-sys.path.insert(0, str(Path(__file__).parents[2]))
-
-from visionframework import VisionPipeline, Visualizer
-from visionframework.utils import ErrorHandler, is_dependency_available, validate_dependency
+from visionframework import YOLODetector, Visualizer
 
 
-def main():
-    print("=== 基础目标检测示例 ===")
-    
-    # 1. 依赖检查
-    print("\n1. 检查依赖...")
-    handler = ErrorHandler()
-    
-    # 2. 创建一个空白图像作为测试
-    # 实际使用时，可以替换为 cv2.imread("your_image.jpg")
-    frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    frame[:] = (128, 128, 128)  # 灰色背景
-    
-    # 在图像上绘制一些简单的形状作为检测目标
-    # 画一个蓝色矩形
-    cv2.rectangle(frame, (100, 100), (200, 200), (255, 0, 0), -1)
-    # 画一个绿色圆形
-    cv2.circle(frame, (320, 240), 50, (0, 255, 0), -1)
-    # 画一个红色三角形
-    pts = np.array([[500, 100], [550, 200], [450, 200]], np.int32)
-    cv2.fillPoly(frame, [pts], (0, 0, 255))
-    
-    print("创建VisionPipeline实例...")
-    # 创建VisionPipeline实例，使用默认的YOLOv8n模型
-    config = {
-        "enable_tracking": False,  # 关闭跟踪，只进行检测
-        "detector_config": {
-            "model_path": "yolov8n.pt",
-            "conf_threshold": 0.25  # 设置置信度阈值
-        }
+def main() -> None:
+    # 1. 创建检测器配置
+    detector_config = {
+        "model_path": "yolov8n.pt",  # 可替换为你的模型路径
+        "device": "auto",
+        "conf_threshold": 0.25,
     }
-    
-    try:
-        pipeline = VisionPipeline(config)
-        
-        print("初始化检测器...")
-        # 初始化检测器
-        if not pipeline.initialize():
-            print("初始化失败！")
-            return
-        
-        print("处理图像...")
-        # 处理图像
-        results = pipeline.process(frame)
-        
-        # 获取检测结果
-        detections = results.get("detections", [])
-        tracks = results.get("tracks", [])
-        
-        print(f"检测结果: {len(detections)} 个目标，{len(tracks)} 个跟踪")
-        
-        # 可视化检测结果
-        print("可视化检测结果...")
-        viz = Visualizer()
-        vis_frame = viz.draw_detections(frame, detections)
-        
-        # 保存可视化结果
-        output_path = "output_basic_detection.jpg"
-        cv2.imwrite(output_path, vis_frame)
-        print(f"可视化结果已保存到: {output_path}")
-        
-        # 显示结果（可选）
-        # cv2.imshow("检测结果", vis_frame)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
-        
-        print("\n=== 示例完成 ===")
-        print("你可以修改代码中的图像路径，使用自己的图像进行测试。")
-        
-    except Exception as e:
-        # 统一错误处理
-        handler.handle_error(
-            error=e,
-            error_type=RuntimeError,
-            message="基础检测示例执行失败",
-            context={"stage": "detection", "config": config},
-            raise_error=False
-        )
-        print("示例执行过程中出现错误，但已被捕获和处理。")
+
+    detector = YOLODetector(detector_config)
+
+    # 2. 初始化模型（加载权重）
+    if not detector.initialize():
+        print("YOLODetector 初始化失败，请检查模型路径和依赖（ultralytics、torch 等）。")
+        return
+
+    # 3. 读取测试图片
+    image_path = "test.jpg"  # 请替换为你自己的图片路径
+    image = cv2.imread(image_path)
+    if image is None:
+        print(f"无法读取图像: {image_path}")
+        return
+
+    # 4. 进行检测
+    detections = detector.detect(image)
+    print(f"检测到 {len(detections)} 个目标")
+
+    # 5. 使用集成的可视化 API 绘制检测结果
+    visualizer = Visualizer()
+    vis_image = visualizer.draw_detections(image.copy(), detections)
+
+    # 6. 显示 / 保存结果
+    cv2.imshow("Detections", vis_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
-    import sys
     main()
+

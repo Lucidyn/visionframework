@@ -15,7 +15,11 @@ from .converter import (
 from .formats import (
     ModelFormat,
     get_supported_formats,
-    is_format_supported
+    is_format_supported,
+    get_compatible_formats,
+    get_format_extension,
+    get_format_dependencies,
+    get_format_from_extension,
 )
 
 __all__ = [
@@ -26,5 +30,9 @@ __all__ = [
     "ConversionConfig",
     "ModelFormat",
     "get_supported_formats",
-    "is_format_supported"
+    "is_format_supported",
+    "get_compatible_formats",
+    "get_format_extension",
+    "get_format_dependencies",
+    "get_format_from_extension",
 ]

@@ -8,6 +8,7 @@ image transformation techniques for model training and evaluation.
 from .augmenter import (
     ImageAugmenter,
     AugmentationConfig,
+    AugmentationType,
     augment_image,
     get_default_augmentations
 )
@@ -15,6 +16,7 @@ from .augmenter import (
 __all__ = [
     "ImageAugmenter",
     "AugmentationConfig",
+    "AugmentationType",
     "augment_image",
     "get_default_augmentations"
 ]

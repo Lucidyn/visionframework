@@ -1171,13 +1171,16 @@ config = AugmentationConfig(
         AugmentationType.BRIGHTNESS,
         AugmentationType.CONTRAST
     ],
-    flip_prob=0.5,
-    rotate_range=(-15, 15),
-    brightness_range=(0.8, 1.2)
+    probability=0.5
 )
 
 augmenter = ImageAugmenter(config)
-augmented_image = augmenter.augment(image)
+augmented_image = augmenter.augment(
+    image,
+    angle=15,  # 旋转角度
+    brightness_factor=1.0,  # 亮度因子
+    contrast_factor=1.0  # 对比度因子
+)
 ```
 
 ## 轨迹分析工具
@@ -1202,7 +1205,7 @@ direction = analyzer.calculate_direction(track)
 future_pos = analyzer.predict_future_position(track, frames_ahead=10)
 
 # 计算轨迹统计
-stats = analyzer.analyze_trajectory(track)
+stats = analyzer.analyze_track(track)
 ```
 
 ## 异常类

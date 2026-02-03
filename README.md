@@ -291,42 +291,18 @@ exporter.export_to_coco_format(detections, 1, image_info, "output/coco_annotatio
 | `00_basic_detection.py` | 基础目标检测示例 |
 | `01_detection_with_tracking.py` | 带跟踪的目标检测示例 |
 | `02_simplified_api.py` | 简化API使用示例 |
-
-### 视频处理示例 (`examples/video/`)
-| 示例 | 说明 |
-|------|------|
-| `03_video_processing.py` | 视频文件处理示例 |
-| `04_stream_processing.py` | 视频流处理示例 |
-| `12_pyav_video_processing.py` | PyAV视频处理示例（高性能视频处理、与OpenCV性能对比） |
-| `13_vision_pipeline_pyav.py` | VisionPipeline PyAV集成示例（在管道中使用PyAV、性能测试） |
+| `03_pose_estimation.py` | 姿态估计示例 |
+| `04_segmentation.py` | 图像分割示例 |
+| `05_video_processing.py` | 视频处理示例 |
 
 ### 高级功能示例 (`examples/advanced/`)
 | 示例 | 说明 |
 |------|------|
-| `05_advanced_features.py` | 高级功能示例（模型管理、批量处理、配置文件、结果导出） |
-| `06_tools_usage.py` | 工具类使用示例 |
-| `07_enhanced_features.py` | 增强功能示例（ReID跟踪、轨迹分析、性能监控） |
-
-### 模型相关示例 (`examples/models/`)
-| 示例 | 说明 |
-|------|------|
-| `08_segmentation_sam.py` | SAM分割示例（自动分割、交互式分割、检测+分割联合推理） |
-| `09_clip_features.py` | CLIP特征示例（图像-文本相似度、零样本分类、图像特征提取） |
-| `10_pose_estimation.py` | 姿态估计示例（YOLO Pose、MediaPipe Pose、关键点检测与可视化） |
-
-### 配置相关示例 (`examples/config/`)
-| 示例 | 说明 |
-|------|------|
-| `11_config_based_processing.py` | 配置文件驱动的视觉处理示例（支持检测、跟踪、姿态估计、CLIP特征、SAM分割） |
-| `my_config.json` | 配置文件示例 |
-
-### 系统功能示例 (`examples/system/`)
-| 示例 | 说明 |
-|------|------|
-| `14_plugin_system_example.py` | 插件系统示例（注册和使用自定义组件） |
-| `15_memory_pool_example.py` | 内存池管理示例（使用和优化内存池） |
-| `16_error_handling_example.py` | 统一错误处理示例（使用ErrorHandler） |
-| `17_dependency_management_example.py` | 依赖管理示例（检查和加载可选依赖） |
+| `08_model_tools_example.py` | 模型工具示例（模型优化、微调配置、数据增强、轨迹分析） |
+| `09_multimodal_processing.py` | 多模态处理示例（检测、跟踪、姿态估计、特征提取） |
+| `10_batch_processing.py` | 批处理示例（批量处理性能测试） |
+| `11_custom_component.py` | 自定义组件示例（创建和注册自定义检测器和处理器） |
+| `12_result_export.py` | 结果导出示例（导出为JSON、CSV、COCO格式） |
 
 ## 依赖项
 

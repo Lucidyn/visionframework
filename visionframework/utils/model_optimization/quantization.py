@@ -11,7 +11,12 @@ from dataclasses import dataclass
 from torch.quantization import QuantStub, DeQuantStub
 from torch.quantization.quantize_fx import prepare_fx, convert_fx
 from torch.ao.quantization import get_default_qconfig_mapping
-from torch.ao.quantization.backend_config import get_default_backend_config
+
+try:
+    # Newer PyTorch versions provide backend-specific default backend configs.
+    from torch.ao.quantization.backend_config import get_default_backend_config  # type: ignore
+except Exception:  # pragma: no cover - fallback for older Torch versions
+    get_default_backend_config = None  # type: ignore
 
 
 @dataclass
@@ -22,14 +27,15 @@ class QuantizationConfig:
     Attributes:
         quantization_type: Type of quantization ('dynamic', 'static', 'aware')
         backend: Quantization backend ('qnnpack', 'fbgemm', 'onednn')
-        dtype: Quantization dtype (torch.quint8, torch.qint8)
+        dtype: Quantization dtype (typically torch.qint8 for dynamic quantization)
         qconfig_mapping: Custom qconfig mapping
         calibration_data: Data for static quantization calibration
         verbose: Whether to print verbose information
     """
     quantization_type: str = "dynamic"
     backend: str = "fbgemm"
-    dtype: torch.dtype = torch.quint8
+    # Use qint8 by default to be compatible with dynamic quantized linear layers
+    dtype: torch.dtype = torch.qint8
     qconfig_mapping: Optional[Any] = None
     calibration_data: Optional[Any] = None
     verbose: bool = False
@@ -105,7 +111,12 @@ def _quantize_static(model: torch.nn.Module, config: QuantizationConfig) -> torc
     else:
         qconfig_mapping = config.qconfig_mapping
     
-    # Get default backend config
+    # Get default backend config if available (PyTorch >= 1.13 / 2.x).
+    if get_default_backend_config is None:
+        raise RuntimeError(
+            "Static quantization is not supported in this PyTorch version: "
+            "missing get_default_backend_config in torch.ao.quantization.backend_config."
+        )
     backend_config = get_default_backend_config(config.backend)
     
     # Prepare model for quantization
@@ -243,13 +254,20 @@ def compare_model_performance(
             optimized_times.append(time.time() - start_time)
     
     # Calculate metrics
+    original_time = sum(original_times) / len(original_times) if original_times else 0.0
+    optimized_time = sum(optimized_times) / len(optimized_times) if optimized_times else 0.0
+    if optimized_time > 0:
+        speedup = original_time / optimized_time
+    else:
+        speedup = 1.0
+    
     metrics = {
         "original_size": original_size,
         "optimized_size": optimized_size,
         "size_reduction": (original_size - optimized_size) / original_size * 100,
-        "original_inference_time": sum(original_times) / len(original_times),
-        "optimized_inference_time": sum(optimized_times) / len(optimized_times),
-        "speedup": sum(original_times) / sum(optimized_times)
+        "original_inference_time": original_time,
+        "optimized_inference_time": optimized_time,
+        "speedup": speedup
     }
     
     return metrics

@@ -87,7 +87,89 @@ cv2.waitKey(0)
 cv2.destroyAllWindows()
 ```
 
-### 示例 2: 简化 API
+### 示例 2: 姿态估计
+
+```python
+from visionframework import VisionPipeline, Visualizer
+import cv2
+
+# 初始化带姿态估计的管道
+pipeline = VisionPipeline({
+    "enable_pose_estimation": True,
+    "detector_config": {"model_path": "yolov8n.pt"},
+    "pose_estimator_config": {"model_path": "yolov8n-pose.pt"}
+})
+
+# 加载图像
+image = cv2.imread("person.jpg")
+
+# 处理图像
+results = pipeline.process(image)
+
+# 绘制姿态关键点和骨骼
+viz = Visualizer()
+result_image = viz.draw_poses(image.copy(), results["poses"])
+
+# 显示结果
+cv2.imshow("姿态估计结果", result_image)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+```
+
+### 示例 3: 图像分割
+
+```python
+from visionframework import SAMSegmenter, Visualizer
+import cv2
+
+# 初始化 SAM 分割器
+segmenter = SAMSegmenter({"model_path": "sam_vit_h_4b8939.pth"})
+segmenter.initialize()
+
+# 加载图像
+image = cv2.imread("object.jpg")
+
+# 自动分割
+results = segmenter.segment(image)
+
+# 绘制分割结果
+viz = Visualizer()
+result_image = viz.draw_segmentations(image.copy(), results)
+
+# 显示结果
+cv2.imshow("分割结果", result_image)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+```
+
+### 示例 4: 视频处理
+
+```python
+from visionframework import VisionPipeline
+
+# 使用配置字典处理视频文件
+pipeline = VisionPipeline({
+    "detector_config": {"model_path": "yolov8n.pt"}
+})
+pipeline.process_video("input.mp4", "output.mp4")
+
+# 或者使用静态方法
+VisionPipeline.run_video("input.mp4", "output.mp4", model_path="yolov8n.pt")
+
+# 使用简化API处理视频（支持批处理和PyAV）
+from visionframework import process_video
+
+process_video(
+    "input.mp4",
+    "output.mp4",
+    model_path="yolov8n.pt",
+    enable_tracking=True,
+    batch_size=8,  # 启用批处理
+    use_pyav=True  # 使用PyAV后端
+)
+```
+
+### 示例 5: 简化 API
 
 ```python
 from visionframework import VisionPipeline
@@ -547,31 +629,25 @@ conda activate frametest
 python examples/basic/00_basic_detection.py
 
 # 运行姿态估计示例
-python examples/models/10_pose_estimation.py
+python examples/basic/03_pose_estimation.py
 
-# 运行 SAM 分割示例
-python examples/models/08_segmentation_sam.py
+# 运行分割示例
+python examples/basic/04_segmentation.py
 
-# 运行 CLIP 特征示例
-python examples/models/09_clip_features.py
+# 运行视频处理示例
+python examples/basic/05_video_processing.py
 
-# 运行 PyAV 视频处理示例
-python examples/video/12_pyav_video_processing.py
+# 运行多模态处理示例
+python examples/advanced/09_multimodal_processing.py
 
-# 运行 VisionPipeline PyAV 集成示例
-python examples/video/13_vision_pipeline_pyav.py
+# 运行批处理示例
+python examples/advanced/10_batch_processing.py
 
-# 运行插件系统示例
-python examples/system/14_plugin_system_example.py
+# 运行自定义组件示例
+python examples/advanced/11_custom_component.py
 
-# 运行内存池管理示例
-python examples/system/15_memory_pool_example.py
-
-# 运行统一错误处理示例
-python examples/system/16_error_handling_example.py
-
-# 运行依赖管理示例
-python examples/system/17_dependency_management_example.py
+# 运行结果导出示例
+python examples/advanced/12_result_export.py
 ```
 
 ### 示例 14: 轨迹分析
@@ -632,10 +708,7 @@ config = AugmentationConfig(
         AugmentationType.CONTRAST,
         AugmentationType.BLUR
     ],
-    flip_prob=0.5,
-    rotate_range=(-15, 15),
-    brightness_range=(0.8, 1.2),
-    contrast_range=(0.8, 1.2)
+    probability=0.5
 )
 
 # 创建增强器
@@ -645,7 +718,13 @@ augmenter = ImageAugmenter(config)
 image = cv2.imread("train_image.jpg")
 
 # 增强图像
-augmented_image = augmenter.augment(image)
+# 在调用 augment 方法时传递增强参数
+augmented_image = augmenter.augment(
+    image,
+    angle=15,  # 旋转角度
+    brightness_factor=1.0,  # 亮度因子
+    contrast_factor=1.0  # 对比度因子
+)
 
 # 批量增强
 images = [cv2.imread(f"image_{i}.jpg") for i in range(10)]

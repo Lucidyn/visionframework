@@ -7,6 +7,9 @@ pose estimation, and ReID.
 
 from .feature_extractor import FeatureExtractor
 
+# Add BaseProcessor as alias for FeatureExtractor
+BaseProcessor = FeatureExtractor
+
 
 def __getattr__(name):
     """Lazy load heavy processor implementations to avoid importing heavy libraries at module load time"""
@@ -24,6 +27,7 @@ def __getattr__(name):
 
 __all__ = [
     "FeatureExtractor",
+    "BaseProcessor",
     "CLIPExtractor",
     "ReIDExtractor",
     "PoseEstimator",

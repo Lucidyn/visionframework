@@ -15,7 +15,7 @@ from .core import (
     ROIDetector, Counter, SAMSegmenter,
     
     # Processors
-    PoseEstimator, CLIPExtractor, ReIDExtractor,
+    PoseEstimator, CLIPExtractor, ReIDExtractor, BaseProcessor,
     
     # Implementations
     YOLODetector, DETRDetector, RFDETRDetector,
@@ -42,6 +42,27 @@ from .utils import (
     Visualizer, Config, ResultExporter,
     PerformanceMonitor, Timer,
     VideoProcessor, VideoWriter, process_video
+)
+
+# Model tools and utilities
+from .utils.data.trajectory_analyzer import TrajectoryAnalyzer
+from .utils.data_augmentation.augmenter import (
+    ImageAugmenter, AugmentationConfig, AugmentationType
+)
+from .utils.model_optimization.quantization import (
+    QuantizationConfig, quantize_model
+)
+from .utils.model_optimization.pruning import (
+    PruningConfig, prune_model
+)
+from .utils.model_training.fine_tuner import (
+    FineTuningConfig
+)
+from .utils.model_management.auto_selector import (
+    select_model
+)
+from .utils.multimodal.fusion import (
+    fuse_features
 )
 
 # Exceptions
@@ -254,6 +275,7 @@ __all__ = [
     "PoseEstimator",
     "CLIPExtractor",
     "ReIDExtractor",
+    "BaseProcessor",
     
     # Implementations
     "YOLODetector",
@@ -280,6 +302,19 @@ __all__ = [
     "VideoProcessor",
     "VideoWriter",
     "process_video",
+    
+    # Model tools
+    "TrajectoryAnalyzer",
+    "ImageAugmenter",
+    "AugmentationConfig",
+    "AugmentationType",
+    "QuantizationConfig",
+    "PruningConfig",
+    "FineTuningConfig",
+    "quantize_model",
+    "prune_model",
+    "select_model",
+    "fuse_features",
     
     # Plugin system
     "plugin_registry",

@@ -15,7 +15,10 @@ from .deployer import (
 from .platforms import (
     DeploymentPlatform,
     get_supported_platforms,
-    is_platform_supported
+    is_platform_supported,
+    get_platform_compatibility,
+    get_platform_requirements,
+    get_platform_from_string,
 )
 
 __all__ = [
@@ -26,5 +29,8 @@ __all__ = [
     "DeploymentConfig",
     "DeploymentPlatform",
     "get_supported_platforms",
-    "is_platform_supported"
+    "is_platform_supported",
+    "get_platform_compatibility",
+    "get_platform_requirements",
+    "get_platform_from_string",
 ]
