@@ -8,8 +8,12 @@ from .config_models import (
     Config, DeviceManager, ModelCache
 )
 from .video_utils import VideoProcessor, VideoWriter, PyAVVideoProcessor, PyAVVideoWriter, process_video
+from .media_source import iter_frames, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 
 __all__ = [
+    "iter_frames",
+    "IMAGE_EXTENSIONS",
+    "VIDEO_EXTENSIONS",
     "Config",
     "DeviceManager",
     "ModelCache",

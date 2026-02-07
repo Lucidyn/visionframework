@@ -6,7 +6,6 @@ Provides pose estimation for human/object keypoint detection.
 
 from typing import List, Optional, Any, Dict, Tuple
 import numpy as np
-import cv2
 
 try:
     from ultralytics import YOLO
@@ -91,7 +90,7 @@ class PoseEstimator(FeatureExtractor):
         Returns:
             List[Pose]: Detected poses with keypoints
         """
-        if not self.is_initialized():
+        if not self.is_initialized:
             self.initialize()
         
         poses: List[Pose] = []
@@ -189,7 +188,7 @@ class PoseEstimator(FeatureExtractor):
                 print(f"Frame {idx}: {len(poses)} detected poses")
             ```
         """
-        if not self.is_initialized():
+        if not self.is_initialized:
             self.initialize()
         
         batch_poses: List[List[Pose]] = []
@@ -249,7 +248,7 @@ class PoseEstimator(FeatureExtractor):
     
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the loaded model."""
-        if not self.is_initialized():
+        if not self.is_initialized:
             return {"status": "not_initialized"}
         
         return {

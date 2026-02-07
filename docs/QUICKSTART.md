@@ -2,744 +2,159 @@
 
 ## 安装
 
-### 方法 1: 使用 pip 安装
-
-1. **克隆仓库**:
-   ```bash
-   git clone https://github.com/yourusername/visionframework.git
-   cd visionframework
-   ```
-
-2. **安装依赖**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **安装包**:
-   ```bash
-   pip install -e .
-   ```
-
-### 方法 2: 使用 Conda 环境（推荐）
-
-1. **创建并激活 Conda 环境**:
-   ```bash
-   conda create -n frametest python=3.8
-   conda activate frametest
-   ```
-
-2. **克隆仓库**:
-   ```bash
-   git clone https://github.com/yourusername/visionframework.git
-   cd visionframework
-   ```
-
-3. **安装依赖**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **安装包**:
-   ```bash
-   pip install -e .
-   ```
-
-5. **安装可选依赖** (根据需要):
-   ```bash
-   # 安装所有可选依赖
-   pip install -e "[all]"
-   
-   # 或者安装特定功能组
-   pip install -e "[clip]"       # 用于 CLIP 支持
-   pip install -e "[sam]"        # 用于 SAM 分割支持
-   pip install -e "[rfdetr]"     # 用于 RF-DETR 支持
-   pip install -e "[pyav]"       # 用于 PyAV 高性能视频处理支持
-   ```
-
-## 基本使用
-
-### 示例 1: 基本目标检测
-
-```python
-from visionframework import VisionPipeline
-import cv2
-
-# 使用配置字典初始化管道
-pipeline = VisionPipeline({
-    "detector_config": {"model_path": "yolov8n.pt"}
-})
-
-# 加载图像
-image = cv2.imread("test.jpg")
-
-# 处理图像
-results = pipeline.process(image)
-
-# 手动绘制边界框
-for detection in results["detections"]:
-    x1, y1, x2, y2 = detection.bbox
-    cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-    cv2.putText(image, detection.class_name, (int(x1), int(y1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-# 显示结果
-cv2.imshow("检测结果", image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
-```
-
-### 示例 2: 姿态估计
-
-```python
-from visionframework import VisionPipeline, Visualizer
-import cv2
-
-# 初始化带姿态估计的管道
-pipeline = VisionPipeline({
-    "enable_pose_estimation": True,
-    "detector_config": {"model_path": "yolov8n.pt"},
-    "pose_estimator_config": {"model_path": "yolov8n-pose.pt"}
-})
-
-# 加载图像
-image = cv2.imread("person.jpg")
-
-# 处理图像
-results = pipeline.process(image)
-
-# 绘制姿态关键点和骨骼
-viz = Visualizer()
-result_image = viz.draw_poses(image.copy(), results["poses"])
-
-# 显示结果
-cv2.imshow("姿态估计结果", result_image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
-```
-
-### 示例 3: 图像分割
-
-```python
-from visionframework import SAMSegmenter, Visualizer
-import cv2
-
-# 初始化 SAM 分割器
-segmenter = SAMSegmenter({"model_path": "sam_vit_h_4b8939.pth"})
-segmenter.initialize()
-
-# 加载图像
-image = cv2.imread("object.jpg")
-
-# 自动分割
-results = segmenter.segment(image)
-
-# 绘制分割结果
-viz = Visualizer()
-result_image = viz.draw_segmentations(image.copy(), results)
-
-# 显示结果
-cv2.imshow("分割结果", result_image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
-```
-
-### 示例 4: 视频处理
-
-```python
-from visionframework import VisionPipeline
-
-# 使用配置字典处理视频文件
-pipeline = VisionPipeline({
-    "detector_config": {"model_path": "yolov8n.pt"}
-})
-pipeline.process_video("input.mp4", "output.mp4")
-
-# 或者使用静态方法
-VisionPipeline.run_video("input.mp4", "output.mp4", model_path="yolov8n.pt")
-
-# 使用简化API处理视频（支持批处理和PyAV）
-from visionframework import process_video
-
-process_video(
-    "input.mp4",
-    "output.mp4",
-    model_path="yolov8n.pt",
-    enable_tracking=True,
-    batch_size=8,  # 启用批处理
-    use_pyav=True  # 使用PyAV后端
-)
-```
-
-### 示例 5: 简化 API
-
-```python
-from visionframework import VisionPipeline
-import cv2
-import numpy as np
-
-# 加载图像
-image = cv2.imread("test.jpg")
-
-# 使用静态方法快速处理
-results = VisionPipeline.process_image(image, model_path="yolov8n.pt")
-
-# 绘制边界框
-for detection in results["detections"]:
-    x1, y1, x2, y2 = detection.bbox
-    cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-    cv2.putText(image, detection.class_name, (int(x1), int(y1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-# 显示结果
-cv2.imshow("结果", image)
-cv2.waitKey(0)
-```
-
-### 示例 3: 视频处理
-
-```python
-from visionframework import VisionPipeline
-
-# 使用配置字典处理视频文件
-pipeline = VisionPipeline({
-    "detector_config": {"model_path": "yolov8n.pt"}
-})
-pipeline.process_video("input.mp4", "output.mp4")
-
-# 或者使用静态方法
-VisionPipeline.run_video("input.mp4", "output.mp4", model_path="yolov8n.pt")
-```
-
-### 示例 4: 视频流处理
-
-```python
-from visionframework import VisionPipeline
-
-# 使用配置字典处理 RTSP 流
-pipeline = VisionPipeline({
-    "detector_config": {"model_path": "yolov8n.pt"}
-})
-pipeline.process_video("rtsp://example.com/stream", "output.mp4")
-
-# 或者使用静态方法
-VisionPipeline.run_video("rtsp://example.com/stream", "output.mp4", model_path="yolov8n.pt")
-```
-
-### 示例 5: 姿态估计
-
-```python
-from visionframework import VisionPipeline, Visualizer
-import cv2
-
-# 初始化带姿态估计的管道
-pipeline = VisionPipeline({
-    "enable_pose_estimation": True,
-    "detector_config": {"model_path": "yolov8n.pt"},
-    "pose_estimator_config": {"model_path": "yolov8n-pose.pt"}
-})
-
-# 加载图像
-image = cv2.imread("person.jpg")
-
-# 处理图像
-results = pipeline.process(image)
-
-# 绘制姿态关键点和骨骼
-viz = Visualizer()
-result_image = viz.draw_poses(image.copy(), results["poses"])
-
-# 显示结果
-cv2.imshow("姿态估计结果", result_image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
-```
-
-### 示例 6: 批处理（提高性能）
-
-```python
-from visionframework import VisionPipeline
-import cv2
-import numpy as np
-
-# 初始化支持批处理的管道
-pipeline = VisionPipeline({
-    "detector_config": {
-        "model_path": "yolov8n.pt",
-        "batch_inference": True  # 启用批量推理
-    }
-})
-
-# 加载多张图像
-images = [
-    cv2.imread("image1.jpg"),
-    cv2.imread("image2.jpg"),
-    cv2.imread("image3.jpg"),
-    cv2.imread("image4.jpg")
-]
-
-# 批处理图像，支持多种优化选项
-results = pipeline.process_batch(
-    images,
-    max_batch_size=4,  # 最大批处理大小
-    use_parallel=True,  # 启用并行处理
-    max_workers=4,  # 工作线程数
-    enable_memory_optimization=True  # 启用内存优化
-)
-
-# 处理结果
-for i, result in enumerate(results):
-    print(f"Image {i+1}: {len(result['detections'])} detections, "
-          f"处理时间: {result['processing_time']:.4f}秒")
-```
-
-### 示例 7: SAM 分割
-
-```python
-from visionframework import SAMSegmenter, Visualizer
-import cv2
-
-# 初始化 SAM 分割器
-segmenter = SAMSegmenter({"model_path": "sam_vit_h_4b8939.pth"})
-segmenter.initialize()
-
-# 加载图像
-image = cv2.imread("object.jpg")
-
-# 自动分割
-results = segmenter.segment(image)
-
-# 绘制分割结果
-viz = Visualizer()
-result_image = viz.draw_segmentations(image.copy(), results)
-
-# 显示结果
-cv2.imshow("分割结果", result_image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
-```
-
-### 示例 8: CLIP 特征
-
-```python
-from visionframework import CLIPExtractor
-import cv2
-
-# 初始化 CLIP 提取器
-clip_extractor = CLIPExtractor({"model_path": "ViT-B/32"})
-clip_extractor.initialize()
-
-# 加载图像
-image = cv2.imread("cat.jpg")
-
-# 提取图像特征
-image_features = clip_extractor.extract_image_features(image)
-print(f"图像特征维度: {image_features.shape}")
-
-# 计算图像-文本相似度
-texts = ["a cat", "a dog", "a car"]
-similarities = clip_extractor.compute_similarity(image, texts)
-print("文本相似度:")
-for text, sim in zip(texts, similarities):
-    print(f"{text}: {sim:.4f}")
-```
-
-### 示例 9: PyAV 视频处理
-
-```python
-from visionframework import VisionPipeline
-
-# 使用配置字典处理视频文件（使用PyAV）
-pipeline = VisionPipeline({
-    "detector_config": {"model_path": "yolov8n.pt"}
-})
-pipeline.process_video("input.mp4", "output.mp4", use_pyav=True)
-
-# 处理RTSP流（使用PyAV）
-pipeline.process_video("rtsp://example.com/stream", "output_rtsp.mp4", use_pyav=True)
-
-# 批量处理视频（使用PyAV，提高性能）
-pipeline.process_video_batch(
-    "input.mp4",
-    "output_batch.mp4",
-    batch_size=16,  # 每批处理16帧
-    use_pyav=True
-)
-
-# 或者使用静态方法（使用PyAV）
-VisionPipeline.run_video("input.mp4", "output.mp4", model_path="yolov8n.pt", use_pyav=True)
-
-# 使用静态方法处理RTSP流（使用PyAV）
-VisionPipeline.run_video("rtsp://example.com/stream", "output_rtsp.mp4", model_path="yolov8n.pt", use_pyav=True)
-
-# 使用简化API处理视频（支持批处理和PyAV）
-from visionframework import process_video
-
-process_video(
-    "input.mp4",
-    "output.mp4",
-    model_path="yolov8n.pt",
-    enable_tracking=True,
-    batch_size=8,  # 启用批处理
-    use_pyav=True  # 使用PyAV后端
-)
-```
-
-### 示例 10: 内存池管理
-
-```python
-from visionframework.utils.memory import MemoryManager
-import numpy as np
-import cv2
-
-# 初始化全局内存池
-memory_pool = MemoryManager.get_global_memory_pool()
-memory_pool.initialize(
-    min_blocks=4,      # 最小内存块数量
-    block_size=(480, 640, 3),  # 每个内存块的形状
-    max_blocks=8       # 最大内存块数量
-)
-
-# 分配内存
-memory = memory_pool.acquire()
-print(f"分配的内存形状: {memory.shape}")
-print(f"内存池状态: {memory_pool.get_status()}")
-
-# 使用内存
-image = cv2.imread("test.jpg")
-if image is not None:
-    # 将图像复制到分配的内存中
-    memory[:image.shape[0], :image.shape[1]] = image[:memory.shape[0], :memory.shape[1]]
-    
-    # 处理图像
-    # ...
-
-# 释放内存
-memory_pool.release(memory)
-print(f"释放内存后的内存池状态: {memory_pool.get_status()}")
-
-# 优化内存使用
-memory_pool.optimize()
-print(f"优化后的内存池状态: {memory_pool.get_status()}")
-
-# 获取内存池统计信息
-stats = memory_pool.get_stats()
-print(f"内存池统计信息: {stats}")
-```
-
-### 示例 11: 插件系统
-
-```python
-from visionframework import (
-    register_detector, register_tracker, plugin_registry,
-    VisionPipeline, Detection
-)
-import cv2
-import numpy as np
-
-# 注册自定义检测器
-@register_detector("simple_detector")
-class SimpleDetector:
-    def __init__(self, config):
-        self.config = config
-        self.conf_threshold = config.get("conf_threshold", 0.5)
-    
-    def initialize(self):
-        print("初始化简单检测器")
-        return True
-    
-    def detect(self, image):
-        # 简单的检测实现
-        detections = []
-        # 模拟检测结果
-        height, width = image.shape[:2]
-        detections.append(Detection(
-            bbox=(width//4, height//4, 3*width//4, 3*height//4),
-            confidence=0.9,
-            class_id=0,
-            class_name="object"
-        ))
-        return detections
-
-# 注册自定义跟踪器
-@register_tracker("simple_tracker")
-class SimpleTracker:
-    def __init__(self, config):
-        self.config = config
-        self.id_counter = 0
-    
-    def initialize(self):
-        print("初始化简单跟踪器")
-        return True
-    
-    def update(self, detections):
-        # 简单的跟踪实现
-        for i, detection in enumerate(detections):
-            detection.track_id = i
-        return detections
-
-# 列出所有注册的组件
-print("注册的检测器:", plugin_registry.list_detectors())
-print("注册的跟踪器:", plugin_registry.list_trackers())
-
-# 使用自定义组件创建管道
-pipeline = VisionPipeline({
-    "detector_config": {
-        "model_path": "simple_detector"  # 使用自定义检测器
-    },
-    "tracker_config": {
-        "tracker_type": "simple_tracker"  # 使用自定义跟踪器
-    },
-    "enable_tracking": True
-})
-
-# 初始化管道
-pipeline.initialize()
-
-# 测试自定义组件
-image = np.zeros((480, 640, 3), dtype=np.uint8)
-cv2.rectangle(image, (100, 100), (300, 300), (255, 255, 255), -1)
-
-results = pipeline.process(image)
-print(f"检测结果数量: {len(results['detections'])}")
-for detection in results['detections']:
-    print(f"检测目标: {detection.class_name}, 置信度: {detection.confidence}, 跟踪ID: {detection.track_id}")
-```
-
-### 示例 12: 统一错误处理
-
-```python
-from visionframework.utils import ErrorHandler
-
-# 创建错误处理器
-handler = ErrorHandler()
-
-# 1. 处理错误
-def risky_operation():
-    raise ValueError("测试错误")
-
-try:
-    # 模拟错误
-    error = ValueError("测试错误")
-    result = handler.handle_error(
-        error=error,
-        error_type=Exception,
-        message="测试错误处理"
-    )
-    print(f"错误处理结果: {result}")
-except Exception as e:
-    print(f"错误处理失败: {e}")
-
-# 2. 包装错误
-print("\n测试错误包装:")
-wrapped_func = handler.wrap_error(
-    func=risky_operation,
-    error_type=Exception,
-    message="测试错误包装"
-)
-result = wrapped_func()
-print(f"包装函数结果: {result}")
-
-# 3. 输入验证
-print("\n测试输入验证:")
-# 有效输入
-valid_input = {"key": "value"}
-is_valid, error_msg = handler.validate_input(
-    input_value=valid_input,
-    expected_type=dict,
-    param_name="input"
-)
-print(f"有效输入验证结果: {is_valid}, 错误消息: {error_msg}")
-
-# 无效输入
-invalid_input = "not a dict"
-is_valid, error_msg = handler.validate_input(
-    input_value=invalid_input,
-    expected_type=dict,
-    param_name="input"
-)
-print(f"无效输入验证结果: {is_valid}, 错误消息: {error_msg}")
-
-# 4. 错误消息格式化
-print("\n测试错误消息格式化:")
-error = ValueError("测试错误")
-error_message = handler.format_error_message(
-    message="测试操作",
-    error=error,
-    context={"param": "value"}
-)
-print(f"格式化的错误消息: {error_message}")
-```
-
-### 示例 13: 依赖管理
-
-```python
-from visionframework.utils import (
-    DependencyManager, is_dependency_available, 
-    import_optional_dependency, get_available_dependencies,
-    get_missing_dependencies
-)
-
-# 创建依赖管理器
-manager = DependencyManager()
-
-# 1. 检查依赖可用性
-print("检查依赖可用性:")
-dependencies = ["clip", "sam", "rfdetr", "pyav"]
-for dep in dependencies:
-    available = is_dependency_available(dep)
-    print(f"{dep}: {available}")
-
-# 2. 获取依赖信息
-print("\n获取依赖信息:")
-clip_info = manager.get_dependency_info("clip")
-print(f"CLIP 依赖信息: {clip_info}")
-
-# 3. 获取安装命令
-print("\n获取安装命令:")
-install_command = manager.get_install_command("clip")
-print(f"CLIP 安装命令: {install_command}")
-
-# 4. 导入可选依赖
-print("\n导入可选依赖:")
-module = import_optional_dependency("clip", "transformers")
-print(f"导入 transformers 模块: {module is not None}")
-
-# 5. 获取可用和缺失的依赖
-print("\n依赖状态:")
-available = get_available_dependencies()
-print(f"可用的依赖: {available}")
-
-missing = get_missing_dependencies()
-print(f"缺失的依赖: {missing}")
-
-# 6. 获取所有依赖状态
-print("\n所有依赖状态:")
-all_status = manager.get_all_dependency_status()
-for dep, status in all_status.items():
-    print(f"  {dep}: {status['available']} - {status['message']}")
-
-
-## 验证
-
-要验证安装是否成功，运行其中一个示例脚本：
-
 ```bash
-# 激活 Conda 环境（如果使用）
-conda activate frametest
-
-# 运行基础检测示例
-python examples/basic/00_basic_detection.py
-
-# 运行姿态估计示例
-python examples/basic/03_pose_estimation.py
-
-# 运行分割示例
-python examples/basic/04_segmentation.py
-
-# 运行视频处理示例
-python examples/basic/05_video_processing.py
-
-# 运行多模态处理示例
-python examples/advanced/09_multimodal_processing.py
-
-# 运行批处理示例
-python examples/advanced/10_batch_processing.py
-
-# 运行自定义组件示例
-python examples/advanced/11_custom_component.py
-
-# 运行结果导出示例
-python examples/advanced/12_result_export.py
+git clone https://github.com/yourusername/visionframework.git
+cd visionframework
+pip install -e .
 ```
 
-### 示例 14: 轨迹分析
+## 核心概念
+
+整个框架只有一个入口类 `Vision`，有两种创建方式：
 
 ```python
-from visionframework import VisionPipeline
-from visionframework.utils import TrajectoryAnalyzer
+from visionframework import Vision
+
+# 方式一：关键字参数
+v = Vision(model="yolov8n.pt", track=True)
+
+# 方式二：配置文件 (JSON / YAML / dict)
+v = Vision.from_config("config.json")
+```
+
+创建后，使用 `v.run(source)` 处理任意媒体源。`source` 支持：图片路径、视频路径、摄像头索引 (0)、RTSP 流、文件夹、路径列表、numpy 数组。
+
+## 示例 1: 基本目标检测
+
+```python
+from visionframework import Vision
+
+v = Vision(model="yolov8n.pt")
+
+for frame, meta, result in v.run("test.jpg"):
+    detections = result["detections"]
+    print(f"检测到 {len(detections)} 个物体")
+    for det in detections:
+        print(f"  {det.class_name}: {det.confidence:.2f}")
+```
+
+## 示例 2: 检测 + 跟踪
+
+```python
+from visionframework import Vision
+
+v = Vision(model="yolov8n.pt", track=True)
+
+for frame, meta, result in v.run("video.mp4"):
+    tracks = result["tracks"]
+    print(f"帧 {meta.get('frame_index')}: 跟踪 {len(tracks)} 个目标")
+    for t in tracks:
+        print(f"  ID={t.track_id}, 类别={t.class_name}, 位置={t.bbox}")
+```
+
+## 示例 3: 从配置文件
+
+```json
+{
+    "model": "yolov8n.pt",
+    "model_type": "yolo",
+    "device": "auto",
+    "conf": 0.3,
+    "track": true,
+    "tracker": "bytetrack",
+    "pose": false,
+    "segment": false
+}
+```
+
+```python
+from visionframework import Vision
+
+v = Vision.from_config("config.json")
+
+for frame, meta, result in v.run(0):  # 摄像头
+    print(result["detections"])
+```
+
+## 示例 4: 姿态估计
+
+```python
+from visionframework import Vision
+
+v = Vision(model="yolov8n-pose.pt", pose=True)
+
+for frame, meta, result in v.run("test.jpg"):
+    poses = result["poses"]
+    print(f"检测到 {len(poses)} 个人体姿态")
+```
+
+## 示例 5: 视频 + 可视化
+
+```python
 import cv2
+from visionframework import Vision
 
-# 初始化带跟踪的管道
-pipeline = VisionPipeline({
-    "detector_config": {"model_path": "yolov8n.pt"},
-    "enable_tracking": True
-})
+v = Vision(model="yolov8n.pt", track=True)
 
-# 创建轨迹分析器
-analyzer = TrajectoryAnalyzer(fps=30.0, pixel_to_meter=0.1)
-
-# 处理视频并分析轨迹
-cap = cv2.VideoCapture("input.mp4")
-while True:
-    ret, frame = cap.read()
-    if not ret:
+for frame, meta, result in v.run("video.mp4", skip_frames=2):
+    annotated = v.draw(frame, result)
+    cv2.imshow("Vision Framework", annotated)
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
-    
-    results = pipeline.process(frame)
-    
-    # 分析每个跟踪目标的轨迹
-    for track in results["tracks"]:
-        # 计算速度
-        speed_x, speed_y = analyzer.calculate_speed(track, use_real_world=True)
-        print(f"Track {track.track_id}: Speed = ({speed_x:.2f}, {speed_y:.2f}) m/s")
-        
-        # 计算方向
-        direction = analyzer.calculate_direction(track)
-        print(f"Track {track.track_id}: Direction = {direction:.2f} degrees")
-        
-        # 预测未来位置
-        if len(track.history) >= 5:
-            future_pos = analyzer.predict_future_position(track, frames_ahead=10)
-            print(f"Track {track.track_id}: Predicted position = {future_pos}")
 
-cap.release()
+cv2.destroyAllWindows()
+v.cleanup()
 ```
 
-### 示例 15: 数据增强
+## 示例 6: 处理文件夹
 
 ```python
-from visionframework.utils.data_augmentation import ImageAugmenter, AugmentationConfig, AugmentationType
-import cv2
+from visionframework import Vision
 
-# 创建增强配置
-config = AugmentationConfig(
-    augmentations=[
-        AugmentationType.FLIP,
-        AugmentationType.ROTATE,
-        AugmentationType.BRIGHTNESS,
-        AugmentationType.CONTRAST,
-        AugmentationType.BLUR
-    ],
-    probability=0.5
-)
+v = Vision(model="yolov8n.pt")
 
-# 创建增强器
-augmenter = ImageAugmenter(config)
-
-# 加载图像
-image = cv2.imread("train_image.jpg")
-
-# 增强图像
-# 在调用 augment 方法时传递增强参数
-augmented_image = augmenter.augment(
-    image,
-    angle=15,  # 旋转角度
-    brightness_factor=1.0,  # 亮度因子
-    contrast_factor=1.0  # 对比度因子
-)
-
-# 批量增强
-images = [cv2.imread(f"image_{i}.jpg") for i in range(10)]
-augmented_images = augmenter.augment_batch(images)
-
-# 保存增强后的图像
-cv2.imwrite("augmented_image.jpg", augmented_image)
+# 递归处理文件夹中所有图片和视频
+for frame, meta, result in v.run("images_folder/", recursive=True):
+    print(f"[{meta.get('source_path')}] {len(result['detections'])} 个检测")
 ```
+
+## Vision 类参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `model` | str | `"yolov8n.pt"` | 模型路径或名称 |
+| `model_type` | str | `"yolo"` | 检测器后端 |
+| `device` | str | `"auto"` | 推理设备 |
+| `conf` | float | `0.25` | 置信度阈值 |
+| `iou` | float | `0.45` | NMS IoU 阈值 |
+| `track` | bool | `False` | 开启跟踪 |
+| `tracker` | str | `"bytetrack"` | 跟踪器类型 |
+| `segment` | bool | `False` | 开启分割 |
+| `pose` | bool | `False` | 开启姿态估计 |
+
+## run() 方法参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `source` | str/int/list/ndarray | - | 媒体源 |
+| `recursive` | bool | `False` | 文件夹递归 |
+| `skip_frames` | int | `0` | 视频跳帧数 |
+| `start_frame` | int | `0` | 视频起始帧 |
+| `end_frame` | int/None | `None` | 视频结束帧 |
+
+## 返回值
+
+`v.run(source)` 返回一个迭代器，每次迭代产生一个元组 `(frame, meta, result)`:
+
+- **frame**: `np.ndarray` — BGR 格式图像
+- **meta**: `dict` — 元数据 (`source_path`, `frame_index`, `is_video` 等)
+- **result**: `dict` — 包含:
+  - `"detections"`: `List[Detection]` — 检测结果
+  - `"tracks"`: `List[Track]` — 跟踪结果 (需 `track=True`)
+  - `"poses"`: `List[Pose]` — 姿态结果 (需 `pose=True`)
 
 ## 下一步
 
-- 在 `examples/` 目录中探索更多示例
-- 查看 `FEATURES.md` 了解所有可用功能
-- 参考 `API_REFERENCE.md` 获取详细的 API 文档
-- 运行测试以确保所有功能正常工作：
-  ```bash
-  python -m pytest test/
-  ```
+- 查看 [examples/](../examples/) 获取完整示例
+- 阅读 [API 参考](API_REFERENCE.md) 了解完整接口
+- 阅读 [功能特性](FEATURES.md) 了解全部能力

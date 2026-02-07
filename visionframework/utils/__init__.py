@@ -11,6 +11,7 @@ from .data.image_utils import ImageUtils
 from .data.export import ResultExporter
 from .monitoring.performance import PerformanceMonitor, Timer
 from .io.video_utils import VideoProcessor, VideoWriter, process_video
+from .io.media_source import iter_frames
 from .monitoring.logger import setup_logger, get_logger
 from .data.trajectory_analyzer import TrajectoryAnalyzer
 from .error_handling import ErrorHandler, error_handler
@@ -48,6 +49,7 @@ __all__ = [
     "VideoProcessor",
     "VideoWriter",
     "process_video",
+    "iter_frames",
     "setup_logger",
     "get_logger",
     "TrajectoryAnalyzer",

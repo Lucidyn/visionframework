@@ -87,7 +87,6 @@ class DETRDetector(BaseDetector):
             if not DETR_AVAILABLE:
                 raise ImportError("transformers and torch not installed. Install with: pip install transformers torch")
             
-            import torch
             # Use cache for processor and model
             proc_key = f"detr_proc:{self.model_name}"
             mdl_key = f"detr_model:{self.model_name}"
@@ -162,12 +161,11 @@ class DETRDetector(BaseDetector):
                         self.processor = None
                     self.processor = None
 
-            try:
-                import torch
-                if torch.cuda.is_available():
+            if DETR_AVAILABLE and torch.cuda.is_available():
+                try:
                     torch.cuda.empty_cache()
-            except Exception:
-                pass
+                except Exception:
+                    pass
         finally:
             self.is_initialized = False
     
@@ -207,6 +205,11 @@ class DETRDetector(BaseDetector):
                 print(f"{det.class_name}: {det.confidence:.2f}")
             ```
         """
+        # Validate input (skip for batch — validated per-element inside)
+        is_batch = isinstance(image, (list, tuple)) or (isinstance(image, np.ndarray) and image.ndim == 4)
+        if not is_batch:
+            self._validate_image(image)
+
         if not self.is_initialized:
             if not self.initialize():
                 logger.error("DETR detector not initialized")
@@ -215,11 +218,7 @@ class DETRDetector(BaseDetector):
         detections: List[Detection] = []
         
         try:
-            import torch
             from PIL import Image
-            
-            # Support single image or batch of images
-            is_batch = isinstance(image, (list, tuple)) or (isinstance(image, np.ndarray) and image.ndim == 4)
 
             # Prepare PIL images
             if is_batch:
@@ -240,13 +239,9 @@ class DETRDetector(BaseDetector):
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
             # Run inference with optional fp16 autocast
-            try:
-                import torch
-                if self.use_fp16 and self.device == 'cuda':
-                    amp_ctx = torch.cuda.amp.autocast()
-                else:
-                    amp_ctx = torch.no_grad()
-            except Exception:
+            if self.use_fp16 and self.device == 'cuda':
+                amp_ctx = torch.cuda.amp.autocast()
+            else:
                 amp_ctx = torch.no_grad()
 
             with amp_ctx:
@@ -356,7 +351,6 @@ class DETRDetector(BaseDetector):
         batch_detections: List[List[Detection]] = [[] for _ in images]
         
         try:
-            import torch
             from PIL import Image
             
             # Prepare PIL images and convert
@@ -371,13 +365,9 @@ class DETRDetector(BaseDetector):
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
             
             # Run inference
-            try:
-                import torch
-                if self.use_fp16 and self.device == 'cuda':
-                    amp_ctx = torch.cuda.amp.autocast()
-                else:
-                    amp_ctx = torch.no_grad()
-            except Exception:
+            if self.use_fp16 and self.device == 'cuda':
+                amp_ctx = torch.cuda.amp.autocast()
+            else:
                 amp_ctx = torch.no_grad()
             
             with amp_ctx:

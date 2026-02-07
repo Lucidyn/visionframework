@@ -13,6 +13,13 @@ from visionframework.utils.io.config_models import DeviceManager, ModelCache
 logger = get_logger(__name__)
 
 try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    TORCH_AVAILABLE = False
+
+try:
     from ultralytics import YOLO
     YOLO_AVAILABLE = True
 except ImportError:
@@ -215,6 +222,11 @@ class YOLODetector(BaseDetector):
                 print(f"{det.class_name}: {det.confidence:.2f}")
             ```
         """
+        # Validate input (skip for batch — validated per-element inside)
+        is_batch = isinstance(image, (list, tuple)) or (isinstance(image, np.ndarray) and image.ndim == 4)
+        if not is_batch:
+            self._validate_image(image)
+
         if not self.is_initialized:
             if not self.initialize():
                 logger.error("YOLO detector not initialized")
@@ -222,7 +234,6 @@ class YOLODetector(BaseDetector):
         
         try:
             # Run YOLO inference
-            is_batch = isinstance(image, (list, tuple)) or (isinstance(image, np.ndarray) and image.ndim == 4)
             results = self._run_inference(image)
             
             # Process results
@@ -470,14 +481,14 @@ class YOLODetector(BaseDetector):
         Returns:
             Any: YOLO inference results
         """
-        try:
-            import torch
-            ctx = torch.no_grad()
-            if self.use_fp16 and self.device == 'cuda':
-                amp = torch.cuda.amp.autocast()
-                ctx = amp
-        except Exception:
-            ctx = None
+        ctx = None
+        if TORCH_AVAILABLE:
+            try:
+                ctx = torch.no_grad()
+                if self.use_fp16 and self.device == 'cuda':
+                    ctx = torch.cuda.amp.autocast()
+            except Exception:
+                ctx = None
         
         if ctx is not None:
             with ctx:
@@ -507,12 +518,11 @@ class YOLODetector(BaseDetector):
                     except Exception:
                         self.model = None
                     self.model = None
-            try:
-                import torch
-                if torch.cuda.is_available():
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                try:
                     torch.cuda.empty_cache()
-            except Exception:
-                pass
+                except Exception:
+                    pass
         finally:
             self.is_initialized = False
 

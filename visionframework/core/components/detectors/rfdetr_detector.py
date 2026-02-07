@@ -4,6 +4,7 @@ RF-DETR detector implementation
 
 import cv2
 import numpy as np
+from contextlib import nullcontext
 from typing import List, Optional, Dict, Any, Union
 from .base_detector import BaseDetector
 from visionframework.data.detection import Detection
@@ -11,6 +12,13 @@ from visionframework.utils.monitoring.logger import get_logger
 from visionframework.utils.io.config_models import DeviceManager, ModelCache
 
 logger = get_logger(__name__)
+
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    TORCH_AVAILABLE = False
 
 try:
     from rfdetr import RFDETRBase
@@ -135,12 +143,11 @@ class RFDETRDetector(BaseDetector):
                     except Exception:
                         self.model = None
                     self.model = None
-            try:
-                import torch
-                if torch.cuda.is_available():
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                try:
                     torch.cuda.empty_cache()
-            except Exception:
-                pass
+                except Exception:
+                    pass
         finally:
             self.is_initialized = False
     
@@ -181,6 +188,11 @@ class RFDETRDetector(BaseDetector):
                 print(f"{det.class_name}: {det.confidence:.2f}")
             ```
         """
+        # Validate input (skip for batch — validated per-element inside)
+        is_batch = isinstance(image, (list, tuple)) or (isinstance(image, np.ndarray) and image.ndim == 4)
+        if not is_batch:
+            self._validate_image(image)
+
         if not self.is_initialized:
             if not self.initialize():
                 logger.error("RF-DETR detector not initialized")
@@ -190,9 +202,6 @@ class RFDETRDetector(BaseDetector):
 
         try:
             from PIL import Image
-
-            # Support batch or single image
-            is_batch = isinstance(image, (list, tuple)) or (isinstance(image, np.ndarray) and image.ndim == 4)
 
             images = []
             if is_batch:
@@ -204,14 +213,15 @@ class RFDETRDetector(BaseDetector):
                 images.append(Image.fromarray(img_rgb))
 
             # Run inference for each image (model.predict may not support batch)
-            try:
-                import torch
-                if self.config.get('use_fp16', False) and self.device == 'cuda':
-                    amp_ctx = torch.cuda.amp.autocast()
-                else:
-                    amp_ctx = torch.no_grad()
-            except Exception:
-                amp_ctx = None
+            amp_ctx = None
+            if TORCH_AVAILABLE:
+                try:
+                    if self.config.get('use_fp16', False) and self.device == 'cuda':
+                        amp_ctx = torch.cuda.amp.autocast()
+                    else:
+                        amp_ctx = torch.no_grad()
+                except Exception:
+                    amp_ctx = None
 
             results_list = []
             if amp_ctx is not None:
@@ -337,7 +347,6 @@ class RFDETRDetector(BaseDetector):
         batch_detections: List[List[Detection]] = [[] for _ in images]
         
         try:
-            import torch
             import supervision
             
             # Process each image individually (RF-DETR batch inference support varies)
@@ -346,7 +355,7 @@ class RFDETRDetector(BaseDetector):
                 
                 try:
                     # Run inference on single image
-                    with torch.no_grad():
+                    with torch.no_grad() if TORCH_AVAILABLE else nullcontext():
                         results = self.model(image)
                     
                     # Convert to supervision Detections if needed

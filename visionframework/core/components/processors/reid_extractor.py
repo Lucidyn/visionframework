@@ -17,7 +17,7 @@ except ImportError:
 
 from .feature_extractor import FeatureExtractor
 from visionframework.utils.monitoring.logger import get_logger
-from visionframework.utils.io.config_models import Config, ModelCache
+from visionframework.utils.io.config_models import ModelCache
 
 logger = get_logger(__name__)
 
@@ -149,7 +149,7 @@ class ReIDExtractor(FeatureExtractor):
         Returns:
             Feature embeddings shape (N, 2048)
         """
-        if not self.is_initialized():
+        if not self.is_initialized:
             self.initialize()
         
         if not bboxes:
@@ -225,7 +225,7 @@ class ReIDExtractor(FeatureExtractor):
             # features[2].shape = (2, 2048)
             ```
         """
-        if not self.is_initialized():
+        if not self.is_initialized:
             self.initialize()
         
         batch_features = []

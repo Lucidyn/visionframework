@@ -1,55 +1,21 @@
 """
-00_basic_detection.py
+00 - 基本目标检测
+=================
+最简单的用法：3 行代码检测图片中的物体。
 
-基础目标检测示例：
-- 使用 YOLODetector 对单张图片进行检测
-- 代码尽量简单，便于快速上手
-
-注意：
-- 需要提前准备 YOLO 权重（如 yolov8n.pt），并放在当前工作目录或指定路径。
+source 参数支持：图片路径、视频路径、摄像头 (0)、RTSP 流、文件夹、路径列表。
 """
 
-import cv2
+from visionframework import Vision
 
-from visionframework import YOLODetector, Visualizer
+# ── 创建 Vision 实例 ──
+v = Vision(model="yolov8n.pt")
 
+# ── 运行检测 ──
+source = "test.jpg"  # 换成你的图片 / 视频 / 摄像头 / 文件夹
 
-def main() -> None:
-    # 1. 创建检测器配置
-    detector_config = {
-        "model_path": "yolov8n.pt",  # 可替换为你的模型路径
-        "device": "auto",
-        "conf_threshold": 0.25,
-    }
-
-    detector = YOLODetector(detector_config)
-
-    # 2. 初始化模型（加载权重）
-    if not detector.initialize():
-        print("YOLODetector 初始化失败，请检查模型路径和依赖（ultralytics、torch 等）。")
-        return
-
-    # 3. 读取测试图片
-    image_path = "test.jpg"  # 请替换为你自己的图片路径
-    image = cv2.imread(image_path)
-    if image is None:
-        print(f"无法读取图像: {image_path}")
-        return
-
-    # 4. 进行检测
-    detections = detector.detect(image)
-    print(f"检测到 {len(detections)} 个目标")
-
-    # 5. 使用集成的可视化 API 绘制检测结果
-    visualizer = Visualizer()
-    vis_image = visualizer.draw_detections(image.copy(), detections)
-
-    # 6. 显示 / 保存结果
-    cv2.imshow("Detections", vis_image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-
-if __name__ == "__main__":
-    main()
-
+for frame, meta, result in v.run(source):
+    detections = result["detections"]
+    print(f"[{meta.get('source_path', 'frame')}] 检测到 {len(detections)} 个物体")
+    for det in detections:
+        print(f"  {det.class_name}: {det.confidence:.2f}  bbox={det.bbox}")

@@ -38,6 +38,29 @@ class BaseTracker(BaseModule):
         self.is_initialized = True
         return True
     
+    @staticmethod
+    def _validate_detections(detections) -> List[Detection]:
+        """Normalise and validate the *detections* argument.
+
+        Accepts ``None`` (treated as empty list) and any iterable of
+        ``Detection`` objects.  Returns a ``list``.
+
+        Raises:
+            TypeError: if *detections* is not iterable or contains
+                       non-Detection objects.
+        """
+        if detections is None:
+            return []
+        if not isinstance(detections, (list, tuple)):
+            try:
+                detections = list(detections)
+            except TypeError:
+                raise TypeError(
+                    f"detections must be a list/tuple of Detection objects, "
+                    f"got {type(detections).__name__}"
+                )
+        return detections
+
     def update(self, detections: List[Detection], frame: Optional[Any] = None) -> List[Track]:
         """
         Update the tracker with new detections

@@ -1,5 +1,41 @@
 # 功能特性
 
+## 🆕 v0.3.0 — 全新 Vision API (2026-02-07)
+
+### API 极简化
+
+整个框架只有一个入口类 `Vision`，两种创建方式：
+
+```python
+from visionframework import Vision
+
+# 方式一：关键字参数
+v = Vision(model="yolov8n.pt", track=True, pose=True)
+
+# 方式二：配置文件 (JSON / YAML / dict)
+v = Vision.from_config("config.json")
+
+# 统一的 run() 方法处理一切
+for frame, meta, result in v.run("video.mp4"):
+    print(result["detections"], result["tracks"], result["poses"])
+```
+
+### 对比旧 API
+
+| 操作 | 旧 API (v0.2.x) | 新 API (v0.3.0) |
+|------|-----------------|-----------------|
+| 检测 | `create_detector(model_path="yolov8n.pt")` | `Vision(model="yolov8n.pt")` |
+| 跟踪 | `create_pipeline(detector_config=..., enable_tracking=True)` | `Vision(track=True)` |
+| 姿态 | 手动创建 PoseEstimator + Pipeline | `Vision(pose=True)` |
+| 处理 | `detector.detect_source(source)` / `pipeline.process_source(source)` / `process_image(source)` | `v.run(source)` |
+| 配置 | `Config.load_from_file(...)` + 手动构建 | `Vision.from_config("config.json")` |
+
+### v0.2.15 代码质量优化
+- 共享工具模块 (`trackers/utils.py`)，减少 ~90 行重复代码
+- 输入验证增强
+- ByteTracker bug 修复
+- ~250 行代码精简
+
 ## 核心功能
 
 ### 1. 目标检测
@@ -37,45 +73,24 @@
 - **导出选项**: 以多种格式保存标注
 
 ### 5. 简化API
-- **静态方法**: 无需初始化管道即可快速处理
-- **类方法**: 针对特定用例的简单配置
-- **链式方法**: 使用流畅语法构建复杂管道
+- **一个入口**: `Vision` 类是唯一需要的入口
+- **两种创建**: 关键字参数 或 配置文件
+- **统一处理**: `v.run(source)` 处理一切输入
 
 #### 使用示例
 
 ```python
-from visionframework import VisionPipeline, process_image, process_video
-import cv2
+from visionframework import Vision
 
-# 使用静态方法快速处理图像
-image = cv2.imread("test.jpg")
-results = VisionPipeline.process_image(
-    image,
-    {
-        "detector_config": {
-            "model_path": "yolov8n.pt",
-            "conf_threshold": 0.4
-        },
-        "enable_tracking": True
-    }
-)
+# 关键字创建
+v = Vision(model="yolov8n.pt", track=True)
 
-# 使用简化函数处理图像
-results = process_image(
-    image,
-    model_path="yolov8n.pt",
-    enable_tracking=True,
-    enable_segmentation=True
-)
+# 或从配置文件
+v = Vision.from_config("config.json")
 
-# 使用简化函数处理视频
-process_video(
-    input_source="input.mp4",
-    output_path="output.mp4",
-    model_path="yolov8n.pt",
-    enable_tracking=True,
-    use_pyav=True  # 启用PyAV后端以获得更高性能
-)
+# 处理任意来源
+for frame, meta, result in v.run("video.mp4"):
+    print(result["detections"], result["tracks"])
 ```
 
 ### 6. 图像分割

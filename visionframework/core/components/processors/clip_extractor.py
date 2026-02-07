@@ -104,7 +104,7 @@ class CLIPExtractor(FeatureExtractor):
         Returns:
             Normalized embeddings shape (N, D)
         """
-        if not self.is_initialized():
+        if not self.is_initialized:
             self.initialize()
         
         import torch
@@ -143,7 +143,7 @@ class CLIPExtractor(FeatureExtractor):
         Returns:
             Normalized embeddings shape (N, D)
         """
-        if not self.is_initialized():
+        if not self.is_initialized:
             self.initialize()
         
         import torch

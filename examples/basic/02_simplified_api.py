@@ -1,52 +1,43 @@
 """
-02_simplified_api.py
-
-简化 API 使用示例：
-- 使用 process_image 一行调用完成检测 / 跟踪 / 分割 / 姿态估计
+02 - 从配置文件加载
+===================
+使用 JSON/YAML 配置文件创建 Vision 实例，便于管理不同场景的配置。
 """
 
-import cv2
+import json
+import tempfile
+from pathlib import Path
+from visionframework import Vision
 
-from visionframework import process_image, Visualizer
+# ── 1. 从 dict 创建（适合代码中动态配置）──
+v1 = Vision.from_config({
+    "model": "yolov8n.pt",
+    "track": True,
+    "conf": 0.3,
+})
+print(f"v1: {v1}")
 
+# ── 2. 从 JSON 文件创建（适合运维/部署场景）──
+config = {
+    "model": "yolov8n.pt",
+    "model_type": "yolo",
+    "device": "auto",
+    "conf": 0.25,
+    "track": True,
+    "tracker": "bytetrack",
+    "pose": False,
+    "segment": False,
+}
 
-def main() -> None:
-    # 1. 加载图像
-    image_path = "test.jpg"  # 请替换为你自己的图片路径
-    image = cv2.imread(image_path)
-    if image is None:
-        print(f"无法读取图像: {image_path}")
-        return
+# 写一个临时配置文件做演示
+config_path = Path(tempfile.gettempdir()) / "vision_config.json"
+config_path.write_text(json.dumps(config, indent=2))
+print(f"配置文件: {config_path}")
 
-    # 2. 使用简化 API 进行处理
-    results = process_image(
-        image,
-        model_path="yolov8n.pt",
-        enable_tracking=True,
-        enable_segmentation=False,
-        enable_pose_estimation=False,
-    )
+v2 = Vision.from_config(config_path)
+print(f"v2: {v2}")
 
-    detections = results.get("detections", [])
-    tracks = results.get("tracks", [])
-    poses = results.get("poses", [])
-    print(f"检测到 {len(detections)} 个目标, {len(tracks)} 条轨迹, {len(poses)} 个姿态")
-
-    # 3. 使用集成的可视化 API 绘制检测 / 跟踪 / 姿态结果
-    visualizer = Visualizer()
-    vis_image = visualizer.draw_results(
-        image.copy(),
-        detections=detections,
-        tracks=tracks,
-        poses=poses,
-    )
-
-    # 4. 显示结果
-    cv2.imshow("Simplified API - process_image", vis_image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-
-if __name__ == "__main__":
-    main()
-
+# ── 3. 处理媒体 ──
+source = "test.jpg"
+for frame, meta, result in v2.run(source):
+    print(f"检测到 {len(result['detections'])} 个物体")

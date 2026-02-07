@@ -51,6 +51,7 @@ class FeatureExtractor(ABC):
         """
         pass
     
+    @property
     def is_initialized(self) -> bool:
         """Check if extractor is initialized."""
         return self._initialized

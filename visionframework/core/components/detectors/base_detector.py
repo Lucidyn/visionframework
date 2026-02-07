@@ -6,7 +6,8 @@ All detectors must inherit from BaseDetector and implement the detect() method.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Union
+from pathlib import Path
+from typing import List, Optional, Union, Iterator, Tuple, Any, Dict
 import numpy as np
 from visionframework.core.base import BaseModule
 from visionframework.data.detection import Detection
@@ -33,6 +34,21 @@ class BaseDetector(BaseModule, ABC):
         ```
     """
     
+    @staticmethod
+    def _validate_image(image: np.ndarray) -> None:
+        """Validate that *image* is a proper BGR numpy array.
+
+        Raises:
+            TypeError: if *image* is not an ndarray.
+            ValueError: if shape or dtype is wrong.
+        """
+        if not isinstance(image, np.ndarray):
+            raise TypeError(f"Expected np.ndarray, got {type(image).__name__}")
+        if image.ndim not in (2, 3):
+            raise ValueError(f"Image must be 2D (grayscale) or 3D (H,W,C), got ndim={image.ndim}")
+        if image.size == 0:
+            raise ValueError("Image is empty (zero pixels)")
+
     @abstractmethod
     def detect(self, image: np.ndarray, categories: Optional[Union[list, tuple]] = None) -> List[Detection]:
         """
@@ -130,4 +146,46 @@ class BaseDetector(BaseModule, ABC):
                                   Each inner list contains Detection objects for that image.
         """
         return self.detect_batch(images, categories=categories)
+
+    def detect_source(
+        self,
+        source: Union[str, int, List[Union[str, int]], np.ndarray, Path],
+        categories: Optional[Union[list, tuple]] = None,
+        *,
+        recursive_folder: bool = False,
+        video_skip_frames: int = 0,
+        video_start_frame: int = 0,
+        video_end_frame: Optional[int] = None,
+    ) -> Iterator[Tuple[np.ndarray, Dict[str, Any], List[Detection]]]:
+        """
+        Detect objects on a unified media source (image, video, stream, folder, or list).
+
+        Yields (frame, meta, detections) for each frame. Accepts:
+        - str: path to image, video, or folder
+        - int: camera index (e.g. 0)
+        - List[Union[str, int]]: multiple paths or camera indices
+        - np.ndarray: single BGR image
+
+        Args:
+            source: Image path, video path/URL, camera index, folder path,
+                    list of the above, or single BGR numpy array.
+            categories: Optional list/tuple of class ids or names to keep.
+            recursive_folder: If source is a folder, include subfolders.
+            video_skip_frames: For video, skip this many frames between reads.
+            video_start_frame: For video, start at this frame index.
+            video_end_frame: For video, stop at this frame index (None = to end).
+
+        Yields:
+            (frame, meta, detections): frame (BGR), meta dict (source_path, frame_index, ...), list of Detection.
+        """
+        from visionframework.utils.io.media_source import iter_frames
+        for frame, meta in iter_frames(
+            source,
+            recursive_folder=recursive_folder,
+            video_skip_frames=video_skip_frames,
+            video_start_frame=video_start_frame,
+            video_end_frame=video_end_frame,
+        ):
+            detections = self.detect(frame, categories=categories)
+            yield frame, meta, detections
 

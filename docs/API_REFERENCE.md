@@ -1,5 +1,140 @@
 # API 参考文档
 
+## Vision 类 (v0.3.0+)
+
+`Vision` 是整个框架的唯一入口。所有功能通过这一个类访问。
+
+```python
+from visionframework import Vision
+```
+
+### 构造函数
+
+```python
+Vision(
+    model: str = "yolov8n.pt",
+    model_type: str = "yolo",
+    device: str = "auto",
+    conf: float = 0.25,
+    iou: float = 0.45,
+    track: bool = False,
+    tracker: str = "bytetrack",
+    segment: bool = False,
+    pose: bool = False,
+    **extra
+)
+```
+
+**参数：**
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `model` | str | `"yolov8n.pt"` | 模型路径或名称 |
+| `model_type` | str | `"yolo"` | 检测器后端: `"yolo"` / `"detr"` / `"rfdetr"` |
+| `device` | str | `"auto"` | 推理设备 |
+| `conf` | float | `0.25` | 置信度阈值 |
+| `iou` | float | `0.45` | NMS IoU 阈值 |
+| `track` | bool | `False` | 是否开启多目标跟踪 |
+| `tracker` | str | `"bytetrack"` | 跟踪器类型: `"bytetrack"` / `"ioutracker"` / `"reidtracker"` |
+| `segment` | bool | `False` | 是否开启实例分割 |
+| `pose` | bool | `False` | 是否开启姿态估计 |
+| `**extra` | - | - | 额外参数透传给检测器配置 |
+
+### `Vision.from_config(path)`
+
+从配置文件或字典创建 Vision 实例。
+
+```python
+# 从 JSON 文件
+v = Vision.from_config("config.json")
+
+# 从 YAML 文件
+v = Vision.from_config("config.yaml")
+
+# 从字典
+v = Vision.from_config({"model": "yolov8n.pt", "track": True})
+```
+
+**配置文件示例 (JSON)：**
+```json
+{
+    "model": "yolov8n.pt",
+    "model_type": "yolo",
+    "device": "auto",
+    "conf": 0.25,
+    "iou": 0.45,
+    "track": true,
+    "tracker": "bytetrack",
+    "segment": false,
+    "pose": false
+}
+```
+
+### `Vision.run(source, *, recursive, skip_frames, start_frame, end_frame)`
+
+处理任意媒体源，返回迭代器。
+
+```python
+for frame, meta, result in v.run(source):
+    # frame: np.ndarray (BGR)
+    # meta:  dict (source_path, frame_index, is_video, ...)
+    # result: dict (detections, tracks, poses)
+    ...
+```
+
+**参数：**
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `source` | str/int/list/ndarray/Path | - | 媒体源 |
+| `recursive` | bool | `False` | 文件夹是否递归 |
+| `skip_frames` | int | `0` | 视频跳帧数 |
+| `start_frame` | int | `0` | 视频起始帧 |
+| `end_frame` | int/None | `None` | 视频结束帧 |
+
+**`source` 支持的类型：**
+
+| 值 | 类型 |
+|----|------|
+| `"test.jpg"` | 图片文件 |
+| `"video.mp4"` | 视频文件 |
+| `0` | 摄像头 |
+| `"rtsp://..."` | RTSP / HTTP 流 |
+| `"folder/"` | 文件夹 |
+| `["a.jpg", "b.mp4"]` | 混合列表 |
+| `np.ndarray` | BGR 图像数组 |
+
+**返回值 `result` 结构：**
+
+| 键 | 类型 | 说明 |
+|----|------|------|
+| `"detections"` | `List[Detection]` | 检测结果列表 |
+| `"tracks"` | `List[Track]` | 跟踪结果列表 (需 `track=True`) |
+| `"poses"` | `List[Pose]` | 姿态结果列表 (需 `pose=True`) |
+
+### `Vision.draw(frame, result)`
+
+在帧上绘制检测/跟踪/姿态结果。
+
+```python
+annotated = v.draw(frame, result)
+cv2.imshow("Result", annotated)
+```
+
+### `Vision.pipeline`
+
+访问底层 `VisionPipeline` 实例，用于高级操作。
+
+### `Vision.cleanup()`
+
+释放模型资源和 GPU 显存。
+
+---
+
+## 旧版 API (向后兼容)
+
+以下 API 仍然可用，但推荐使用 `Vision` 类代替。
+
 ## VisionPipeline
 
 用于创建计算机视觉管道的主类。

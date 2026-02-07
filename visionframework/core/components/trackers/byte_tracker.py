@@ -6,14 +6,9 @@ ByteTrack: Multi-Object Tracking by Associating Every Detection Box
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from .base_tracker import BaseTracker
+from .utils import iou_cost_matrix, linear_assignment
 from visionframework.data.track import STrack
 from visionframework.data.detection import Detection
-
-try:
-    from scipy.optimize import linear_sum_assignment
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
 
 
 class ByteTracker(BaseTracker):
@@ -54,81 +49,30 @@ class ByteTracker(BaseTracker):
         self.is_initialized = True
         return True
     
-    def _calculate_iou(self, box1: Tuple[float, float, float, float],
-                       box2: Tuple[float, float, float, float]) -> float:
-        """Calculate IoU between two boxes"""
-        x1_1, y1_1, x2_1, y2_1 = box1
-        x1_2, y1_2, x2_2, y2_2 = box2
-        
-        x1_i = max(x1_1, x1_2)
-        y1_i = max(y1_1, y1_2)
-        x2_i = min(x2_1, x2_2)
-        y2_i = min(y2_1, y2_2)
-        
-        if x2_i <= x1_i or y2_i <= y1_i:
-            return 0.0
-        
-        intersection = (x2_i - x1_i) * (y2_i - y1_i)
-        area1 = (x2_1 - x1_1) * (y2_1 - y1_1)
-        area2 = (x2_2 - x1_2) * (y2_2 - y1_2)
-        union = area1 + area2 - intersection
-        
-        return intersection / union if union > 0 else 0.0
-    
     def _iou_distance(self, tracks: List[STrack], detections: List[Detection]) -> np.ndarray:
-        """Calculate IoU distance matrix"""
-        if len(tracks) == 0 or len(detections) == 0:
-            return np.zeros((len(tracks), len(detections)), dtype=np.float32)
-        
-        cost_matrix = np.zeros((len(tracks), len(detections)), dtype=np.float32)
-        for i, track in enumerate(tracks):
-            for j, det in enumerate(detections):
-                iou = self._calculate_iou(track.bbox, det.bbox)
-                cost_matrix[i, j] = 1.0 - iou
-        
-        return cost_matrix
-    
-    def _linear_assignment(self, cost_matrix: np.ndarray, thresh: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Linear assignment using Hungarian algorithm"""
-        if cost_matrix.size == 0:
-            return np.empty((0, 2), dtype=int), tuple(range(cost_matrix.shape[0])), tuple(range(cost_matrix.shape[1]))
-        
-        if SCIPY_AVAILABLE:
-            matched_indices = linear_sum_assignment(cost_matrix)
-            matched_indices = np.array(list(zip(*matched_indices)))
-        else:
-            matched_indices = []
-            used_rows = set()
-            used_cols = set()
-            
-            for i in range(cost_matrix.shape[0]):
-                for j in range(cost_matrix.shape[1]):
-                    if i not in used_rows and j not in used_cols:
-                        if cost_matrix[i, j] < thresh:
-                            matched_indices.append([i, j])
-                            used_rows.add(i)
-                            used_cols.add(j)
-            matched_indices = np.array(matched_indices) if matched_indices else np.empty((0, 2), dtype=int)
-        
-        unmatched_a = []
-        unmatched_b = []
-        
-        for i, cost in enumerate(cost_matrix):
-            if i not in matched_indices[:, 0]:
-                unmatched_a.append(i)
-        
-        for i in range(cost_matrix.shape[1]):
-            if i not in matched_indices[:, 1]:
-                unmatched_b.append(i)
-        
-        return matched_indices, np.array(unmatched_a), np.array(unmatched_b)
+        """Calculate IoU distance matrix using shared utility."""
+        return iou_cost_matrix(
+            [t.bbox for t in tracks],
+            [d.bbox for d in detections],
+        )
     
     def update(self, detections, image=None) -> List[STrack]:
         """Process detections and update tracks"""
+        detections = self._validate_detections(detections)
         if not self.is_initialized:
             self.initialize()
         
         self.frame_id += 1
+        
+        if not detections:
+            # Age existing tracks even when there are no new detections
+            for track in self.tracked_tracks:
+                if track.state != "Lost":
+                    track.mark_lost()
+            self.lost_tracks.extend([t for t in self.tracked_tracks if t.state == "Lost"])
+            self.tracked_tracks = []
+            self.lost_tracks = [t for t in self.lost_tracks if self.frame_id - t.frame_id <= self.track_buffer]
+            return []
         
         # Separate detections by confidence
         detections_high = [d for d in detections if d.confidence >= self.track_thresh]
@@ -147,9 +91,11 @@ class ByteTracker(BaseTracker):
         removed_tracks = []
         
         # Match high confidence detections with tracked tracks
+        unmatched_det_indices: np.ndarray = np.arange(len(detections_high))
         if len(self.tracked_tracks) > 0:
             cost_matrix = self._iou_distance(self.tracked_tracks, detections_high)
-            matches, u_track, u_detection = self._linear_assignment(cost_matrix, 1.0 - self.match_thresh)
+            matches, u_track, u_detection = linear_assignment(cost_matrix, 1.0 - self.match_thresh)
+            unmatched_det_indices = u_detection
             
             for itrack, idet in matches:
                 track = self.tracked_tracks[itrack]
@@ -170,33 +116,27 @@ class ByteTracker(BaseTracker):
         # Match low confidence detections with lost tracks
         if len(self.lost_tracks) > 0:
             cost_matrix = self._iou_distance(self.lost_tracks, detections_low)
-            matches, u_lost, u_detection_low = self._linear_assignment(cost_matrix, 1.0 - self.match_thresh)
+            low_matches, u_lost, u_detection_low = linear_assignment(cost_matrix, 1.0 - self.match_thresh)
             
-            for itrack, idet in matches:
+            for itrack, idet in low_matches:
                 track = self.lost_tracks[itrack]
                 det = detections_low[idet]
                 track.re_activate(det, self.frame_id, new_id=False)
                 refined_tracks.append(track)
         
         # Create new tracks for unmatched high confidence detections
-        for det in detections_high:
-            # Check if already matched
-            matched = False
-            for match in matches if len(self.tracked_tracks) > 0 else []:
-                if det == detections_high[match[1]]:
-                    matched = True
-                    break
-            if not matched:
-                track = STrack(
-                    track_id=self.next_id,
-                    bbox=det.bbox,
-                    score=det.confidence,
-                    class_id=det.class_id,
-                    class_name=det.class_name
-                )
-                track.activate(self.frame_id)
-                activated_tracks.append(track)
-                self.next_id += 1
+        for idet in unmatched_det_indices:
+            det = detections_high[idet]
+            track = STrack(
+                track_id=self.next_id,
+                bbox=det.bbox,
+                score=det.confidence,
+                class_id=det.class_id,
+                class_name=det.class_name
+            )
+            track.activate(self.frame_id)
+            activated_tracks.append(track)
+            self.next_id += 1
         
         # Update track lists
         self.tracked_tracks = [t for t in activated_tracks if t.state == "Tracked"]

@@ -5,14 +5,12 @@ IoU-based tracker implementation
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from .base_tracker import BaseTracker
+from .utils import iou_cost_matrix, SCIPY_AVAILABLE
 from visionframework.data.detection import Detection
 from visionframework.data.track import Track
 
-try:
+if SCIPY_AVAILABLE:
     from scipy.optimize import linear_sum_assignment
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
 
 
 class IOUTracker(BaseTracker):
@@ -44,27 +42,6 @@ class IOUTracker(BaseTracker):
         self.is_initialized = True
         return True
     
-    def _calculate_iou(self, box1: Tuple[float, float, float, float],
-                       box2: Tuple[float, float, float, float]) -> float:
-        """Calculate IoU between two boxes"""
-        x1_1, y1_1, x2_1, y2_1 = box1
-        x1_2, y1_2, x2_2, y2_2 = box2
-        
-        x1_i = max(x1_1, x1_2)
-        y1_i = max(y1_1, y1_2)
-        x2_i = min(x2_1, x2_2)
-        y2_i = min(y2_1, y2_2)
-        
-        if x2_i <= x1_i or y2_i <= y1_i:
-            return 0.0
-        
-        intersection = (x2_i - x1_i) * (y2_i - y1_i)
-        area1 = (x2_1 - x1_1) * (y2_1 - y1_1)
-        area2 = (x2_2 - x1_2) * (y2_2 - y1_2)
-        union = area1 + area2 - intersection
-        
-        return intersection / union if union > 0 else 0.0
-    
     def _associate_detections_to_tracks(
         self,
         detections: List[Detection],
@@ -74,12 +51,11 @@ class IOUTracker(BaseTracker):
         if len(tracks) == 0 or len(detections) == 0:
             return [], list(range(len(detections))), list(range(len(tracks)))
         
-        # Build cost matrix
-        cost_matrix = np.zeros((len(tracks), len(detections)))
-        for i, track in enumerate(tracks):
-            for j, det in enumerate(detections):
-                iou = self._calculate_iou(track.bbox, det.bbox)
-                cost_matrix[i, j] = 1.0 - iou
+        # Build cost matrix using shared utility
+        cost_matrix = iou_cost_matrix(
+            [t.bbox for t in tracks],
+            [d.bbox for d in detections],
+        )
         
         # Use Hungarian algorithm if scipy available, else greedy matching
         if SCIPY_AVAILABLE:
@@ -120,6 +96,7 @@ class IOUTracker(BaseTracker):
     
     def update(self, detections: List[Detection], image=None) -> List[Track]:
         """Update tracker with new detections"""
+        detections = self._validate_detections(detections)
         if not self.is_initialized:
             self.initialize()
         

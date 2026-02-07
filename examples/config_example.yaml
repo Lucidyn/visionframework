@@ -1,0 +1,12 @@
+# Vision Framework 配置示例
+# 使用: v = Vision.from_config("config_example.yaml")
+
+model: yolov8n.pt
+model_type: yolo
+device: auto
+conf: 0.25
+iou: 0.45
+track: true
+tracker: bytetrack
+segment: false
+pose: false
