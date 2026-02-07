@@ -1,6 +1,3 @@
-# Vision Framework 配置示例
-# 使用: v = Vision.from_config("config_example.yaml")
-
 model: yolov8n.pt
 model_type: yolo
 device: auto
@@ -10,3 +7,10 @@ track: true
 tracker: bytetrack
 segment: false
 pose: false
+fp16: false
+batch_inference: false
+dynamic_batch: false
+max_batch_size: 8
+category_thresholds:
+  person: 0.5
+  car: 0.3

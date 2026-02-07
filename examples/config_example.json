@@ -7,5 +7,13 @@
     "track": true,
     "tracker": "bytetrack",
     "segment": false,
-    "pose": false
+    "pose": false,
+    "fp16": false,
+    "batch_inference": false,
+    "dynamic_batch": false,
+    "max_batch_size": 8,
+    "category_thresholds": {
+        "person": 0.5,
+        "car": 0.3
+    }
 }

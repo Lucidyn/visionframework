@@ -57,13 +57,12 @@ for frame, meta, result in v.run("video.mp4"):
 ```json
 {
     "model": "yolov8n.pt",
-    "model_type": "yolo",
     "device": "auto",
     "conf": 0.3,
     "track": true,
     "tracker": "bytetrack",
-    "pose": false,
-    "segment": false
+    "fp16": true,
+    "category_thresholds": {"person": 0.5, "car": 0.3}
 }
 ```
 
@@ -125,12 +124,17 @@ for frame, meta, result in v.run("images_folder/", recursive=True):
 | `model` | str | `"yolov8n.pt"` | 模型路径或名称 |
 | `model_type` | str | `"yolo"` | 检测器后端 |
 | `device` | str | `"auto"` | 推理设备 |
-| `conf` | float | `0.25` | 置信度阈值 |
+| `conf` | float | `0.25` | 全局置信度阈值 |
 | `iou` | float | `0.45` | NMS IoU 阈值 |
 | `track` | bool | `False` | 开启跟踪 |
 | `tracker` | str | `"bytetrack"` | 跟踪器类型 |
 | `segment` | bool | `False` | 开启分割 |
 | `pose` | bool | `False` | 开启姿态估计 |
+| `fp16` | bool | `False` | FP16 半精度推理 (CUDA) |
+| `batch_inference` | bool | `False` | 启用批量推理 |
+| `dynamic_batch` | bool | `False` | 动态调整批量大小 |
+| `max_batch_size` | int | `8` | 最大 batch 大小 |
+| `category_thresholds` | dict/None | `None` | 按类别阈值, 如 `{"person": 0.5}` |
 
 ## run() 方法参数
 

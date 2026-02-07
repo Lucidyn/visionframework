@@ -161,3 +161,95 @@ def test_vision_repr() -> None:
     assert "yolov8n.pt" in r
     assert "track=" in r
     assert "pose=True" in r
+
+
+def test_vision_repr_fp16() -> None:
+    """repr 应该显示 fp16 标志。"""
+    v = Vision(model="nonexistent_model.pt", fp16=True)
+    assert "fp16=True" in repr(v)
+
+
+def test_vision_repr_batch() -> None:
+    """repr 应该显示 batch_inference 标志。"""
+    v = Vision(model="nonexistent_model.pt", batch_inference=True)
+    assert "batch_inference=True" in repr(v)
+
+
+# ================================================================
+# 6. 新增参数 — fp16, batch, category_thresholds
+# ================================================================
+
+def test_vision_constructor_fp16() -> None:
+    """Vision(fp16=True) 应能创建实例。"""
+    v = Vision(model="nonexistent_model.pt", fp16=True, device="cpu")
+    assert isinstance(v, Vision)
+
+
+def test_vision_constructor_batch_inference() -> None:
+    """Vision(batch_inference=True) 应能创建实例。"""
+    v = Vision(model="nonexistent_model.pt", batch_inference=True)
+    assert isinstance(v, Vision)
+
+
+def test_vision_constructor_dynamic_batch() -> None:
+    """Vision(dynamic_batch=True) 应能创建实例。"""
+    v = Vision(model="nonexistent_model.pt", dynamic_batch=True, max_batch_size=16)
+    assert isinstance(v, Vision)
+
+
+def test_vision_constructor_category_thresholds() -> None:
+    """Vision(category_thresholds={...}) 应能创建实例。"""
+    v = Vision(
+        model="nonexistent_model.pt",
+        category_thresholds={"person": 0.6, "car": 0.3},
+    )
+    assert isinstance(v, Vision)
+
+
+def test_vision_from_config_with_new_params() -> None:
+    """Vision.from_config() 应能解析 fp16 / batch / category_thresholds。"""
+    cfg = {
+        "model": "nonexistent_model.pt",
+        "fp16": True,
+        "batch_inference": True,
+        "dynamic_batch": True,
+        "max_batch_size": 16,
+        "category_thresholds": {"person": 0.5},
+    }
+    v = Vision.from_config(cfg)
+    assert isinstance(v, Vision)
+    assert "fp16=True" in repr(v)
+    assert "batch_inference=True" in repr(v)
+
+
+def test_vision_run_with_fp16() -> None:
+    """fp16 模式下 run() 应正常返回结果。"""
+    v = Vision(model="nonexistent_model.pt", fp16=True)
+    img = _make_dummy_image()
+    for frame, meta, result in v.run(img):
+        assert isinstance(result, dict)
+        assert "detections" in result
+
+
+def test_vision_all_params_combined() -> None:
+    """所有参数组合使用应能创建实例并运行。"""
+    v = Vision(
+        model="nonexistent_model.pt",
+        model_type="yolo",
+        device="cpu",
+        conf=0.3,
+        iou=0.5,
+        track=True,
+        tracker="bytetrack",
+        segment=True,
+        pose=True,
+        fp16=False,
+        batch_inference=True,
+        dynamic_batch=True,
+        max_batch_size=4,
+        category_thresholds={"person": 0.6},
+    )
+    assert isinstance(v, Vision)
+    img = _make_dummy_image()
+    for frame, meta, result in v.run(img):
+        assert isinstance(result, dict)

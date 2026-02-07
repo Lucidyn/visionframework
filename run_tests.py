@@ -16,6 +16,7 @@ TEST_MODULES = [
     "test.core.test_tracker_utils",
     "test.core.test_input_validation",
     "test.core.test_basic_api",
+    "test.core.test_processors",
 ]
 
 
@@ -30,7 +31,19 @@ def run_module(module_name: str):
         traceback.print_exc()
         return 0, 1
 
-    passed = failed = 0
+    # Collect skip exception types
+    _skip_types = []
+    try:
+        from _pytest.outcomes import Skipped
+        _skip_types.append(Skipped)
+    except ImportError:
+        pass
+    # Also detect test-level _Skip markers
+    if hasattr(mod, "_Skip"):
+        _skip_types.append(mod._Skip)
+    _skip_types = tuple(_skip_types) if _skip_types else None
+
+    passed = failed = skipped = 0
     for name in sorted(dir(mod)):
         if not name.startswith("test_"):
             continue
@@ -41,9 +54,15 @@ def run_module(module_name: str):
             fn()
             print(f"  {name} ... [PASSED]")
             passed += 1
-        except Exception as e:
-            print(f"  {name} ... [FAILED] {e}")
-            failed += 1
+        except BaseException as e:
+            if _skip_types and isinstance(e, _skip_types):
+                print(f"  {name} ... [SKIPPED]")
+                skipped += 1
+            else:
+                print(f"  {name} ... [FAILED] {e}")
+                failed += 1
+    if skipped:
+        print(f"\n  ({skipped} tests skipped due to unavailable dependencies)")
     return passed, failed
 
 

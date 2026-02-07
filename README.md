@@ -34,7 +34,8 @@ for frame, meta, result in v.run("video.mp4"):
     "model": "yolov8n.pt",
     "track": true,
     "conf": 0.25,
-    "device": "auto"
+    "device": "auto",
+    "fp16": true
 }
 ```
 
@@ -68,12 +69,17 @@ for frame, meta, result in v.run("video.mp4"):
 | `model` | `"yolov8n.pt"` | 模型路径或名称 |
 | `model_type` | `"yolo"` | 检测器后端：`yolo` / `detr` / `rfdetr` |
 | `device` | `"auto"` | 设备：`auto` / `cpu` / `cuda` / `cuda:0` |
-| `conf` | `0.25` | 置信度阈值 |
+| `conf` | `0.25` | 全局置信度阈值 |
 | `iou` | `0.45` | NMS IoU 阈值 |
 | `track` | `False` | 开启多目标跟踪 |
 | `tracker` | `"bytetrack"` | 跟踪器：`bytetrack` / `ioutracker` / `reidtracker` |
 | `segment` | `False` | 开启实例分割 |
 | `pose` | `False` | 开启姿态估计 |
+| `fp16` | `False` | FP16 半精度推理 (CUDA) |
+| `batch_inference` | `False` | 启用批量推理 |
+| `dynamic_batch` | `False` | 动态调整批量大小 |
+| `max_batch_size` | `8` | 最大 batch 大小 |
+| `category_thresholds` | `None` | 按类别阈值, 如 `{"person": 0.5}` |
 
 ## 更多示例
 
@@ -122,6 +128,10 @@ track: true
 tracker: bytetrack
 pose: false
 segment: false
+fp16: true
+category_thresholds:
+  person: 0.5
+  car: 0.3
 ```
 
 ```python
@@ -141,11 +151,11 @@ v = Vision.from_config("config.yaml")
 ## 关键更新
 
 **v0.3.0 - API 大幅简化** (2026-02-07):
-- **全新 `Vision` 类**：一个类取代所有旧 API (`create_detector`, `create_pipeline`, `process_image` 等)
+- **全新 `Vision` 类**：一个类取代所有旧 API
 - **两种创建方式**：`Vision(...)` 关键字参数 + `Vision.from_config(path)` 配置文件
 - **统一 `run()` 方法**：处理图片/视频/摄像头/RTSP/文件夹/列表
 - **`draw()` 方法**：一行绘制检测/跟踪/姿态结果
-- **向后兼容**：旧的内部类 (YOLODetector, VisionPipeline 等) 仍可导入
+- **性能参数**：`fp16`、`batch_inference`、`dynamic_batch`、`category_thresholds`
 - 修复了 `core/pipelines/pipeline.py` 中的相对导入错误
 
 **v0.2.15 - 核心代码优化与重构**:

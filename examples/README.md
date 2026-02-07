@@ -17,6 +17,7 @@
 
 | 文件 | 功能 |
 |------|------|
+| `06_clip_features.py` | CLIP 特征提取 / 零样本分类 |
 | `08_model_tools_example.py` | 模型工具（量化、剪枝、增强等） |
 | `09_multimodal_processing.py` | 多模态处理 |
 | `10_batch_processing.py` | 批处理 |

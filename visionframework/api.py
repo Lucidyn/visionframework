@@ -73,6 +73,11 @@ class Vision:
         tracker: str = "bytetrack",
         segment: bool = False,
         pose: bool = False,
+        fp16: bool = False,
+        batch_inference: bool = False,
+        dynamic_batch: bool = False,
+        max_batch_size: int = 8,
+        category_thresholds: Optional[Dict[str, float]] = None,
         **extra,
     ) -> None:
         """Create a Vision instance from keyword arguments.
@@ -97,6 +102,16 @@ class Vision:
             Enable instance segmentation.
         pose : bool
             Enable pose estimation.
+        fp16 : bool
+            Use FP16 half-precision inference (CUDA only, improves speed).
+        batch_inference : bool
+            Enable batch inference for processing multiple images.
+        dynamic_batch : bool
+            Enable dynamic batch sizing (auto-adjust batch size).
+        max_batch_size : int
+            Maximum batch size when batch_inference is enabled.
+        category_thresholds : dict | None
+            Per-category confidence thresholds, e.g. ``{"person": 0.5, "car": 0.3}``.
         **extra
             Forwarded into the detector / tracker / pipeline config as-is.
         """
@@ -109,6 +124,11 @@ class Vision:
         self._tracker = tracker
         self._segment = segment
         self._pose = pose
+        self._fp16 = fp16
+        self._batch_inference = batch_inference
+        self._dynamic_batch = dynamic_batch
+        self._max_batch_size = max_batch_size
+        self._category_thresholds = category_thresholds
         self._extra = extra
 
         # Build internal pipeline
@@ -254,6 +274,10 @@ class Vision:
             parts.append("segment=True")
         if self._pose:
             parts.append("pose=True")
+        if self._fp16:
+            parts.append("fp16=True")
+        if self._batch_inference:
+            parts.append("batch_inference=True")
         parts.append(f"device={self._device!r}")
         return f"Vision({', '.join(parts)})"
 
@@ -269,7 +293,18 @@ class Vision:
             "device": self._device,
             "conf_threshold": self._conf,
             "iou_threshold": self._iou,
+            "use_fp16": self._fp16,
+            "batch_inference": self._batch_inference,
+            "dynamic_batch_size": self._dynamic_batch,
+            "max_batch_size": self._max_batch_size,
         }
+        if self._category_thresholds:
+            detector_cfg["category_thresholds"] = self._category_thresholds
+
+        # Segmentation flag
+        if self._segment:
+            detector_cfg["enable_segmentation"] = True
+
         # Forward any extra keys into detector config
         for k, v in self._extra.items():
             detector_cfg.setdefault(k, v)
