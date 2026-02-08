@@ -7,7 +7,7 @@ long_description = readme_file.read_text(encoding="utf-8") if readme_file.exists
 
 setup(
     name="visionframework",
-    version="0.2.14",
+    version="0.3.0",
     description="A comprehensive vision framework for detection, tracking, and more with configuration management, model management, and device autoselection",
     long_description=long_description,
     long_description_content_type="text/markdown",

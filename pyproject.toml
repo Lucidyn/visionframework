@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visionframework"
-version = "0.2.14"
+version = "0.3.0"
 description = "A comprehensive vision framework for detection, tracking, and more with configuration management, model management, and device autoselection"
 readme = "README.md"
 requires-python = ">=3.8"
