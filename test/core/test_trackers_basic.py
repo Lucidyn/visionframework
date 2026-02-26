@@ -1,15 +1,14 @@
 """
-Basic tests for IOUTracker and ByteTracker.
+IOUTracker 与 ByteTracker 基础测试。
 
-这些测试构造少量虚拟 Detection，验证：
+构造少量虚拟 Detection，验证：
 - 跟踪器可以创建轨迹
 - 连续帧更新时，轨迹数量和 ID 表现合理
 """
 
 from typing import List
 
-from visionframework.core.components.trackers import IOUTracker, ByteTracker
-from visionframework.data import Detection
+from visionframework import IOUTracker, ByteTracker, Detection
 
 
 def _make_detections_frame1() -> List[Detection]:
@@ -32,12 +31,10 @@ def test_iou_tracker_creates_and_updates_tracks() -> None:
 
     dets1 = _make_detections_frame1()
     tracks1 = tracker.update(dets1)
-    # 第一帧应创建至少两个轨迹
     assert len(tracks1) >= 1
 
     dets2 = _make_detections_frame2()
     tracks2 = tracker.update(dets2)
-    # 第二帧后，仍应有轨迹存在
     assert len(tracks2) >= 1
 
 
@@ -56,8 +53,6 @@ def test_byte_tracker_creates_tracks() -> None:
     tracks1 = tracker.update(dets1)
     assert len(tracks1) >= 1
 
-    # 第二帧略微移动，应保持同 ID 或增加少量新轨迹
     dets2 = _make_detections_frame2()
     tracks2 = tracker.update(dets2)
     assert len(tracks2) >= 1
-

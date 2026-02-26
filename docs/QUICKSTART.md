@@ -154,11 +154,64 @@ for frame, meta, result in v.run("images_folder/", recursive=True):
 - **meta**: `dict` — 元数据 (`source_path`, `frame_index`, `is_video` 等)
 - **result**: `dict` — 包含:
   - `"detections"`: `List[Detection]` — 检测结果
-  - `"tracks"`: `List[Track]` — 跟踪结果 (需 `track=True`)
-  - `"poses"`: `List[Pose]` — 姿态结果 (需 `pose=True`)
+  - `"tracks"`: `List[Track]` — 跟踪结果（需 `track=True`）
+  - `"poses"`: `List[Pose]` — 姿态结果（需 `pose=True`）
+  - `"counts"`: `dict` — ROI 计数结果（需先调用 `add_roi()`）
+
+## 示例 7: ROI 区域计数
+
+```python
+from visionframework import Vision
+
+v = Vision(model="yolov8n.pt", track=True)
+v.add_roi("entrance", [(100,100),(400,100),(400,400),(100,400)])
+
+for frame, meta, result in v.run("video.mp4"):
+    counts = result["counts"]
+    print(counts)
+    # {"entrance": {"inside": 3, "entering": 1, "exiting": 0,
+    #               "total_entered": 12, "total_exited": 9}}
+```
+
+## 示例 8: 批量图像处理
+
+```python
+import numpy as np
+from visionframework import Vision
+
+v = Vision(model="yolov8n.pt")
+images = [np.zeros((480, 640, 3), dtype=np.uint8) for _ in range(4)]
+results = v.process_batch(images)
+for i, r in enumerate(results):
+    print(f"图像 {i}: {len(r['detections'])} 个检测")
+```
+
+## 示例 9: 热力图可视化
+
+```python
+import cv2
+from visionframework import Vision, Visualizer
+
+v = Vision(model="yolov8n.pt", track=True)
+vis = Visualizer()
+state = {}
+
+for frame, meta, result in v.run("video.mp4"):
+    heatmap = vis.draw_heatmap(
+        frame, result["tracks"],
+        alpha=0.4, accumulate=True, _heat_state=state
+    )
+    cv2.imshow("热力图", heatmap)
+    if cv2.waitKey(1) & 0xFF == ord("q"):
+        break
+cv2.destroyAllWindows()
+v.cleanup()
+```
 
 ## 下一步
 
 - 查看 [examples/](../examples/) 获取完整示例
 - 阅读 [API 参考](API_REFERENCE.md) 了解完整接口
 - 阅读 [功能特性](FEATURES.md) 了解全部能力
+- 阅读 [高级指南](ADVANCED.md) 了解插件、优化、部署
+- 查看 [更新日志](CHANGELOG.md) 了解版本历史

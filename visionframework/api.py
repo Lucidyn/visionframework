@@ -30,6 +30,8 @@ import numpy as np
 
 from .core.pipelines.pipeline import VisionPipeline
 from .utils.visualization.unified_visualizer import Visualizer
+from .core.roi_detector import ROIDetector
+from .core.counter import Counter
 
 
 class Vision:
@@ -131,6 +133,10 @@ class Vision:
         self._category_thresholds = category_thresholds
         self._extra = extra
 
+        # ROI / counting (populated via add_roi)
+        self._roi_detector: Optional[ROIDetector] = None
+        self._counter: Optional[Counter] = None
+
         # Build internal pipeline
         self._pipeline = self._build_pipeline()
 
@@ -222,13 +228,22 @@ class Vision:
             - *meta*: dict with ``source_path``, ``frame_index``, …
             - *result*: dict with ``detections``, ``tracks``, ``poses``
         """
-        yield from self._pipeline.process_source(
+        for frame, meta, result in self._pipeline.process_source(
             source,
             recursive_folder=recursive,
             video_skip_frames=skip_frames,
             video_start_frame=start_frame,
             video_end_frame=end_frame,
-        )
+        ):
+            # Inject ROI counts when zones have been registered
+            if self._counter is not None:
+                tracks = result.get("tracks") or []
+                detections = result.get("detections") or []
+                if tracks:
+                    result["counts"] = self._counter.count_tracks(tracks)
+                else:
+                    result["counts"] = self._counter.count_detections(detections)
+            yield frame, meta, result
 
     # ------------------------------------------------------------------
     # Convenience helpers
@@ -265,6 +280,123 @@ class Vision:
     def cleanup(self) -> None:
         """Release model resources and free GPU memory."""
         self._pipeline.cleanup()
+
+    # ------------------------------------------------------------------
+    # ROI counting
+    # ------------------------------------------------------------------
+
+    def add_roi(
+        self,
+        name: str,
+        points: List[Tuple[float, float]],
+        roi_type: str = "polygon",
+    ) -> "Vision":
+        """Register a Region of Interest for counting.
+
+        After adding at least one ROI, the ``result["counts"]`` key will be
+        populated on every frame returned by :meth:`run`.
+
+        Parameters
+        ----------
+        name : str
+            Human-readable name for the zone (e.g. ``"entrance"``).
+        points : list of (x, y)
+            Polygon vertices (or two corner points for ``roi_type="rectangle"``).
+        roi_type : str
+            ``"polygon"`` | ``"rectangle"`` | ``"circle"``.
+
+        Returns
+        -------
+        Vision
+            *self*, so calls can be chained.
+
+        Example
+        -------
+        >>> v = Vision(model="yolov8n.pt", track=True)
+        >>> v.add_roi("entrance", [(100,100),(400,100),(400,400),(100,400)])
+        >>> for frame, meta, result in v.run("video.mp4"):
+        ...     print(result["counts"])
+        """
+        if self._roi_detector is None:
+            self._roi_detector = ROIDetector()
+            self._roi_detector.initialize()
+            self._counter = Counter({"roi_detector": self._roi_detector})
+            self._counter.initialize()
+        self._roi_detector.add_roi(name, points, roi_type)
+        return self
+
+    # ------------------------------------------------------------------
+    # Batch convenience
+    # ------------------------------------------------------------------
+
+    def process_batch(
+        self,
+        images: List[np.ndarray],
+    ) -> List[Dict[str, Any]]:
+        """Process a list of numpy images and return a list of result dicts.
+
+        Parameters
+        ----------
+        images : list of np.ndarray
+            BGR images to process.
+
+        Returns
+        -------
+        list of dict
+            One result dict per image (same structure as ``run()``).
+
+        Example
+        -------
+        >>> v = Vision(model="yolov8n.pt")
+        >>> results = v.process_batch([frame1, frame2, frame3])
+        >>> for r in results:
+        ...     print(len(r["detections"]))
+        """
+        results = []
+        for img in images:
+            frames = list(self.run(img))
+            results.append(frames[0][2] if frames else {"detections": [], "tracks": [], "poses": []})
+        return results
+
+    # ------------------------------------------------------------------
+    # Info
+    # ------------------------------------------------------------------
+
+    def info(self) -> Dict[str, Any]:
+        """Return a summary of this Vision instance's configuration.
+
+        Returns
+        -------
+        dict
+            Keys: ``model``, ``model_type``, ``device``, ``conf``, ``iou``,
+            ``track``, ``tracker``, ``segment``, ``pose``, ``fp16``,
+            ``batch_inference``, ``max_batch_size``, ``category_thresholds``,
+            ``rois``.
+
+        Example
+        -------
+        >>> v = Vision(model="yolov8n.pt", track=True)
+        >>> print(v.info())
+        """
+        rois = []
+        if self._roi_detector is not None:
+            rois = [r.name for r in self._roi_detector.get_rois()]
+        return {
+            "model": self._model,
+            "model_type": self._model_type,
+            "device": self._device,
+            "conf": self._conf,
+            "iou": self._iou,
+            "track": self._track,
+            "tracker": self._tracker,
+            "segment": self._segment,
+            "pose": self._pose,
+            "fp16": self._fp16,
+            "batch_inference": self._batch_inference,
+            "max_batch_size": self._max_batch_size,
+            "category_thresholds": self._category_thresholds,
+            "rois": rois,
+        }
 
     def __repr__(self) -> str:
         parts = [f"model={self._model!r}"]

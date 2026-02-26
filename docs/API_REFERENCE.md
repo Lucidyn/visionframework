@@ -1,5 +1,7 @@
 # API 参考文档
 
+> **v0.4.0** — 所有组件均可直接从 `visionframework` 导入，无需记忆内部模块路径。
+
 ## Vision 类
 
 `Vision` 是整个框架的唯一入口。所有功能通过这一个类访问。
@@ -142,10 +144,52 @@ for frame, meta, result in v.run(source):
 | `"detections"` | `List[Detection]` | 检测结果列表 |
 | `"tracks"` | `List[Track]` | 跟踪结果列表 (需 `track=True`) |
 | `"poses"` | `List[Pose]` | 姿态结果列表 (需 `pose=True`) |
+| `"counts"` | `dict` | ROI 计数结果 (需先调用 `add_roi()`) |
 
-### `Vision.draw(frame, result)`
+### `Vision.add_roi(name, points, roi_type="polygon")`
 
-在帧上绘制检测/跟踪/姿态结果。
+注册感兴趣区域，开启区域计数功能。返回 `self` 以支持链式调用。
+
+```python
+v = Vision(model="yolov8n.pt", track=True)
+v.add_roi("entrance", [(100,100),(400,100),(400,400),(100,400)])
+v.add_roi("exit",     [(500,100),(800,100),(800,400),(500,400)], roi_type="rectangle")
+
+for frame, meta, result in v.run("video.mp4"):
+    counts = result["counts"]
+    # {"entrance": {"inside": 3, "entering": 1, "exiting": 0,
+    #               "total_entered": 12, "total_exited": 9}}
+```
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `name` | str | 区域名称 |
+| `points` | list[(x,y)] | 多边形顶点（矩形用两个角点） |
+| `roi_type` | str | `"polygon"` / `"rectangle"` / `"circle"` |
+
+### `Vision.process_batch(images)`
+
+批量处理 numpy 图像列表，返回结果列表。
+
+```python
+results = v.process_batch([img1, img2, img3])
+for r in results:
+    print(len(r["detections"]))
+```
+
+### `Vision.info()`
+
+返回当前实例的配置摘要字典。
+
+```python
+print(v.info())
+# {"model": "yolov8n.pt", "device": "cpu", "track": True,
+#  "rois": ["entrance", "exit"], ...}
+```
+
+### `Vision.draw(frame, result, **kwargs)`
+
+在帧上绘制检测/跟踪/姿态结果（`Visualizer.draw()` 的快捷方式）。
 
 ```python
 annotated = v.draw(frame, result)
@@ -285,6 +329,33 @@ vis = Visualizer()
 | `draw_poses(image, poses)` | 绘制姿态结果 |
 | `draw_results(image, detections, tracks, poses)` | 绘制所有结果 |
 | `draw(image, result)` | 传入 `v.run()` 返回的 result dict，自动绘制 |
+| `draw_heatmap(frame, tracks, *, alpha, radius, colormap, accumulate, _heat_state)` | 轨迹热力图叠加 |
+
+**`draw_heatmap` 参数：**
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `frame` | ndarray | - | BGR 图像 |
+| `tracks` | list[Track] | - | 当前帧的跟踪结果 |
+| `alpha` | float | `0.5` | 热力图混合权重 (0–1) |
+| `radius` | int | `20` | 高斯热点半径（像素） |
+| `colormap` | int | `cv2.COLORMAP_JET` | OpenCV 颜色映射 |
+| `accumulate` | bool | `False` | 是否跨帧累积热力图 |
+| `_heat_state` | dict\|None | `None` | 跨帧累积状态字典（传入同一个 dict 即可） |
+
+```python
+from visionframework import Visualizer
+vis = Visualizer()
+
+# 单帧热力图
+heatmap = vis.draw_heatmap(frame, tracks)
+
+# 累积热力图（跨帧）
+state = {}
+for frame, meta, result in v.run("video.mp4"):
+    heatmap = vis.draw_heatmap(frame, result["tracks"],
+                               accumulate=True, _heat_state=state)
+```
 
 ---
 
@@ -457,6 +528,44 @@ for frame, meta, result in v.run("input.mp4"):
         print(f"ID {track.track_id}")
 v.cleanup()
 ```
+
+---
+
+## 可导入符号速查表
+
+所有符号均可通过 `from visionframework import <名称>` 直接导入：
+
+| 类别 | 符号 |
+|------|------|
+| **主入口** | `Vision` |
+| **数据结构** | `Detection`, `Track`, `STrack`, `Pose`, `KeyPoint`, `ROI` |
+| **可视化** | `Visualizer` |
+| **导出** | `ResultExporter` |
+| **基类** | `BaseDetector`, `BaseTracker`, `BaseProcessor` |
+| **检测器** | `YOLODetector`, `DETRDetector`, `RFDETRDetector` |
+| **跟踪器** | `IOUTracker`, `ByteTracker`, `ReIDTracker` |
+| **跟踪工具** | `calculate_iou`, `iou_cost_matrix`, `linear_assignment`, `SCIPY_AVAILABLE` |
+| **处理器** | `PoseEstimator`, `CLIPExtractor`, `ReIDExtractor` |
+| **分割器** | `SAMSegmenter` |
+| **管道** | `VisionPipeline`, `BatchPipeline`, `VideoPipeline` |
+| **插件系统** | `PluginRegistry`, `ModelRegistry`, `plugin_registry`, `model_registry`, `register_detector`, `register_tracker`, `register_segmenter`, `register_processor`, `register_model`, `register_visualizer`, `register_evaluator`, `register_custom_component` |
+| **ROI / 计数** | `ROIDetector`, `Counter` |
+| **配置** | `Config`, `BaseConfig`, `DetectorConfig` |
+| **监控** | `PerformanceMonitor`, `PerformanceMetrics`, `Timer` |
+| **媒体源** | `iter_frames` |
+| **内存管理** | `MemoryPool`, `MultiMemoryPool`, `create_memory_pool`, `acquire_memory`, `release_memory`, `get_memory_pool_status`, `optimize_memory_usage`, `clear_memory_pool`, `clear_all_memory_pools` |
+| **并发处理** | `Task`, `ThreadPoolProcessor`, `parallel_map` |
+| **数据增强** | `ImageAugmenter`, `AugmentationConfig`, `AugmentationType`, `InterpolationType` |
+| **模型优化** | `QuantizationConfig`, `quantize_model`, `PruningConfig`, `prune_model`, `DistillationConfig`, `distill_model`, `compare_model_performance` |
+| **模型训练** | `FineTuningConfig`, `FineTuningStrategy`, `ModelFineTuner` |
+| **模型转换** | `ModelFormat`, `ConversionConfig`, `ModelConverter`, `convert_model`, `validate_converted_model`, `get_supported_formats`, `get_compatible_formats`, `get_format_extension`, `get_format_dependencies`, `get_format_from_extension` |
+| **模型部署** | `DeploymentPlatform`, `DeploymentConfig`, `ModelDeployer`, `deploy_model`, `validate_deployment`, `get_supported_platforms`, `get_platform_compatibility`, `get_platform_requirements`, `get_platform_from_string` |
+| **模型管理** | `select_model`, `ModelSelector`, `ModelType`, `ModelRequirement`, `HardwareInfo`, `HardwareTier` |
+| **多模态融合** | `FusionType`, `MultimodalFusion`, `fuse_features`, `get_fusion_model` |
+| **轨迹分析** | `TrajectoryAnalyzer` |
+| **评估工具** | `DetectionEvaluator`, `TrackingEvaluator` |
+| **错误处理** | `ErrorHandler`, `DependencyManager`, `dependency_manager`, `is_dependency_available`, `get_available_dependencies`, `get_missing_dependencies`, `validate_dependency`, `get_install_command`, `import_optional_dependency` |
+| **异常** | `VisionFrameworkError`, `DetectorInitializationError`, `DetectorInferenceError`, `TrackerInitializationError`, `TrackerUpdateError`, `ConfigurationError`, `ModelNotFoundError`, `ModelLoadError`, `DeviceError`, `DependencyError`, `DataFormatError`, `ProcessingError` |
 
 ---
 

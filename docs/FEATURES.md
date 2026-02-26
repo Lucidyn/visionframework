@@ -1,5 +1,59 @@
 # 功能特性
 
+## 🆕 v0.4.0 — 新功能（2026-02-26）
+
+### ROI 区域计数
+
+```python
+v = Vision(model="yolov8n.pt", track=True)
+v.add_roi("entrance", [(100,100),(400,100),(400,400),(100,400)])
+for frame, meta, result in v.run("video.mp4"):
+    counts = result["counts"]  # {"entrance": {"inside": 3, "total_entered": 12, ...}}
+```
+
+### 批量图像处理
+
+```python
+results = v.process_batch([img1, img2, img3])
+```
+
+### 实例信息
+
+```python
+print(v.info())  # {"model": "yolov8n.pt", "device": "cpu", "rois": ["entrance"], ...}
+```
+
+### 热力图可视化
+
+```python
+from visionframework import Visualizer
+vis = Visualizer()
+heatmap = vis.draw_heatmap(frame, tracks, alpha=0.5, accumulate=True, _heat_state={})
+```
+
+### LoRA / QLoRA 微调
+
+```python
+from visionframework import FineTuningConfig, FineTuningStrategy, ModelFineTuner
+
+cfg = FineTuningConfig(strategy=FineTuningStrategy.LORA, epochs=10)
+tuner = ModelFineTuner(cfg)
+```
+
+### 统一导入风格
+
+v0.4.0 起，所有组件均可直接从 `visionframework` 导入，无需记忆内部模块路径：
+
+```python
+# 旧写法（仍然有效）
+from visionframework.utils.model_optimization.quantization import QuantizationConfig
+
+# 新写法（推荐）
+from visionframework import QuantizationConfig
+```
+
+---
+
 ## 🆕 v0.3.0 — 全新 Vision API (2026-02-07)
 
 ### API 极简化
@@ -196,7 +250,7 @@ for frame, meta, result in v.run("video.mp4"):
 - **动态配置**: 运行时更新设置
 - **默认配置**: 合理的默认值，便于快速设置
 
-### 4. 性能优化
+### 3. 性能优化
 - **动态批量大小**: 根据输入大小自动调整批量大小，优化内存使用
 - **FP16支持**: 半精度推理，加快处理速度，减少显存占用
 - **并行处理**: 

@@ -2,8 +2,9 @@
 Unified visualizer combining all visualization capabilities
 """
 
+import cv2
 import numpy as np
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from .base_visualizer import BaseVisualizer
 from .detection_visualizer import DetectionVisualizer
 from .track_visualizer import TrackVisualizer
@@ -72,6 +73,111 @@ class Visualizer(BaseVisualizer):
         # Draw detections if no tracks (or if explicitly requested)
         if detections and not tracks:
             result = self.draw_detections(result, detections)
-        
+
         return result
+
+    def draw_heatmap(
+        self,
+        frame: np.ndarray,
+        tracks: List[Track],
+        *,
+        alpha: float = 0.5,
+        radius: int = 20,
+        colormap: int = cv2.COLORMAP_JET,
+        accumulate: bool = False,
+        _heat_state: Optional[Dict] = None,
+    ) -> np.ndarray:
+        """Overlay a trajectory heatmap on *frame*.
+
+        Each track's bounding-box centre is used as a heat point.
+
+        Parameters
+        ----------
+        frame : np.ndarray
+            BGR image to draw on.
+        tracks : list[Track]
+            Current frame's tracks.
+        alpha : float
+            Blend weight for the heatmap overlay (0 = invisible, 1 = full).
+        radius : int
+            Gaussian blob radius in pixels.
+        colormap : int
+            OpenCV colormap constant (default ``cv2.COLORMAP_JET``).
+        accumulate : bool
+            If *True* and *_heat_state* is provided, accumulate heat across
+            frames instead of resetting each call.
+        _heat_state : dict | None
+            Mutable dict ``{"heat": np.ndarray}`` for cross-frame accumulation.
+            Pass the same dict on every call to build up a persistent heatmap.
+
+        Returns
+        -------
+        np.ndarray
+            Copy of *frame* with heatmap blended in.
+        """
+        h, w = frame.shape[:2]
+
+        if accumulate and _heat_state is not None:
+            if "heat" not in _heat_state or _heat_state["heat"].shape != (h, w):
+                _heat_state["heat"] = np.zeros((h, w), dtype=np.float32)
+            heat = _heat_state["heat"]
+        else:
+            heat = np.zeros((h, w), dtype=np.float32)
+
+        for track in tracks:
+            x1, y1, x2, y2 = track.bbox
+            cx = int((x1 + x2) / 2)
+            cy = int((y1 + y2) / 2)
+            if 0 <= cx < w and 0 <= cy < h:
+                # Draw a Gaussian blob centred at (cx, cy)
+                x_start = max(0, cx - radius)
+                x_end = min(w, cx + radius + 1)
+                y_start = max(0, cy - radius)
+                y_end = min(h, cy + radius + 1)
+                for iy in range(y_start, y_end):
+                    for ix in range(x_start, x_end):
+                        dist2 = (ix - cx) ** 2 + (iy - cy) ** 2
+                        heat[iy, ix] += np.exp(-dist2 / (2 * (radius / 3) ** 2))
+
+        if accumulate and _heat_state is not None:
+            _heat_state["heat"] = heat
+
+        # Normalise to [0, 255]
+        max_val = heat.max()
+        if max_val > 0:
+            heat_norm = (heat / max_val * 255).astype(np.uint8)
+        else:
+            heat_norm = heat.astype(np.uint8)
+
+        heat_color = cv2.applyColorMap(heat_norm, colormap)
+        result = cv2.addWeighted(frame, 1.0 - alpha, heat_color, alpha, 0)
+        return result
+
+    def draw(
+        self,
+        frame: np.ndarray,
+        result: Dict[str, Any],
+        **kwargs,
+    ) -> np.ndarray:
+        """Convenience wrapper: draw everything in a result dict.
+
+        Parameters
+        ----------
+        frame : np.ndarray
+            BGR image.
+        result : dict
+            The *result* dict from ``Vision.run()``.
+
+        Returns
+        -------
+        np.ndarray
+            Annotated copy of *frame*.
+        """
+        return self.draw_results(
+            frame,
+            detections=result.get("detections"),
+            tracks=result.get("tracks"),
+            poses=result.get("poses"),
+            **kwargs,
+        )
 

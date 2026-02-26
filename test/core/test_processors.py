@@ -7,14 +7,10 @@ CLIP 依赖 transformers，属于可选依赖。
 - 需要模型的方法 -> 尝试 initialize，若依赖缺失则 skip
 """
 
+import pytest
 import numpy as np
 
 from visionframework import CLIPExtractor, ReIDExtractor
-
-
-class _Skip(Exception):
-    """Lightweight skip marker for both pytest and custom runner."""
-    pass
 
 
 def _make_dummy_image(h: int = 224, w: int = 224) -> np.ndarray:
@@ -46,7 +42,7 @@ def _try_init_clip():
     try:
         clip.initialize()
     except (ImportError, RuntimeError, ValueError) as e:
-        raise _Skip(f"CLIP init unavailable: {e}")
+        pytest.skip(f"CLIP init unavailable: {e}")
     return clip
 
 

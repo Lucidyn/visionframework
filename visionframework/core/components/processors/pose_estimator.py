@@ -4,7 +4,7 @@ Pose Estimator
 Provides pose estimation for human/object keypoint detection.
 """
 
-from typing import List, Optional, Any, Dict, Tuple
+from typing import List, Optional, Any, Dict, Tuple, Union
 import numpy as np
 
 try:
@@ -35,30 +35,46 @@ class PoseEstimator(FeatureExtractor):
         "left_knee", "right_knee", "left_ankle", "right_ankle"
     ]
     
-    def __init__(self, model_name: str = "yolov8n-pose.pt", 
-                 device: str = "cpu",
-                 conf_threshold: float = 0.25,
-                 keypoint_threshold: float = 0.5):
+    def __init__(
+        self,
+        model_name: Union[str, Dict[str, Any]] = "yolov8n-pose.pt",
+        device: str = "cpu",
+        conf_threshold: float = 0.25,
+        keypoint_threshold: float = 0.5,
+    ):
         """
         Initialize pose estimator.
-        
+
         Args:
-            model_name: Model path or identifier
-            device: Device to run on ("cpu", "cuda", etc.)
-            conf_threshold: Confidence threshold for pose detection
-            keypoint_threshold: Confidence threshold for individual keypoints
+            model_name: Model path/identifier, or a config dict with keys
+                ``model_path``, ``device``, ``conf_threshold``, ``keypoint_threshold``.
+            device: Device to run on (``"cpu"``, ``"cuda"``, …).
+            conf_threshold: Confidence threshold for pose detection.
+            keypoint_threshold: Confidence threshold for individual keypoints.
         """
+        if isinstance(model_name, dict):
+            cfg = model_name
+            model_name = cfg.get("model_path", "yolov8n-pose.pt")
+            device = cfg.get("device", device)
+            conf_threshold = cfg.get("conf_threshold", conf_threshold)
+            keypoint_threshold = cfg.get("keypoint_threshold", keypoint_threshold)
         super().__init__(model_name, device)
         self.conf_threshold = conf_threshold
         self.keypoint_threshold = keypoint_threshold
         self.keypoint_names = self.COCO_KEYPOINT_NAMES
     
     def initialize(self) -> None:
-        """Initialize the pose estimator model."""
+        """Initialize the pose estimator model.
+
+        Logs an error and leaves ``is_initialized`` as ``False`` if the model
+        file cannot be loaded, so callers can safely call :meth:`process` and
+        receive an empty list rather than an exception.
+        """
         if not YOLO_AVAILABLE:
-            raise ImportError("ultralytics not installed. "
-                            "Install with: pip install 'visionframework[yolo]'")
-        
+            logger.error("ultralytics not installed. "
+                         "Install with: pip install 'visionframework[yolo]'")
+            return
+
         try:
             self.model = YOLO(self.model_name)
             self.model.to(self.device)
@@ -66,7 +82,6 @@ class PoseEstimator(FeatureExtractor):
             logger.info(f"Pose estimator initialized with {self.model_name}")
         except Exception as e:
             logger.error(f"Failed to initialize pose estimator: {e}", exc_info=True)
-            raise RuntimeError(f"Pose estimator initialization failed: {e}")
     
     def extract(self, image: np.ndarray) -> List[Pose]:
         """
@@ -92,9 +107,12 @@ class PoseEstimator(FeatureExtractor):
         """
         if not self.is_initialized:
             self.initialize()
-        
+
+        if not self.is_initialized:
+            return []
+
         poses: List[Pose] = []
-        
+
         try:
             # Run YOLO Pose inference
             results = self.model(
@@ -190,7 +208,10 @@ class PoseEstimator(FeatureExtractor):
         """
         if not self.is_initialized:
             self.initialize()
-        
+
+        if not self.is_initialized:
+            return [[] for _ in images]
+
         batch_poses: List[List[Pose]] = []
         
         try:

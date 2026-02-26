@@ -52,7 +52,7 @@ class CLIPExtractor(FeatureExtractor):
 
             self.processor = ModelCache.get_model(proc_key, lambda: CLIPProcessor.from_pretrained(self.model_name))
             self._cached_processor_key = proc_key
-            self.model = ModelCache.get_model(mdl_key, lambda: CLIPModel.from_pretrained(self.model_name))
+            self.model = ModelCache.get_model(mdl_key, lambda: CLIPModel.from_pretrained(self.model_name, use_safetensors=True))
             self._cached_model_key = mdl_key
 
             # Normalize device and move model if supported

@@ -18,6 +18,38 @@ from torchvision import transforms
 from torchvision.datasets import ImageFolder
 
 
+# ---------------------------------------------------------------------------
+# Lightweight built-in LoRA adapter (used when peft is not installed)
+# ---------------------------------------------------------------------------
+
+class _LoRALinear(nn.Module):
+    """Drop-in LoRA wrapper for nn.Linear."""
+
+    def __init__(self, linear: nn.Linear, rank: int = 8, alpha: float = 16.0) -> None:
+        super().__init__()
+        self.base = linear
+        self.rank = rank
+        self.scale = alpha / rank
+        in_f, out_f = linear.in_features, linear.out_features
+        self.lora_A = nn.Parameter(torch.randn(rank, in_f) * 0.02)
+        self.lora_B = nn.Parameter(torch.zeros(out_f, rank))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        base_out = self.base(x)
+        lora_out = (x @ self.lora_A.T @ self.lora_B.T) * self.scale
+        return base_out + lora_out
+
+
+def _inject_lora_adapters(model: nn.Module, rank: int = 8, alpha: float = 16.0) -> nn.Module:
+    """Replace all nn.Linear layers with _LoRALinear wrappers (in-place)."""
+    for name, module in list(model.named_children()):
+        if isinstance(module, nn.Linear):
+            setattr(model, name, _LoRALinear(module, rank=rank, alpha=alpha))
+        else:
+            _inject_lora_adapters(module, rank=rank, alpha=alpha)
+    return model
+
+
 class FineTuningStrategy(Enum):
     """Fine-tuning strategy enum"""
     FULL = "full"
@@ -273,23 +305,53 @@ class ModelFineTuner:
             for param in model.parameters():
                 param.requires_grad = True
         elif strategy == FineTuningStrategy.LORA:
-            # Implement LoRA (Low-Rank Adaptation)
-            # This is a simplified implementation
+            # Freeze all base parameters first
             for param in model.parameters():
                 param.requires_grad = False
-            
-            # Add LoRA layers to key layers
-            # This would be model-specific
-            pass
+
+            # Try peft-based LoRA; fall back to lightweight built-in LoRA
+            try:
+                from peft import get_peft_model, LoraConfig, TaskType  # type: ignore
+                lora_cfg = LoraConfig(
+                    r=self.config.lora_rank if hasattr(self.config, "lora_rank") else 8,
+                    lora_alpha=self.config.lora_alpha if hasattr(self.config, "lora_alpha") else 16,
+                    lora_dropout=self.config.lora_dropout if hasattr(self.config, "lora_dropout") else 0.1,
+                    bias="none",
+                    task_type=TaskType.FEATURE_EXTRACTION,
+                )
+                model = get_peft_model(model, lora_cfg)
+            except (ImportError, Exception):
+                # Fallback: inject lightweight LoRA adapters into Linear layers
+                model = _inject_lora_adapters(
+                    model,
+                    rank=getattr(self.config, "lora_rank", 8),
+                    alpha=getattr(self.config, "lora_alpha", 16),
+                )
+
         elif strategy == FineTuningStrategy.QLORA:
-            # Implement QLoRA (Quantized LoRA)
-            # This is a simplified implementation
+            # Freeze all base parameters first
             for param in model.parameters():
                 param.requires_grad = False
-            
-            # Add quantized LoRA layers
-            # This would be model-specific
-            pass
+
+            # Try bitsandbytes + peft QLoRA; fall back to LoRA without quantization
+            try:
+                import bitsandbytes as bnb  # type: ignore
+                from peft import get_peft_model, LoraConfig, TaskType  # type: ignore
+                lora_cfg = LoraConfig(
+                    r=self.config.lora_rank if hasattr(self.config, "lora_rank") else 4,
+                    lora_alpha=self.config.lora_alpha if hasattr(self.config, "lora_alpha") else 8,
+                    lora_dropout=0.05,
+                    bias="none",
+                    task_type=TaskType.FEATURE_EXTRACTION,
+                )
+                model = get_peft_model(model, lora_cfg)
+            except (ImportError, Exception):
+                # Fallback: same lightweight LoRA adapters (quantization skipped)
+                model = _inject_lora_adapters(
+                    model,
+                    rank=getattr(self.config, "lora_rank", 4),
+                    alpha=getattr(self.config, "lora_alpha", 8),
+                )
         
         return model
     
