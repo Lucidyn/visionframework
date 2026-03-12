@@ -80,80 +80,19 @@ NECK_MAP = {
 HEAD_IDX = "23"
 
 
-def _map_conv_key(ul_suffix: str) -> str:
-    """将 ultralytics Conv 内部 key 映射为 ConvBNAct 的 key。
-
-    ultralytics Conv:  conv.weight, bn.weight, bn.bias, bn.running_mean, bn.running_var, bn.num_batches_tracked
-    VisionFramework:   conv.weight, bn.weight, bn.bias, bn.running_mean, bn.running_var, bn.num_batches_tracked
-
-    这两者的 submodule 名一致，都是 conv + bn，不需要转换。
-    """
-    return ul_suffix
 
 
-def _map_c3k2_key(ul_suffix: str) -> str:
-    """C3k2 内部 key 映射。
-
-    ultralytics C3k2:
-      cv1.conv.weight / cv1.bn.*
-      cv2.conv.weight / cv2.bn.*
-      m.0.cv1.conv.weight / m.0.cv2.conv.weight ...  (Bottleneck)
-      或 m.0.cv1/cv2/cv3 + m.0.m.0.cv1/cv2 (C3k -> CSPBlock 内含 Bottleneck)
-
-    VisionFramework C3k2:
-      cv1.conv.conv.weight / cv1.conv.bn.*  (外层 ConvBNAct wraps nn.Conv2d as .conv)
-      cv2.conv.conv.weight / cv2.conv.bn.*
-      m.0.cv1.conv.conv.weight ...
-
-    差异：我们的 ConvBNAct 多了一层 .conv (nn.Conv2d)
-    """
-    return _inject_conv_wrapper(ul_suffix)
-
-
-def _inject_conv_wrapper(key: str) -> str:
-    """在 ConvBNAct 层加入 .conv 前缀。
-
-    ultralytics:  cv1.conv.weight -> ours: cv1.conv.conv.weight
-    ultralytics:  cv1.bn.weight   -> ours: cv1.conv.bn.weight (已匹配，ConvBNAct 用 .bn)
-
-    实际上 ultralytics 的 Conv class 内部是 .conv (nn.Conv2d) + .bn，
-    而我们的 ConvBNAct 也是 .conv (nn.Conv2d) + .bn。
-    所以 key 结构一致，只需处理前缀即可。
-    """
-    return key
-
-
-def _map_sppf_key(ul_suffix: str) -> str:
-    """SPPF key 映射。"""
-    return ul_suffix
-
-
-def _map_c2psa_key(ul_suffix: str) -> str:
-    """C2PSA 内部 key 映射。
-
-    ultralytics C2PSA:
-      cv1.conv.weight / cv1.bn.*
-      cv2.conv.weight / cv2.bn.*
-      m.0.attn.qkv.conv.weight / m.0.attn.qkv.bn.*
-      m.0.attn.proj.conv.weight / m.0.attn.proj.bn.*
-      m.0.attn.pe.conv.weight / m.0.attn.pe.bn.*
-      m.0.ffn.0.conv.weight / m.0.ffn.0.bn.*
-      m.0.ffn.1.conv.weight / m.0.ffn.1.bn.*
-
-    VisionFramework C2PSA (after rewrite):
-      cv1.conv.conv.weight / cv1.conv.bn.*  (ConvBNAct wraps Conv2d as .conv)
-      ...same structure...
-    """
-    return ul_suffix
-
-
-def _map_detect_key(ul_suffix: str) -> str:
+def _map_detect_key(ul_suffix: str, use_one2one: bool = False) -> str:
     """Detect head key 映射。
 
-    ultralytics Detect:
+    ultralytics YOLO11 Detect:
       cv2.{level}.{layer}.{rest}       (reg branch: Conv + Conv + Conv2d)
       cv3.{level}.{layer}.{sub}.{rest} (cls branch: Sequential(DWConv+Conv) × 2 + Conv2d)
       dfl.conv.weight                  (DFL projection)
+
+    ultralytics YOLO26 v2 Detect (8.4+):
+      cv2/cv3          -> one-to-many head (training only, skip)
+      one2one_cv2/cv3  -> one-to-one head  (inference, use this)
 
     VisionFramework YOLOHead:
       reg_convs.{level}.{layer}.{rest}
@@ -161,6 +100,17 @@ def _map_detect_key(ul_suffix: str) -> str:
       reg_preds.{level}.weight / .bias
       cls_preds.{level}.weight / .bias
     """
+    # For YOLO26 (use_one2one=True): map one2one_cv2/cv3, skip plain cv2/cv3
+    if use_one2one:
+        if ul_suffix.startswith("cv2.") or ul_suffix.startswith("cv3."):
+            return None
+        # Strip "one2one_" prefix and fall through to normal mapping
+        ul_suffix = ul_suffix.replace("one2one_cv2.", "cv2.", 1).replace("one2one_cv3.", "cv3.", 1)
+    else:
+        # For YOLO11: skip one2one_* keys if present
+        if ul_suffix.startswith("one2one_"):
+            return None
+
     # Handle reg branch (cv2)
     m = re.match(r"cv2\.(\d+)\.(\d+)\.(.*)", ul_suffix)
     if m:
@@ -188,28 +138,24 @@ def _map_detect_key(ul_suffix: str) -> str:
     return None
 
 
-def _prefix_conv(prefix: str, ul_suffix: str) -> str:
-    """为 backbone/neck 中的 ConvBNAct 模块 key 添加前缀。
-
-    ultralytics:  conv.weight -> ours: {prefix}.conv.weight
-    ultralytics:  bn.weight   -> ours: {prefix}.bn.weight
-    """
-    return f"{prefix}.{ul_suffix}"
-
-
-def _prefix_block(prefix: str, ul_suffix: str) -> str:
-    """为 C3k2/SPPF/C2PSA 等模块 key 添加前缀。"""
-    return f"{prefix}.{ul_suffix}"
-
 
 def build_mapping(ul_state_dict: dict) -> OrderedDict:
     """构建从 ultralytics key → VisionFramework key 的完整映射。
+
+    自动检测 YOLO26（含 one2one_cv2/cv3 键），使用 one-to-one head 权重。
 
     Returns
     -------
     OrderedDict[str, str]
         {ultralytics_key: visionframework_key}
     """
+    # Detect YOLO26 by presence of one2one_cv2 keys in detect head
+    use_one2one = any(
+        f"model.{HEAD_IDX}.one2one_cv2" in k for k in ul_state_dict.keys()
+    )
+    if use_one2one:
+        print("检测到 YOLO26 (one-to-one head)，使用 one2one_cv2/cv3 权重")
+
     mapping = OrderedDict()
 
     for ul_key in ul_state_dict.keys():
@@ -222,23 +168,11 @@ def build_mapping(ul_state_dict: dict) -> OrderedDict:
         vf_key = None
 
         if idx in BACKBONE_MAP:
-            prefix = BACKBONE_MAP[idx]
-            if idx in ("0", "1", "3", "5", "7"):
-                vf_key = f"{prefix}.{rest}"
-            elif idx == "9":
-                vf_key = f"{prefix}.{rest}"
-            elif idx == "10":
-                vf_key = f"{prefix}.{rest}"
-            else:
-                vf_key = f"{prefix}.{rest}"
+            vf_key = f"{BACKBONE_MAP[idx]}.{rest}"
         elif idx in NECK_MAP:
-            prefix = NECK_MAP[idx]
-            if idx in ("17", "20"):
-                vf_key = f"{prefix}.{rest}"
-            else:
-                vf_key = f"{prefix}.{rest}"
+            vf_key = f"{NECK_MAP[idx]}.{rest}"
         elif idx == HEAD_IDX:
-            vf_key = _map_detect_key(rest)
+            vf_key = _map_detect_key(rest, use_one2one=use_one2one)
         else:
             continue
 
@@ -353,8 +287,13 @@ def main():
 
     if args.test:
         from visionframework.core.builder import build_model_from_file
-        model = build_model_from_file("configs/models/yolo11n.yaml", weights=out_path)
-        print(f"模型加载成功: {sum(p.numel() for p in model.parameters())} parameters")
+        model_stem = Path(args.model).stem  # e.g. "yolo26s"
+        cfg_path = f"configs/models/{model_stem}.yaml"
+        if not Path(cfg_path).exists():
+            cfg_path = "configs/models/yolo11n.yaml"
+            print(f"警告: 未找到 {model_stem}.yaml，使用默认 yolo11n.yaml")
+        model = build_model_from_file(cfg_path, weights=out_path)
+        print(f"模型加载成功 ({cfg_path}): {sum(p.numel() for p in model.parameters())} parameters")
 
         if args.image:
             img = cv2.imread(args.image)

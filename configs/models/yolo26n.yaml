@@ -1,10 +1,15 @@
 task: detection
 
+# 转换后的权重（python tools/convert_ultralytics.py --model yolo26n.pt --out weights/yolo26n_converted.pth）
+# weights: weights/yolo26n_converted.pth
+
 backbone:
   type: YOLOBackbone
   depth: 0.50
   width: 0.25
   max_channels: 1024
+  sppf_cv1_act: false
+  sppf_residual: true
 
 neck:
   type: YOLOPAN

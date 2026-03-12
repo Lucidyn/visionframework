@@ -1,7 +1,7 @@
 pipeline: tracking
 
 models:
-  detector: configs/models/yolo_n.yaml
+  detector: configs/models/yolo11n.yaml
 
 tracker: configs/components/bytetrack.yaml
 

@@ -11,6 +11,7 @@ from typing import List, Tuple
 
 from visionframework.core.registry import HEADS
 from visionframework.layers.deformable_attn import DeformableAttention
+from visionframework.layers.mlp import MLP
 
 
 class RFDETRDecoderLayer(nn.Module):
@@ -45,22 +46,6 @@ class RFDETRDecoderLayer(nn.Module):
         # FFN
         tgt = self.norm3(tgt + self.ffn(tgt))
         return tgt
-
-
-class MLP(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, num_layers: int = 3):
-        super().__init__()
-        layers = []
-        for i in range(num_layers):
-            d_in = in_dim if i == 0 else hidden_dim
-            d_out = out_dim if i == num_layers - 1 else hidden_dim
-            layers.append(nn.Linear(d_in, d_out))
-            if i < num_layers - 1:
-                layers.append(nn.ReLU(inplace=True))
-        self.net = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.net(x)
 
 
 @HEADS.register("RFDETRHead")

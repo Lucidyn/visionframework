@@ -9,12 +9,13 @@ backbone:
 neck:
   type: YOLOPAN
   in_channels: [512, 512, 512]
+  out_channels: [256, 512, 512]
   depth: 1.00
   c3k: false
 
 head:
   type: YOLOHead
-  in_channels: [512, 512, 512]
+  in_channels: [256, 512, 512]
   num_classes: 80
   reg_max: 16
 

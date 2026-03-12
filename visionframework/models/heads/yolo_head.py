@@ -13,20 +13,7 @@ import torch.nn as nn
 from typing import List
 
 from visionframework.core.registry import HEADS
-from visionframework.layers import ConvBNAct
-
-
-class DWConvBNAct(nn.Module):
-    """Depthwise Conv + BN + Act (matches ultralytics DWConv)."""
-
-    def __init__(self, c_in, c_out, k=3, s=1, act=True):
-        super().__init__()
-        self.conv = nn.Conv2d(c_in, c_out, k, s, k // 2, groups=min(c_in, c_out), bias=False)
-        self.bn = nn.BatchNorm2d(c_out, eps=1e-3, momentum=0.03)
-        self.act = nn.SiLU(inplace=True) if act else nn.Identity()
-
-    def forward(self, x):
-        return self.act(self.bn(self.conv(x)))
+from visionframework.layers import ConvBNAct, DWConvBNAct
 
 
 @HEADS.register("YOLOHead")

@@ -8,18 +8,17 @@ import cv2
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as torchF
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from visionframework.core.registry import ALGORITHMS
 from visionframework.data.detection import Detection
-from visionframework.utils.bbox import xywh2xyxy
 from visionframework.utils.nms import non_max_suppression
-from visionframework.utils.device import resolve_device
+from visionframework.utils.filter import resolve_filter_ids
+from visionframework.algorithms.base import BaseAlgorithm
 
 
 @ALGORITHMS.register("Detector")
-class Detector:
+class Detector(BaseAlgorithm):
     """Detection algorithm.
 
     Wraps a ``ModelWrapper`` (backbone → neck → head) and adds:
@@ -43,6 +42,8 @@ class Detector:
         ``'cpu'``, ``'cuda'``, or ``'auto'``.
     fp16 : bool
         Use half-precision inference on CUDA.
+    end2end : bool
+        Skip NMS (YOLO26 one-to-one head).
     """
 
     def __init__(
@@ -55,38 +56,16 @@ class Detector:
         filter_classes: Optional[List] = None,
         device: str = "auto",
         fp16: bool = False,
+        end2end: bool = False,
         **_kw,
     ):
+        super().__init__(model=model, device=device, fp16=fp16)
         self.input_size = input_size
         self.conf = conf
         self.nms_iou = nms_iou
         self.class_names = class_names
-        self.fp16 = fp16 and torch.cuda.is_available()
-
-        self._filter_ids = self._resolve_filter(filter_classes, class_names)
-
-        self.device = resolve_device(device)
-        self.model = model.to(self.device).eval()
-        if self.fp16:
-            self.model = self.model.half()
-
-    @staticmethod
-    def _resolve_filter(filter_classes, class_names):
-        """将 filter_classes（int/str 混合列表）统一解析为 class_id 集合。"""
-        if not filter_classes:
-            return None
-        ids = set()
-        name_to_id = {}
-        if class_names:
-            name_to_id = {n.lower(): i for i, n in enumerate(class_names) if n}
-        for c in filter_classes:
-            if isinstance(c, int):
-                ids.add(c)
-            elif isinstance(c, str):
-                cid = name_to_id.get(c.lower())
-                if cid is not None:
-                    ids.add(cid)
-        return ids if ids else None
+        self.end2end = end2end
+        self._filter_ids = resolve_filter_ids(filter_classes, class_names)
 
     # -- preprocessing -------------------------------------------------------
 
@@ -189,14 +168,20 @@ class Detector:
         if boxes.numel() == 0:
             return []
 
-        nms_keep = non_max_suppression(
-            boxes.cpu().numpy(),
-            max_scores.cpu().numpy(),
-            self.nms_iou,
-            class_ids=cls_ids.cpu().numpy(),
-        )
+        if self.end2end:
+            # One-to-one head: each grid cell predicts at most one object,
+            # no NMS needed (YOLO26 one2one head)
+            keep_indices = range(min(len(boxes), 300))
+        else:
+            keep_indices = non_max_suppression(
+                boxes.cpu().numpy(),
+                max_scores.cpu().numpy(),
+                self.nms_iou,
+                class_ids=cls_ids.cpu().numpy(),
+            )[:300]
+
         detections = []
-        for idx in nms_keep[:300]:
+        for idx in keep_indices:
             b = boxes[idx].cpu().numpy()
             detections.append(Detection(
                 bbox=tuple(b.tolist()),
@@ -207,7 +192,3 @@ class Detector:
             ))
         return detections
 
-    @torch.no_grad()
-    def predict_batch(self, images: List[np.ndarray]) -> List[List[Detection]]:
-        """Run detection on a batch of images."""
-        return [self.predict(img) for img in images]

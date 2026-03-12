@@ -30,6 +30,22 @@ from visionframework.engine.runner import Runner
 import visionframework.models  # noqa: F401
 
 
+def _resolve_weights(runtime_cfg: Dict[str, Any], role: str) -> Any:
+    """从 runtime 配置中解析指定角色的权重路径。
+
+    支持两种写法：
+    - ``weights: path/to/weights.pth``          — 单一权重，作用于 detector
+    - ``weights: {detector: ..., reid: ...}``   — 按角色分别指定
+    """
+    weights = runtime_cfg.get("weights")
+    if weights is None:
+        return None
+    if isinstance(weights, dict):
+        return weights.get(role)
+    # 字符串形式只作用于 detector（最常见场景）
+    return weights if role == "detector" else None
+
+
 def _build_pipeline_from_runtime(runtime_cfg: Dict[str, Any]):
     """根据 runtime 配置组装 pipeline。"""
     from visionframework.core.registry import PIPELINES
@@ -43,16 +59,13 @@ def _build_pipeline_from_runtime(runtime_cfg: Dict[str, Any]):
     models_cfg = runtime_cfg.get("models") or runtime_cfg.get("model", {})
     device = runtime_cfg.get("device", "auto")
     fp16 = runtime_cfg.get("fp16", False)
-
-    # 检查是否使用 DETR 系列
     algorithm_type = runtime_cfg.get("algorithm", None)
-
     filter_classes = runtime_cfg.get("filter_classes")
 
     if pipeline_type == "detection":
         det_cfg_path = models_cfg if isinstance(models_cfg, str) else models_cfg.get("detector")
         model_cfg = resolve_config(det_cfg_path) if det_cfg_path else {}
-        model = build_model(model_cfg)
+        model = build_model(model_cfg, weights=_resolve_weights(runtime_cfg, "detector"))
         pp = model_cfg.get("postprocess", {})
 
         if algorithm_type == "DETRDetector":
@@ -69,13 +82,14 @@ def _build_pipeline_from_runtime(runtime_cfg: Dict[str, Any]):
                 conf=pp.get("conf", 0.25), nms_iou=pp.get("nms_iou", 0.45),
                 class_names=model_cfg.get("class_names"),
                 filter_classes=filter_classes,
+                end2end=pp.get("end2end", False),
             )
         return PIPELINES.get("detection")(detector=detector)
 
     if pipeline_type == "segmentation":
         seg_cfg_path = models_cfg if isinstance(models_cfg, str) else models_cfg.get("segmenter")
         model_cfg = resolve_config(seg_cfg_path) if seg_cfg_path else {}
-        model = build_model(model_cfg)
+        model = build_model(model_cfg, weights=_resolve_weights(runtime_cfg, "segmenter"))
         segmenter = Segmenter(model=model, device=device, fp16=fp16,
                               num_classes=model_cfg.get("head", {}).get("num_classes", 21))
         return PIPELINES.get("segmentation")(segmenter=segmenter)
@@ -83,13 +97,14 @@ def _build_pipeline_from_runtime(runtime_cfg: Dict[str, Any]):
     if pipeline_type in ("tracking", "reid_tracking"):
         det_cfg_path = models_cfg.get("detector") if isinstance(models_cfg, dict) else models_cfg
         det_model_cfg = resolve_config(det_cfg_path) if det_cfg_path else {}
-        det_model = build_model(det_model_cfg)
+        det_model = build_model(det_model_cfg, weights=_resolve_weights(runtime_cfg, "detector"))
         pp = det_model_cfg.get("postprocess", {})
         detector = Detector(
             model=det_model, device=device, fp16=fp16,
             conf=pp.get("conf", 0.25), nms_iou=pp.get("nms_iou", 0.45),
             class_names=det_model_cfg.get("class_names"),
             filter_classes=filter_classes,
+            end2end=pp.get("end2end", False),
         )
 
         tracker_cfg = runtime_cfg.get("tracker", {})
@@ -101,7 +116,7 @@ def _build_pipeline_from_runtime(runtime_cfg: Dict[str, Any]):
         if pipeline_type == "reid_tracking":
             reid_cfg_path = models_cfg.get("reid")
             reid_model_cfg = resolve_config(reid_cfg_path) if reid_cfg_path else {}
-            reid_model = build_model(reid_model_cfg)
+            reid_model = build_model(reid_model_cfg, weights=_resolve_weights(runtime_cfg, "reid"))
             embedder = Embedder(model=reid_model, device=device, fp16=fp16)
             return PIPELINES.get("reid_tracking")(
                 detector=detector, embedder=embedder, tracker=tracker,

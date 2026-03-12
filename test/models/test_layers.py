@@ -3,11 +3,12 @@
 import torch
 
 from visionframework.layers import (
-    ConvBNAct, DepthwiseSepConv, Focus,
+    ConvBNAct, DWConvBNAct, DepthwiseSepConv, Focus,
     Bottleneck, CSPBlock, C2f, C3k, C3k2, Attention, PSABlock, C2PSA,
     SPPF, SPP,
     SEBlock, CBAM, TransformerBlock,
     PositionalEncoding2D, DeformableAttention,
+    MLP,
 )
 
 
@@ -16,6 +17,11 @@ class TestConvLayers:
         m = ConvBNAct(3, 16, 3, 1)
         x = torch.randn(1, 3, 64, 64)
         assert m(x).shape == (1, 16, 64, 64)
+
+    def test_dw_conv_bn_act(self):
+        m = DWConvBNAct(16, 16, 3, 1)
+        x = torch.randn(1, 16, 32, 32)
+        assert m(x).shape == (1, 16, 32, 32)
 
     def test_depthwise_sep_conv(self):
         m = DepthwiseSepConv(16, 32, 3, 1)
@@ -155,3 +161,17 @@ class TestDeformableAttention:
         value = torch.randn(1, 64, 64)
         out = attn(query, value, (8, 8))
         assert out.shape == (1, 64, 64)
+
+
+class TestMLP:
+    def test_output_shape(self):
+        mlp = MLP(in_dim=256, hidden_dim=256, out_dim=4, num_layers=3)
+        x = torch.randn(2, 10, 256)
+        out = mlp(x)
+        assert out.shape == (2, 10, 4)
+
+    def test_single_layer(self):
+        mlp = MLP(in_dim=64, hidden_dim=64, out_dim=32, num_layers=1)
+        x = torch.randn(1, 64)
+        out = mlp(x)
+        assert out.shape == (1, 32)

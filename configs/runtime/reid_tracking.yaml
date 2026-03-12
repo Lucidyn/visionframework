@@ -1,7 +1,7 @@
 pipeline: reid_tracking
 
 models:
-  detector: configs/models/yolo_n.yaml
+  detector: configs/models/yolo11n.yaml
   reid: configs/models/osnet_reid.yaml
 
 tracker: configs/components/bytetrack.yaml

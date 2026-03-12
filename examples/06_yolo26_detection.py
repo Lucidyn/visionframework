@@ -1,11 +1,11 @@
 """
-示例 01 — YOLO11 目标检测
+示例 06 — YOLO26 端到端检测（NMS-free）
 
-通过 YAML 配置文件驱动 YOLO11n 检测器，处理单张图片并输出可视化结果。
+YOLO26 使用 one-to-one 检测头，无需 NMS 后处理。
 
 前提条件:
     pip install ultralytics
-    python tools/convert_ultralytics.py --model yolo11n.pt --out weights/yolo11n_converted.pth
+    python tools/convert_ultralytics.py --model yolo26n.pt --out weights/yolo26n_converted.pth
 """
 
 import cv2
@@ -14,8 +14,8 @@ from visionframework import TaskRunner, Visualizer
 # 加载图片
 img = cv2.imread("test_bus.jpg")
 
-# 通过 YAML 配置文件启动检测（weights 字段在 detect.yaml 中指定）
-task = TaskRunner("configs/runtime/detect.yaml")
+# 通过 YAML 配置文件启动检测（weights 字段在 detect_yolo26.yaml 中指定）
+task = TaskRunner("configs/runtime/detect_yolo26.yaml")
 result = task.process(img)
 
 detections = result.get("detections", [])
@@ -26,5 +26,5 @@ for det in detections:
 # 可视化并保存
 vis = Visualizer()
 result_img = vis.draw_detections(img.copy(), detections)
-cv2.imwrite("yolo11n_result.jpg", result_img)
-print("结果已保存至: yolo11n_result.jpg")
+cv2.imwrite("yolo26n_result.jpg", result_img)
+print("结果已保存至: yolo26n_result.jpg")

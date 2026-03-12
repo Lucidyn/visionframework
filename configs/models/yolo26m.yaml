@@ -5,16 +5,20 @@ backbone:
   depth: 0.50
   width: 1.00
   max_channels: 512
+  sppf_cv1_act: false
+  sppf_residual: true
 
 neck:
   type: YOLOPAN
   in_channels: [512, 512, 512]
+  out_channels: [256, 512, 512]
   depth: 0.50
   c3k: true
+  a2c2f: true
 
 head:
   type: YOLOHead
-  in_channels: [512, 512, 512]
+  in_channels: [256, 512, 512]
   num_classes: 80
   reg_max: 1
 

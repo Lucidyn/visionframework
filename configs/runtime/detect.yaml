@@ -1,10 +1,11 @@
 pipeline: detection
 
 models:
-  detector: configs/models/yolo_n.yaml
+  detector: configs/models/yolo11n.yaml
+
+# 转换后的权重路径
+# python tools/convert_ultralytics.py --model yolo11n.pt --out weights/yolo11n_converted.pth
+weights: weights/yolo11n_converted.pth
 
 device: auto
 fp16: false
-
-output:
-  show: true

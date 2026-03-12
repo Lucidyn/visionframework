@@ -7,16 +7,15 @@ from __future__ import annotations
 import cv2
 import numpy as np
 import torch
-import torch.nn as nn
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from visionframework.core.registry import ALGORITHMS
 from visionframework.data.detection import Detection
-from visionframework.utils.device import resolve_device
+from visionframework.algorithms.base import BaseAlgorithm
 
 
 @ALGORITHMS.register("Embedder")
-class Embedder:
+class Embedder(BaseAlgorithm):
     """Extract appearance embeddings for bounding-box crops.
 
     Parameters
@@ -33,18 +32,14 @@ class Embedder:
 
     def __init__(
         self,
-        model: nn.Module,
+        model,
         input_size: Tuple[int, int] = (256, 128),
         device: str = "auto",
         fp16: bool = False,
         **_kw,
     ):
+        super().__init__(model=model, device=device, fp16=fp16)
         self.input_size = input_size
-        self.fp16 = fp16 and torch.cuda.is_available()
-        self.device = resolve_device(device)
-        self.model = model.to(self.device).eval()
-        if self.fp16:
-            self.model = self.model.half()
 
     def _crop_and_preprocess(self, img: np.ndarray, bbox: Tuple) -> torch.Tensor:
         h, w = img.shape[:2]

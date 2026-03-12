@@ -7,16 +7,15 @@ from __future__ import annotations
 import cv2
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Tuple
 
 from visionframework.core.registry import ALGORITHMS
-from visionframework.utils.device import resolve_device
+from visionframework.algorithms.base import BaseAlgorithm
 
 
 @ALGORITHMS.register("Segmenter")
-class Segmenter:
+class Segmenter(BaseAlgorithm):
     """Semantic segmentation algorithm.
 
     Parameters
@@ -35,20 +34,16 @@ class Segmenter:
 
     def __init__(
         self,
-        model: nn.Module,
+        model,
         input_size: Tuple[int, int] = (640, 640),
         num_classes: int = 21,
         device: str = "auto",
         fp16: bool = False,
         **_kw,
     ):
+        super().__init__(model=model, device=device, fp16=fp16)
         self.input_size = input_size
         self.num_classes = num_classes
-        self.fp16 = fp16 and torch.cuda.is_available()
-        self.device = resolve_device(device)
-        self.model = model.to(self.device).eval()
-        if self.fp16:
-            self.model = self.model.half()
 
     def _preprocess(self, img: np.ndarray) -> torch.Tensor:
         resized = cv2.resize(img, (self.input_size[1], self.input_size[0]))
@@ -72,6 +67,3 @@ class Segmenter:
         ).squeeze().byte().cpu().numpy()
         return seg_map
 
-    @torch.no_grad()
-    def predict_batch(self, images: List[np.ndarray]) -> List[np.ndarray]:
-        return [self.predict(img) for img in images]

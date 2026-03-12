@@ -9,12 +9,12 @@ from __future__ import annotations
 import cv2
 import numpy as np
 import torch
-import torch.nn as nn
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from visionframework.core.registry import ALGORITHMS
 from visionframework.data.detection import Detection
-from visionframework.utils.device import resolve_device
+from visionframework.utils.filter import resolve_filter_ids
+from visionframework.algorithms.base import BaseAlgorithm
 
 # ImageNet 归一化参数
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -22,7 +22,7 @@ IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 
 @ALGORITHMS.register("DETRDetector")
-class DETRDetector:
+class DETRDetector(BaseAlgorithm):
     """DETR-style 检测器（与 Facebook DETR 官方预处理对齐）。
 
     Parameters
@@ -43,7 +43,7 @@ class DETRDetector:
 
     def __init__(
         self,
-        model: nn.Module,
+        model,
         input_size: Tuple[int, int] = (800, 800),
         conf: float = 0.7,
         class_names: Optional[List[str]] = None,
@@ -52,38 +52,11 @@ class DETRDetector:
         fp16: bool = False,
         **_kw,
     ):
+        super().__init__(model=model, device=device, fp16=fp16)
         self.input_size = input_size
         self.conf = conf
         self.class_names = class_names
-        self.fp16 = fp16 and torch.cuda.is_available()
-
-        self._filter_ids = self._resolve_filter(filter_classes, class_names)
-
-        self.device = resolve_device(device)
-        self.model = model.to(self.device).eval()
-        if self.fp16:
-            self.model = self.model.half()
-
-    @staticmethod
-    def _resolve_filter(filter_classes, class_names):
-        """将 filter_classes（int/str 混合列表）统一解析为 class_id 集合。"""
-        if not filter_classes:
-            return None
-        ids = set()
-        name_to_id = {}
-        if class_names:
-            if isinstance(class_names, dict):
-                name_to_id = {v.lower(): k for k, v in class_names.items()}
-            else:
-                name_to_id = {n.lower(): i for i, n in enumerate(class_names) if n}
-        for c in filter_classes:
-            if isinstance(c, int):
-                ids.add(c)
-            elif isinstance(c, str):
-                cid = name_to_id.get(c.lower())
-                if cid is not None:
-                    ids.add(cid)
-        return ids if ids else None
+        self._filter_ids = resolve_filter_ids(filter_classes, class_names)
 
     def _preprocess(self, img: np.ndarray) -> Tuple[torch.Tensor, Tuple[int, int]]:
         """DETR 预处理: resize（保持比例）→ ImageNet normalize → tensor。"""
@@ -144,7 +117,3 @@ class DETRDetector:
                 class_name=self.class_names[cid] if self.class_names and cid < len(self.class_names) else None,
             ))
         return detections
-
-    @torch.no_grad()
-    def predict_batch(self, images: List[np.ndarray]) -> List[List[Detection]]:
-        return [self.predict(img) for img in images]

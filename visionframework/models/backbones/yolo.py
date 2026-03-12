@@ -33,7 +33,8 @@ class YOLOBackbone(nn.Module):
     """
 
     def __init__(self, depth: float = 0.5, width: float = 0.25,
-                 max_channels: int = 1024, in_channels: int = 3, **_kw):
+                 max_channels: int = 1024, in_channels: int = 3,
+                 sppf_cv1_act: bool = True, sppf_residual: bool = False, **_kw):
         super().__init__()
         ch0 = _ch(64, width, max_channels)
         ch1 = _ch(128, width, max_channels)
@@ -53,7 +54,7 @@ class YOLOBackbone(nn.Module):
         self.c3k2_3 = C3k2(ch3, ch3, n=n_c3k2, c3k=True)
         self.conv7 = ConvBNAct(ch3, ch4, 3, 2)
         self.c3k2_4 = C3k2(ch4, ch4, n=n_c3k2, c3k=True)
-        self.sppf = SPPF(ch4, ch4, k=5)
+        self.sppf = SPPF(ch4, ch4, k=5, cv1_act=sppf_cv1_act, residual=sppf_residual)
         self.c2psa = C2PSA(ch4, ch4, n=n_c2psa)
 
         self.out_channels = [ch3, ch3, ch4]

@@ -177,3 +177,32 @@ class TestWeightLoading:
         model2 = build_model(cfg, weights=path)
         for (n1, p1), (n2, p2) in zip(model.state_dict().items(), model2.state_dict().items()):
             assert torch.equal(p1, p2)
+
+
+class TestResolveWeights:
+    """Tests for TaskRunner's _resolve_weights helper."""
+
+    def setup_method(self):
+        from visionframework.task_api import _resolve_weights
+        self.resolve = _resolve_weights
+
+    def test_none_when_no_weights_key(self):
+        assert self.resolve({}, "detector") is None
+
+    def test_string_resolves_to_detector(self):
+        cfg = {"weights": "weights/model.pth"}
+        assert self.resolve(cfg, "detector") == "weights/model.pth"
+
+    def test_string_returns_none_for_other_roles(self):
+        cfg = {"weights": "weights/model.pth"}
+        assert self.resolve(cfg, "reid") is None
+        assert self.resolve(cfg, "segmenter") is None
+
+    def test_dict_resolves_by_role(self):
+        cfg = {"weights": {"detector": "w/det.pth", "reid": "w/reid.pth"}}
+        assert self.resolve(cfg, "detector") == "w/det.pth"
+        assert self.resolve(cfg, "reid") == "w/reid.pth"
+
+    def test_dict_returns_none_for_missing_role(self):
+        cfg = {"weights": {"detector": "w/det.pth"}}
+        assert self.resolve(cfg, "segmenter") is None
