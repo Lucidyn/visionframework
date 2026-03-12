@@ -1,279 +1,278 @@
-# Vision Framework
+# VisionFramework v2.0
 
-[![Python 版本](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
-[![许可证](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![版本](https://img.shields.io/badge/version-0.4.0-orange.svg)](docs/CHANGELOG.md)
+模块化、组件式计算机视觉框架。通过 YAML 配置驱动，支持目标检测、语义分割、多目标跟踪等任务。
 
-轻量、模块化的计算机视觉框架，支持目标检测、跟踪、实例分割、姿态估计、ROI 计数、模型优化与部署。
+## 特性
 
-**整个框架只有一个入口：`Vision` 类。所有组件均可直接从 `visionframework` 导入。**
+- **组件化架构** — Backbone / Neck / Head 自由组合，通过注册表动态实例化
+- **YAML 驱动** — 唯一入口 `TaskRunner(yaml_path)`，零代码配置切换模型和任务
+- **内置模型** — YOLO11、YOLO26、DETR、RF-DETR，以及 CSPDarknet、ResNet 等基础组件
+- **官方权重** — 支持加载 Facebook DETR (458/458 完美映射)、ultralytics YOLO 官方预训练权重
+- **类别过滤** — 通过 `filter_classes` 配置项指定只检测某些类别
+- **多任务支持** — 检测、分割、跟踪、ReID 跟踪，统一 pipeline 管理
+- **最少依赖** — 核心仅需 `torch`、`opencv-python`、`numpy`、`pyyaml`
 
-## 安装
+## 快速开始
+
+### 安装
 
 ```bash
-git clone https://github.com/yourusername/visionframework.git
-cd visionframework
-pip install -e .
-
-# 安装可选依赖（按需选择）
-pip install -e ".[clip]"    # CLIP / DETR 支持
-pip install -e ".[sam]"     # SAM 分割支持
-pip install -e ".[dev]"     # 开发工具（pytest 等）
-pip install -e ".[all]"     # 全部可选依赖
+pip install torch torchvision opencv-python numpy pyyaml
 ```
 
-## 快速上手
-
-### 方式一：关键字参数
+### 目标检测
 
 ```python
-from visionframework import Vision
+from visionframework import TaskRunner
 
-v = Vision(model="yolov8n.pt", track=True)
-
-for frame, meta, result in v.run("video.mp4"):
-    print(result["detections"])
-    print(result["tracks"])
+task = TaskRunner("configs/runtime/detect.yaml")
+result = task.process(image)
+detections = result["detections"]
 ```
 
-### 方式二：从配置文件
+### 视频跟踪
 
 ```python
-from visionframework import Vision
-
-v = Vision.from_config("config.json")   # 支持 .json / .yaml / dict
-
-for frame, meta, result in v.run("video.mp4"):
-    print(result["detections"])
+task = TaskRunner("configs/runtime/tracking.yaml")
+for frame, meta, result in task.run("video.mp4"):
+    tracks = result["tracks"]
 ```
 
-**config.json 示例：**
-
-```json
-{
-    "model": "yolov8n.pt",
-    "track": true,
-    "conf": 0.25,
-    "device": "auto",
-    "fp16": true
-}
-```
-
-## `source` 支持一切
-
-`v.run(source)` 无需额外代码，直接支持：
-
-| source 值 | 含义 |
-|-----------|------|
-| `"test.jpg"` | 单张图片 |
-| `"video.mp4"` | 视频文件 |
-| `0` | 摄像头 |
-| `"rtsp://..."` | RTSP / HTTP 视频流 |
-| `"images_folder/"` | 包含图片/视频的文件夹 |
-| `["a.jpg", "b.mp4"]` | 多个路径组成的列表 |
-| `np.ndarray` | BGR numpy 图像数组 |
-
-## 核心参数
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `model` | `"yolov8n.pt"` | 模型路径或名称 |
-| `model_type` | `"yolo"` | 检测器后端：`yolo` / `detr` / `rfdetr` |
-| `device` | `"auto"` | 设备：`auto` / `cpu` / `cuda` / `cuda:0` |
-| `conf` | `0.25` | 全局置信度阈值 |
-| `iou` | `0.45` | NMS IoU 阈值 |
-| `track` | `False` | 开启多目标跟踪 |
-| `tracker` | `"bytetrack"` | 跟踪器：`bytetrack` / `ioutracker` / `reidtracker` |
-| `segment` | `False` | 开启实例分割 |
-| `pose` | `False` | 开启姿态估计 |
-| `fp16` | `False` | FP16 半精度推理（CUDA） |
-| `batch_inference` | `False` | 启用批量推理 |
-| `dynamic_batch` | `False` | 动态调整批量大小 |
-| `max_batch_size` | `8` | 最大 batch 大小 |
-| `category_thresholds` | `None` | 按类别阈值，如 `{"person": 0.5}` |
-
-## 更多示例
-
-### 姿态估计
+### DETR 检测（使用官方预训练权重）
 
 ```python
-from visionframework import Vision
+# 1. 先转换官方权重
+#    python tools/convert_detr.py \
+#        --url https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth \
+#        --output weights/detr_r50.pth --verify
 
-v = Vision(model="yolov8n-pose.pt", pose=True)
-for frame, meta, result in v.run("test.jpg"):
-    for pose in result["poses"]:
-        print(f"{len(pose.keypoints)} 个关键点")
+# 2. 在 YAML 中指定权重路径，运行
+task = TaskRunner("configs/runtime/detect_detr.yaml")
+result = task.process(image)
 ```
 
-### 实例分割
+### RF-DETR 检测（通过适配器）
 
 ```python
-from visionframework import Vision
+# 需要额外安装: pip install rfdetr
+from tools.rfdetr_adapter import RFDETRAdapter
 
-v = Vision(model="yolov8n-seg.pt", segment=True)
-for frame, meta, result in v.run("test.jpg"):
-    for det in result["detections"]:
-        print(f"{det.class_name}: mask={'有' if det.mask is not None else '无'}")
+adapter = RFDETRAdapter(model_size="base", conf=0.5)
+detections = adapter.predict(image_bgr)
 ```
 
-### 视频处理 + 可视化
+### 类别过滤
+
+在 runtime YAML 中添加 `filter_classes` 即可只检测指定类别，支持类别名称和 ID 混用：
+
+```yaml
+# configs/runtime/detect_person.yaml
+pipeline: detection
+models:
+  detector: configs/models/yolo_n.yaml
+filter_classes:
+  - person
+```
+
+```yaml
+# 同时过滤多个类别
+filter_classes:
+  - car
+  - bus
+  - truck
+```
+
+```yaml
+# 按 ID 过滤（int / str 可混用）
+filter_classes:
+  - 0           # person (COCO class id)
+  - bus         # 按名称
+```
+
+## 项目结构
+
+```
+visionframework/
+├── layers/                # 原子层：ConvBNAct, C3k2, C2PSA, Attention, SPPF, ...
+│   ├── conv.py            # 基础卷积块
+│   ├── csp.py             # CSP 系列模块 (C3k2, C2PSA, PSABlock)
+│   ├── pooling.py         # SPPF, SPP
+│   ├── attention.py       # SEBlock, CBAM
+│   ├── positional.py      # 2D 正弦位置编码（与官方 DETR 对齐）
+│   └── deformable_attn.py # 可变形注意力
+├── models/
+│   ├── backbones/         # YOLOBackbone, ResNet, CSPDarknet, DINOv2Backbone
+│   ├── necks/             # YOLOPAN, PAN, FPN, TransformerEncoderNeck, DeformableEncoderNeck
+│   └── heads/             # YOLOHead, DETRHead, RFDETRHead, SegHead, ReIDHead
+├── algorithms/
+│   ├── detection/         # Detector (YOLO), DETRDetector (DETR)
+│   ├── segmentation/      # Segmenter
+│   ├── tracking/          # ByteTracker, IOUTracker
+│   └── reid/              # Embedder
+├── pipelines/             # DetectionPipeline, TrackingPipeline, ...
+├── core/
+│   ├── registry.py        # 组件注册表
+│   ├── builder.py         # 模型/算法/管线构建器
+│   └── config.py          # YAML 配置加载与解析
+├── engine/                # 数据源处理 (图片/视频/摄像头)
+├── task_api.py            # TaskRunner — 唯一公共入口
+├── utils/                 # bbox, nms, device, visualization
+└── data/                  # Detection, Track, Pose 等数据结构
+
+configs/
+├── models/                # 模型配置
+│   ├── yolo_n.yaml        # CSPDarknet-YOLOHead (nano)
+│   ├── yolo_s.yaml        # CSPDarknet-YOLOHead (small)
+│   ├── yolo11n/s/m/l.yaml # YOLOBackbone+YOLOPAN (YOLO11 系列)
+│   ├── yolo26n/s/m/l.yaml # YOLOBackbone+YOLOPAN(c3k) (YOLO26 系列)
+│   ├── detr_r50.yaml      # ResNet-50 + TransformerEncoder + DETRHead
+│   ├── rfdetr_base.yaml   # DINOv2 + DeformableEncoder + RFDETRHead
+│   ├── resnet50_seg.yaml  # ResNet-50 语义分割
+│   └── osnet_reid.yaml    # OSNet ReID 特征提取
+├── runtime/               # 运行时配置
+│   ├── detect.yaml        # 通用检测
+│   ├── detect_detr.yaml   # DETR 检测
+│   ├── detect_rfdetr.yaml # RF-DETR 检测
+│   ├── detect_person.yaml # 只检测行人（类别过滤示例）
+│   ├── detect_vehicles.yaml # 只检测车辆（类别过滤示例）
+│   ├── tracking.yaml      # ByteTrack 跟踪
+│   ├── reid_tracking.yaml # ReID 跟踪
+│   └── segmentation.yaml  # 语义分割
+└── components/            # 组件配置
+    ├── bytetrack.yaml     # ByteTracker 参数
+    └── iou_tracker.yaml   # IOUTracker 参数
+
+tools/
+├── convert_ultralytics.py # ultralytics YOLO 权重转换工具
+├── convert_detr.py        # Facebook DETR 官方权重转换工具
+└── rfdetr_adapter.py      # RF-DETR 适配器（封装 rfdetr 包）
+
+examples/                  # 教程示例 (全部 YAML 驱动)
+```
+
+## 内置模型
+
+| 模型 | 配置文件 | Backbone | Neck | Head | 特点 |
+|------|----------|----------|------|------|------|
+| YOLO-nano | `yolo_n.yaml` | CSPDarknet | PAN | YOLOHead | 基础轻量模型 |
+| YOLO-small | `yolo_s.yaml` | CSPDarknet | PAN | YOLOHead | 基础小型模型 |
+| YOLO11n | `yolo11n.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，轻量 |
+| YOLO11s | `yolo11s.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，小型 |
+| YOLO11m | `yolo11m.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，中型 |
+| YOLO11l | `yolo11l.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，大型 |
+| YOLO26n | `yolo26n.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free, reg_max=1 |
+| YOLO26s | `yolo26s.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free, reg_max=1 |
+| YOLO26m | `yolo26m.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free, reg_max=1 |
+| YOLO26l | `yolo26l.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free, reg_max=1 |
+| DETR-R50 | `detr_r50.yaml` | ResNet-50 | TransformerEncoderNeck | DETRHead | 无 NMS，集合预测 |
+| RF-DETR | `rfdetr_base.yaml` | DINOv2Backbone | DeformableEncoderNeck | RFDETRHead | 可变形注意力 |
+| 分割 | `resnet50_seg.yaml` | ResNet-50 | FPN | SegHead | 语义分割 |
+| ReID | `osnet_reid.yaml` | OSNet | — | ReIDHead | 行人重识别 |
+
+## 官方预训练权重
+
+### DETR (Facebook)
+
+框架的 DETR 实现与 Facebook 官方完全对齐，支持直接加载官方预训练权重：
+
+```bash
+# 下载并转换官方 DETR-R50 权重（458/458 keys 完美映射）
+python tools/convert_detr.py \
+    --url https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth \
+    --output weights/detr_r50.pth \
+    --verify
+
+# 支持的官方 checkpoint:
+#   DETR-R50:      https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth
+#   DETR-R101:     https://dl.fbaipublicfiles.com/detr/detr-r101-2c7b67e5.pth
+#   DETR-DC5-R50:  https://dl.fbaipublicfiles.com/detr/detr-r50-dc5-f0fb7ef5.pth
+#   DETR-DC5-R101: https://dl.fbaipublicfiles.com/detr/detr-r101-dc5-a2e86def.pth
+```
+
+转换后在模型 YAML 中添加 `weights` 字段：
+
+```yaml
+# configs/models/detr_r50.yaml 中添加
+weights: weights/detr_r50.pth
+```
+
+### YOLO (ultralytics)
+
+```bash
+# 转换 ultralytics YOLO11n 权重
+python tools/convert_ultralytics.py --model yolo11n.pt --out weights/yolo11n_vf.pt --test
+```
+
+### RF-DETR (Roboflow)
+
+RF-DETR 架构复杂度较高，采用适配器模式直接调用 `rfdetr` 包推理：
+
+```bash
+# 安装依赖
+pip install rfdetr
+
+# 命令行测试
+python tools/rfdetr_adapter.py --model base --image test.jpg --conf 0.5
+```
 
 ```python
-import cv2
-from visionframework import Vision
+# 代码调用
+from tools.rfdetr_adapter import RFDETRAdapter
 
-v = Vision(model="yolov8n.pt", track=True)
-for frame, meta, result in v.run("video.mp4", skip_frames=2):
-    annotated = v.draw(frame, result)
-    cv2.imshow("Vision", annotated)
-    if cv2.waitKey(1) & 0xFF == ord("q"):
-        break
-cv2.destroyAllWindows()
-v.cleanup()
+adapter = RFDETRAdapter(model_size="base", conf=0.5)
+detections = adapter.predict(image_bgr)
 ```
 
-### ROI 区域计数（v0.4.0 新增）
+支持的模型: `nano`, `small`, `base`, `medium`, `large`。
 
-```python
-from visionframework import Vision
+## 运行时配置参数
 
-v = Vision(model="yolov8n.pt", track=True)
-v.add_roi("入口", [(100,100),(400,100),(400,400),(100,400)])
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `pipeline` | str | 任务类型：`detection` / `tracking` / `segmentation` / `reid_tracking` |
+| `algorithm` | str | 检测算法：`Detector`（默认）或 `DETRDetector` |
+| `models.detector` | str | 检测模型配置路径 |
+| `models.segmenter` | str | 分割模型配置路径 |
+| `models.reid` | str | ReID 模型配置路径 |
+| `tracker` | str/dict | 跟踪器配置路径或内联配置 |
+| `device` | str | `auto` / `cpu` / `cuda` |
+| `fp16` | bool | 半精度推理 |
+| `filter_classes` | list | 类别过滤，支持类别名称 (str) 和 ID (int) 混用 |
 
-for frame, meta, result in v.run("video.mp4"):
-    counts = result["counts"]
-    # {"入口": {"inside": 3, "entering": 1, "exiting": 0, "total_entered": 12}}
+## 自定义模型
+
+通过 YAML 自由组合组件：
+
+```yaml
+# 自定义: ResNet-50 backbone + PAN neck + YOLO head
+backbone:
+  type: ResNet
+  layers: 50
+
+neck:
+  type: PAN
+  in_channels: [512, 1024, 2048]
+  depth: 0.33
+
+head:
+  type: YOLOHead
+  in_channels: [512, 1024, 2048]
+  num_classes: 20
+  reg_max: 16
 ```
 
-### 批量图像处理（v0.4.0 新增）
+## 依赖
 
-```python
-from visionframework import Vision
+| 包 | 版本 | 说明 |
+|----|------|------|
+| torch | ≥1.10 | 核心 |
+| opencv-python | ≥4.5 | 图像处理 |
+| numpy | ≥1.20 | 数值计算 |
+| pyyaml | ≥5.0 | 配置文件 |
+| scipy | 可选 | ByteTrack 匹配 |
+| ultralytics | 可选 | YOLO 权重转换 |
+| rfdetr | 可选 | RF-DETR 推理适配器 |
 
-v = Vision(model="yolov8n.pt")
-results = v.process_batch([img1, img2, img3])
-for i, r in enumerate(results):
-    print(f"图像 {i}: {len(r['detections'])} 个目标")
-```
+## 许可
 
-### 热力图可视化（v0.4.0 新增）
-
-```python
-from visionframework import Vision, Visualizer
-import cv2
-
-v = Vision(model="yolov8n.pt", track=True)
-vis = Visualizer()
-state = {}
-
-for frame, meta, result in v.run("video.mp4"):
-    heatmap = vis.draw_heatmap(frame, result["tracks"],
-                               alpha=0.5, accumulate=True, _heat_state=state)
-    cv2.imshow("热力图", heatmap)
-    if cv2.waitKey(1) & 0xFF == ord("q"):
-        break
-cv2.destroyAllWindows()
-```
-
-### 模型优化
-
-```python
-from visionframework import QuantizationConfig, quantize_model, PruningConfig, prune_model
-import torch
-
-model = torch.load("model.pt").eval()
-
-# 动态量化
-q_model = quantize_model(model, QuantizationConfig(quantization_type="dynamic"))
-
-# L1 剪枝
-import torch.nn as nn
-p_model = prune_model(model, PruningConfig(pruning_type="l1_unstructured", amount=0.3,
-                                           target_modules=[nn.Linear]))
-```
-
-### 自定义插件
-
-```python
-from visionframework import BaseDetector, Detection, register_detector
-import numpy as np
-
-@register_detector("my_detector")
-class MyDetector(BaseDetector):
-    def initialize(self) -> bool:
-        self._initialized = True
-        return True
-
-    def detect(self, image: np.ndarray) -> list:
-        return []
-```
-
-## 文档
-
-| 文档 | 说明 |
-|------|------|
-| [快速开始](docs/QUICKSTART.md) | 安装与最小示例 |
-| [功能特性](docs/FEATURES.md) | 功能一览与场景说明 |
-| [API 参考](docs/API_REFERENCE.md) | 详细的 API 文档 |
-| [高级指南](docs/ADVANCED.md) | 插件、优化、部署、微调 |
-| [更新日志](docs/CHANGELOG.md) | 版本历史 |
-| [贡献指南](docs/CONTRIBUTING.md) | 如何参与贡献 |
-
-示例脚本在 `examples/`，查看 `examples/README.md` 获取运行命令。
-
-## 版本历史
-
-**v0.4.0（2026-02-26）**：
-- `Vision.add_roi()` — ROI 区域计数
-- `Vision.process_batch()` — 批量图像处理
-- `Vision.info()` — 实例配置摘要
-- `Visualizer.draw_heatmap()` — 轨迹热力图
-- LoRA / QLoRA 微调完整实现
-- 统一导入风格：所有组件直接从 `visionframework` 导入
-- 新增 11 个测试文件，264 个测试全部通过
-
-**v0.3.0（2026-02-07）**：
-- 全新 `Vision` 类，一个入口取代所有旧 API
-- 统一 `run()` 方法处理图片/视频/摄像头/RTSP/文件夹
-- `draw()` 方法一行绘制所有结果
-
-<details>
-<summary>更早版本</summary>
-
-**v0.2.15**：共享跟踪器工具、输入验证增强、ByteTracker 修复、~250 行代码精简
-
-**v0.2.14**：VisionPipeline 批处理增强、视频批处理、模型优化工具
-
-**v0.2.13**：内存池管理、插件系统、统一错误处理、依赖管理优化
-
-</details>
-
-## 依赖项
-
-### 必需
-
-- opencv-python >= 4.8.0
-- numpy >= 1.24.0, < 2.0.0
-- torch >= 2.0.0
-- torchvision >= 0.15.0
-- ultralytics >= 8.0.0
-- scipy >= 1.10.0
-- Pillow >= 10.0.0
-- pyyaml >= 6.0
-- pydantic >= 2.0.0
-- huggingface_hub >= 0.14.0
-
-### 可选
-
-- transformers（DETR / CLIP 支持）
-- segment-anything（SAM 分割）
-- rfdetr（RF-DETR 检测器）
-- onnx / onnxruntime（ONNX 模型转换与推理）
-- av（PyAV 高性能视频处理）
-- peft（LoRA / QLoRA 微调）
-- bitsandbytes（QLoRA 量化微调）
-- psutil（内存监控）
-
-## 许可证
-
-MIT License — 详见 [LICENSE](LICENSE)
+MIT License

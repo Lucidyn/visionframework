@@ -1,48 +1,9 @@
-# ── 必需依赖 ──────────────────────────────────────────────────────────────
-opencv-python>=4.8.0
-numpy>=1.24.0,<2.0.0
+# Core dependencies (minimal)
 torch>=2.0.0
 torchvision>=0.15.0
-ultralytics>=8.0.0
-scipy>=1.10.0
-Pillow>=10.0.0
+opencv-python>=4.8.0
+numpy>=1.24.0,<2.0.0
 pyyaml>=6.0
-pydantic>=2.0.0
-huggingface_hub>=0.14.0
 
-# ── 可选依赖（按需安装）────────────────────────────────────────────────────
-
-# CLIP / DETR 支持：
-# transformers>=4.30.0
-
-# SAM（Segment Anything Model）分割支持：
-# segment-anything>=1.0
-
-# ONNX 模型转换与推理：
-# onnx>=1.14.0
-# onnxruntime>=1.14.0
-
-# RF-DETR 检测器支持：
-# rfdetr>=0.1.0
-# supervision>=0.18.0
-
-# PyAV 高性能视频处理（基于 FFmpeg）：
-# av>=11.0.0
-
-# LoRA / QLoRA 微调支持：
-# peft>=0.7.0
-# bitsandbytes>=0.41.0
-
-# 内存与性能监控：
-# psutil>=5.9.0
-
-# ── 安装方式 ──────────────────────────────────────────────────────────────
-# 安装所有可选依赖：
-#   pip install -e ".[all]"
-#
-# 按功能组安装：
-#   pip install -e ".[clip]"     # CLIP / DETR 支持
-#   pip install -e ".[sam]"      # SAM 分割支持
-#   pip install -e ".[rfdetr]"   # RF-DETR 支持
-#   pip install -e ".[pyav]"     # PyAV 视频处理支持
-#   pip install -e ".[dev]"      # 开发工具（pytest、black、mypy 等）
+# Optional: Hungarian assignment for tracking
+# scipy>=1.10.0

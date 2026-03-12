@@ -4,21 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visionframework"
-version = "0.4.0"
-description = "A comprehensive vision framework for detection, tracking, and more with configuration management, model management, and device autoselection"
+version = "1.0.0"
+description = "模块化、组件式计算机视觉框架 — 通过 backbone/neck/head 组件组合构建模型，YAML 配置驱动"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
     {name = "Vision Framework Contributors"}
 ]
-keywords = ["computer vision", "object detection", "object tracking", "yolo", "deep learning", "pydantic", "configuration management", "model management"]
+keywords = [
+    "computer vision", "object detection", "tracking", "segmentation",
+    "reid", "deep learning", "modular", "component-based", "yaml config",
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Software Development :: Libraries :: Python Modules",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -27,60 +29,24 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-    "opencv-python>=4.8.0",
-    "numpy>=1.24.0,<2.0.0",
     "torch>=2.0.0",
     "torchvision>=0.15.0",
-    "ultralytics>=8.0.0",
-    "scipy>=1.10.0",
-    "Pillow>=10.0.0",
-    "pydantic>=2.0.0",
+    "opencv-python>=4.8.0",
+    "numpy>=1.24.0,<2.0.0",
     "pyyaml>=6.0",
-    "huggingface_hub>=0.14.0",
-    # Optional heavy dependencies moved to [project.optional-dependencies]
 ]
 
 [project.optional-dependencies]
+scipy = ["scipy>=1.10.0"]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "flake8>=6.0.0",
-    "mypy>=1.0.0",
+    "scipy>=1.10.0",
 ]
 
-# Feature groups for optional heavy dependencies
-clip = [
-    "transformers>=4.30.0"
-]
-
-sam = [
-    "segment-anything>=1.0"
-]
-
-rfdetr = [
-    "rfdetr>=0.1.0",
-    "supervision>=0.18.0"
-]
-
-pyav = [
-    "av>=11.0.0"
-]
-
-all = [
-    "visionframework[clip]",
-    "visionframework[sam]",
-    "visionframework[rfdetr]",
-    "visionframework[pyav]",
-    "visionframework[dev]"
-]
-
-[tool.setuptools]
-packages = ["visionframework"]
-
-[tool.black]
-line-length = 100
-target-version = ['py38', 'py39', 'py310', 'py311']
+[tool.setuptools.packages.find]
+include = ["visionframework*"]
+exclude = ["test*", "configs*"]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
@@ -93,9 +59,6 @@ filterwarnings = [
     "ignore::UserWarning",
 ]
 
-[tool.mypy]
-python_version = "3.8"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = false
-
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311']

@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from typing import List, Optional, Tuple, Dict, Any
 from .base_visualizer import BaseVisualizer
-from ...data.detection import Detection
+from visionframework.data.detection import Detection
 
 
 class DetectionVisualizer(BaseVisualizer):

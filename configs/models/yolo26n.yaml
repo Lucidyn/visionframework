@@ -1,0 +1,26 @@
+task: detection
+
+backbone:
+  type: YOLOBackbone
+  depth: 0.50
+  width: 0.25
+  max_channels: 1024
+
+neck:
+  type: YOLOPAN
+  in_channels: [128, 128, 256]
+  out_channels: [64, 128, 256]
+  depth: 0.50
+  c3k: true
+  a2c2f: true
+
+head:
+  type: YOLOHead
+  in_channels: [64, 128, 256]
+  num_classes: 80
+  reg_max: 1
+
+postprocess:
+  conf: 0.25
+  nms_iou: 0.45
+  end2end: true

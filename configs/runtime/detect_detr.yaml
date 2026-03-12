@@ -1,0 +1,8 @@
+pipeline: detection
+algorithm: DETRDetector
+
+models:
+  detector: configs/models/detr_r50.yaml
+
+device: auto
+fp16: false

@@ -1,0 +1,25 @@
+task: detection
+
+backbone:
+  type: ResNet
+  layers: 50
+
+neck:
+  type: TransformerEncoderNeck
+  in_channels: [512, 1024, 2048]
+  d_model: 256
+  nhead: 8
+  num_layers: 6
+  dim_feedforward: 2048
+
+head:
+  type: DETRHead
+  d_model: 256
+  nhead: 8
+  num_layers: 6
+  num_queries: 100
+  num_classes: 91
+  dim_feedforward: 2048
+
+postprocess:
+  conf: 0.7

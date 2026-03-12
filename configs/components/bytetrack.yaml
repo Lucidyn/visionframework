@@ -1,0 +1,6 @@
+type: bytetrack
+track_thresh: 0.5
+match_thresh: 0.8
+track_buffer: 30
+frame_rate: 30
+min_box_area: 10

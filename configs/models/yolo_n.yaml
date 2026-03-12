@@ -1,0 +1,21 @@
+task: detection
+
+backbone:
+  type: CSPDarknet
+  depth: 0.33
+  width: 0.25
+
+neck:
+  type: PAN
+  in_channels: [64, 128, 256]
+  depth: 0.33
+
+head:
+  type: YOLOHead
+  in_channels: [64, 128, 256]
+  num_classes: 80
+  reg_max: 16
+
+postprocess:
+  conf: 0.25
+  nms_iou: 0.45

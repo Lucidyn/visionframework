@@ -1,0 +1,10 @@
+pipeline: segmentation
+
+models:
+  segmenter: configs/models/resnet50_seg.yaml
+
+device: auto
+fp16: false
+
+output:
+  show: true

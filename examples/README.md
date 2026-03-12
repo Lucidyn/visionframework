@@ -1,95 +1,132 @@
-# 示例
+# 示例教程
 
-所有示例都使用统一的 `Vision` API。运行前请激活 `frametest` conda 环境：
+本目录包含 VisionFramework 的使用示例，全部通过 YAML 配置文件驱动。
 
-```bash
-conda activate frametest
-pip install -e .
-```
+## 示例列表
 
-## 基础示例
+| 示例 | 文件 | 说明 |
+|------|------|------|
+| 目标检测 | `01_detection.py` | 使用 YOLO 进行单图检测 |
+| 多目标跟踪 | `02_tracking.py` | ByteTrack 多帧跟踪 |
+| 语义分割 | `03_segmentation.py` | ResNet50 语义分割 |
+| 可视化 | `04_visualization.py` | 检测结果绘制 |
+| 真实检测 | `05_real_detection.py` | ultralytics 预训练权重真实图片检测 |
 
-| 文件 | 功能 | 核心用法 |
-|------|------|---------|
-| `basic/00_basic_detection.py` | 基本目标检测 | `Vision()` + `v.run()` |
-| `basic/01_detection_with_tracking.py` | 检测 + 跟踪 | `Vision(track=True)` |
-| `basic/02_simplified_api.py` | 从配置文件加载 | `Vision.from_config()` |
-| `basic/03_pose_estimation.py` | 姿态估计 | `Vision(pose=True)` |
-| `basic/04_segmentation.py` | 实例分割 | `Vision(segment=True)` |
-| `basic/05_video_processing.py` | 视频 / 摄像头处理 | `v.run()` + `v.draw()` |
-
-## 进阶示例
-
-| 文件 | 功能 |
-|------|------|
-| `advanced/06_clip_features.py` | CLIP 特征提取 / 零样本分类 |
-| `advanced/08_model_tools_example.py` | 模型工具（量化、剪枝、增强等） |
-| `advanced/09_multimodal_processing.py` | 多模态处理 |
-| `advanced/10_batch_processing.py` | 批处理 |
-| `advanced/11_custom_component.py` | 自定义组件与插件系统 |
-| `advanced/12_result_export.py` | 结果导出（JSON / CSV） |
-| `advanced/13_roi_counting.py` | ROI 区域计数（进出统计） |
-| `advanced/14_heatmap.py` | 轨迹热力图可视化 |
-| `advanced/15_batch_images.py` | `process_batch()` 批量图像推理 |
-| `advanced/16_model_optimization.py` | 量化 + 剪枝工作流 |
-| `advanced/17_performance_monitor.py` | 性能监控与报告 |
-
-## 快速运行
+## 运行方式
 
 ```bash
-# 基础检测
-conda run -n frametest python examples/basic/00_basic_detection.py
+# 确保在项目根目录
+cd visionframework
 
-# 检测 + 跟踪
-conda run -n frametest python examples/basic/01_detection_with_tracking.py
-
-# ROI 计数（需要 video.mp4）
-conda run -n frametest python examples/advanced/13_roi_counting.py
-
-# 热力图（需要 video.mp4）
-conda run -n frametest python examples/advanced/14_heatmap.py
-
-# 批量图像处理
-conda run -n frametest python examples/advanced/15_batch_images.py
-
-# 模型量化与剪枝
-conda run -n frametest python examples/advanced/16_model_optimization.py
-
-# 性能监控（需要 video.mp4）
-conda run -n frametest python examples/advanced/17_performance_monitor.py
+# 运行示例
+python examples/01_detection.py
+python examples/02_tracking.py
+python examples/03_segmentation.py
+python examples/04_visualization.py
 ```
 
-## API 速查
+## 核心用法
+
+框架唯一入口是 `TaskRunner(yaml_path)`：
 
 ```python
-from visionframework import Vision
+from visionframework import TaskRunner
 
-# 方式一：直接创建
-v = Vision(model="yolov8n.pt", track=True, pose=True)
+# 加载 YAML 配置并运行
+task = TaskRunner("configs/runtime/detect.yaml")
 
-# 方式二：从配置文件创建
-v = Vision.from_config("config.json")
+# 处理单张图片
+result = task.process(image)
 
-# 处理任意来源
-for frame, meta, result in v.run(source):
-    print(result["detections"])
-    print(result["tracks"])
-    print(result["poses"])
-    print(result.get("counts"))   # 需先调用 v.add_roi(...)
-
-# ROI 区域计数
-v.add_roi("entrance", [(100,100),(400,100),(400,400),(100,400)])
-
-# 批量处理
-results = v.process_batch([img1, img2, img3])
-
-# 实例信息
-print(v.info())
-
-# 热力图
-from visionframework import Visualizer
-vis = Visualizer()
-heatmap = vis.draw_heatmap(frame, tracks)
+# 处理视频/摄像头
+for frame, meta, result in task.run("video.mp4"):
+    ...
 ```
 
-`source` 支持：图片路径、视频路径、摄像头 (0)、RTSP 流、文件夹、路径列表、numpy 数组。
+## 权重转换工具
+
+```bash
+# ultralytics YOLO 权重
+python tools/convert_ultralytics.py --model yolo11n.pt --out weights/yolo11n_vf.pt
+
+# Facebook DETR 官方权重（458/458 keys 完美映射）
+python tools/convert_detr.py \
+    --url https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth \
+    --output weights/detr_r50.pth --verify
+```
+
+## RF-DETR 适配器
+
+RF-DETR 采用适配器模式，直接封装 `rfdetr` 包推理（需 `pip install rfdetr`）：
+
+```bash
+python tools/rfdetr_adapter.py --model base --image test.jpg --conf 0.5
+```
+
+```python
+from tools.rfdetr_adapter import RFDETRAdapter
+adapter = RFDETRAdapter(model_size="base", conf=0.5)
+detections = adapter.predict(image_bgr)
+```
+
+## YAML 配置说明
+
+### 运行时配置 (configs/runtime/)
+
+```yaml
+pipeline: detection          # detection / tracking / segmentation / reid_tracking
+algorithm: DETRDetector      # 可选，指定检测算法类型
+
+models:
+  detector: configs/models/yolo11n.yaml  # 模型配置路径
+
+device: auto                 # auto / cpu / cuda
+fp16: false                  # 半精度推理
+
+# 类别过滤：只检测指定类别，支持名称 (str) 和 ID (int) 混用
+filter_classes:
+  - person
+  - car
+  - 5                        # 也可以用类别 ID
+```
+
+### 模型配置 (configs/models/)
+
+```yaml
+backbone:
+  type: YOLOBackbone
+  depth: 0.50
+  width: 0.25
+
+neck:
+  type: YOLOPAN
+  in_channels: [128, 128, 256]
+  depth: 0.50
+  c3k: false
+
+head:
+  type: YOLOHead
+  in_channels: [128, 128, 256]
+  num_classes: 80
+  reg_max: 16
+
+postprocess:
+  conf: 0.25
+  nms_iou: 0.45
+
+# 可选：指定预训练权重路径
+# weights: weights/yolo11n_vf.pt
+```
+
+### 内置运行时配置一览
+
+| 配置文件 | 说明 |
+|----------|------|
+| `detect.yaml` | 通用 YOLO 检测 |
+| `detect_detr.yaml` | DETR 检测 |
+| `detect_rfdetr.yaml` | RF-DETR 检测 |
+| `detect_person.yaml` | 只检测行人（类别过滤） |
+| `detect_vehicles.yaml` | 只检测车辆（类别过滤） |
+| `tracking.yaml` | ByteTrack 多目标跟踪 |
+| `reid_tracking.yaml` | ReID 增强跟踪 |
+| `segmentation.yaml` | 语义分割 |

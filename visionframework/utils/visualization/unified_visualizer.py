@@ -9,9 +9,9 @@ from .base_visualizer import BaseVisualizer
 from .detection_visualizer import DetectionVisualizer
 from .track_visualizer import TrackVisualizer
 from .pose_visualizer import PoseVisualizer
-from ...data.detection import Detection
-from ...data.track import Track
-from ...data.pose import Pose
+from visionframework.data.detection import Detection
+from visionframework.data.track import Track
+from visionframework.data.pose import Pose
 
 
 class Visualizer(BaseVisualizer):
@@ -166,7 +166,7 @@ class Visualizer(BaseVisualizer):
         frame : np.ndarray
             BGR image.
         result : dict
-            The *result* dict from ``Vision.run()``.
+            The *result* dict from ``TaskRunner.run()``.
 
         Returns
         -------

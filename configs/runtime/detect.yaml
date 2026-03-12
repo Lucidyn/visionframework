@@ -1,0 +1,10 @@
+pipeline: detection
+
+models:
+  detector: configs/models/yolo_n.yaml
+
+device: auto
+fp16: false
+
+output:
+  show: true

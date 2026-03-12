@@ -1,0 +1,30 @@
+task: detection
+
+backbone:
+  type: DINOv2Backbone
+  model_name: dinov2_vitb14
+  out_dim: 256
+  pretrained: false
+  freeze: false
+
+neck:
+  type: DeformableEncoderNeck
+  in_channels: [256]
+  d_model: 256
+  nhead: 8
+  num_layers: 6
+  n_points: 4
+  dim_feedforward: 1024
+
+head:
+  type: RFDETRHead
+  d_model: 256
+  nhead: 8
+  num_layers: 6
+  num_queries: 300
+  num_classes: 80
+  n_points: 4
+  dim_feedforward: 1024
+
+postprocess:
+  conf: 0.5
