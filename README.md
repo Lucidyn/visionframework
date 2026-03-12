@@ -9,7 +9,6 @@
 - **内置模型** — YOLO11、YOLO26、DETR、RF-DETR，以及 CSPDarknet、ResNet 等基础组件
 - **官方权重** — 支持加载 Facebook DETR（458/458 完美映射）、ultralytics YOLO 官方预训练权重
 - **YOLO26 端到端** — NMS-free one-to-one 检测头，`end2end: true` 一键启用
-- **类别过滤** — 通过 `filter_classes` 配置项指定只检测某些类别
 - **多任务支持** — 检测、分割、跟踪、ReID 跟踪，统一 pipeline 管理
 - **最少依赖** — 核心仅需 `torch`、`opencv-python`、`numpy`、`pyyaml`
 
