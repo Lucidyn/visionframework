@@ -6,11 +6,13 @@
 
 | 示例 | 文件 | 说明 |
 |------|------|------|
-| 目标检测 | `01_detection.py` | 使用 YOLO 进行单图检测 |
+| 目标检测 | `01_detection.py` | YOLO11 单图检测 |
 | 多目标跟踪 | `02_tracking.py` | ByteTrack 多帧跟踪 |
 | 语义分割 | `03_segmentation.py` | ResNet50 语义分割 |
 | 可视化 | `04_visualization.py` | 检测结果绘制 |
-| 真实检测 | `05_real_detection.py` | ultralytics 预训练权重真实图片检测 |
+| DETR 检测 | `05_detr_detection.py` | Facebook DETR 官方权重 |
+| YOLO26 检测 | `06_yolo26_detection.py` | YOLO26 端到端检测（NMS-free）|
+| RF-DETR 检测 | `07_rfdetr_detection.py` | RF-DETR 适配器 |
 
 ## 运行方式
 
@@ -23,6 +25,9 @@ python examples/01_detection.py
 python examples/02_tracking.py
 python examples/03_segmentation.py
 python examples/04_visualization.py
+python examples/05_detr_detection.py
+python examples/06_yolo26_detection.py
+python examples/07_rfdetr_detection.py
 ```
 
 ## 核心用法
@@ -122,7 +127,8 @@ postprocess:
 
 | 配置文件 | 说明 |
 |----------|------|
-| `detect.yaml` | 通用 YOLO 检测 |
+| `detect.yaml` | 通用 YOLO11 检测 |
+| `detect_yolo26.yaml` | YOLO26 端到端检测（NMS-free）|
 | `detect_detr.yaml` | DETR 检测 |
 | `detect_rfdetr.yaml` | RF-DETR 检测 |
 | `detect_person.yaml` | 只检测行人（类别过滤） |

@@ -164,8 +164,8 @@ visionframework/
 
 configs/
 ├── models/                   # 模型配置
-│   ├── yolo11n/s/m/l.yaml    # YOLO11 系列（YOLOBackbone + YOLOPAN）
-│   ├── yolo26n/s/m/l.yaml    # YOLO26 系列（NMS-free，reg_max=1）
+│   ├── yolo11n/s/m/l/x.yaml  # YOLO11 系列（YOLOBackbone + YOLOPAN）
+│   ├── yolo26n/s/m/l/x.yaml  # YOLO26 系列（NMS-free，reg_max=1）
 │   ├── detr_r50.yaml         # ResNet-50 + TransformerEncoder + DETRHead
 │   ├── rfdetr_base.yaml      # DINOv2 + DeformableEncoder + RFDETRHead
 │   ├── resnet50_seg.yaml     # ResNet-50 语义分割
@@ -206,10 +206,12 @@ examples/
 | YOLO11s | `yolo11s.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，小型 |
 | YOLO11m | `yolo11m.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，中型 |
 | YOLO11l | `yolo11l.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，大型 |
+| YOLO11x | `yolo11x.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，超大 |
 | YOLO26n | `yolo26n.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
 | YOLO26s | `yolo26s.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
 | YOLO26m | `yolo26m.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
 | YOLO26l | `yolo26l.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
+| YOLO26x | `yolo26x.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
 | DETR-R50 | `detr_r50.yaml` | ResNet-50 | TransformerEncoderNeck | DETRHead | 无 NMS，集合预测 |
 | RF-DETR | `rfdetr_base.yaml` | DINOv2Backbone | DeformableEncoderNeck | RFDETRHead | 可变形注意力 |
 | 分割 | `resnet50_seg.yaml` | ResNet-50 | FPN | SegHead | 语义分割 |
@@ -234,11 +236,14 @@ weights:
 转换工具自动检测模型类型，YOLO26 会自动使用 one-to-one head 权重：
 
 ```bash
-# YOLO11（支持 n/s/m/l）
+# YOLO11（支持 n/s/m/l/x）
 python tools/convert_ultralytics.py --model yolo11n.pt --out weights/yolo11n_converted.pth
 
-# YOLO26（自动检测 one2one head，无需额外参数）
+# YOLO26（支持 n/s/m/l/x，自动检测 one2one head）
 python tools/convert_ultralytics.py --model yolo26n.pt --out weights/yolo26n_converted.pth
+
+# 验证与 Ultralytics 推理一致（10 个模型：11n/s/m/l/x、26n/s/m/l/x）
+python tools/test_yolo26.py
 ```
 
 ### DETR (Facebook)

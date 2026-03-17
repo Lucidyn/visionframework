@@ -97,7 +97,7 @@ class C3k2(nn.Module):
     """
 
     def __init__(self, c_in, c_out, n=1, c3k=False, a2c2f=False,
-                 e=0.5, g=1, shortcut=True):
+                 e=0.5, g=1, shortcut=True, bottleneck_k=3):
         super().__init__()
         self.c = int(c_out * e)
         self.cv1 = ConvBNAct(c_in, 2 * self.c, 1, 1)
@@ -113,11 +113,11 @@ class C3k2(nn.Module):
             )
         elif c3k:
             self.m = nn.ModuleList(
-                C3k(self.c, self.c, n=2, shortcut=shortcut) for _ in range(n)
+                C3k(self.c, self.c, n=2, shortcut=shortcut, k=bottleneck_k) for _ in range(n)
             )
         else:
             self.m = nn.ModuleList(
-                Bottleneck(self.c, self.c, shortcut=shortcut, g=g)
+                Bottleneck(self.c, self.c, shortcut=shortcut, g=g, k=(bottleneck_k, bottleneck_k))
                 for _ in range(n)
             )
 

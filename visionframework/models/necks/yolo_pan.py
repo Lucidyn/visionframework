@@ -13,7 +13,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import List
+from typing import List, Optional
 
 from visionframework.core.registry import NECKS
 from visionframework.layers import ConvBNAct, C3k2
@@ -38,25 +38,38 @@ class YOLOPAN(nn.Module):
 
     def __init__(self, in_channels: List[int], out_channels: List[int] = None,
                  depth: float = 0.5, c3k: bool = False, a2c2f: bool = False,
-                 **_kw):
+                 bottleneck_k: Optional[int] = None, **_kw):
         super().__init__()
         c3, c4, c5 = in_channels
         o3, o4, o5 = out_channels if out_channels else in_channels
         n = max(1, round(2 * depth))
 
+        # Ultralytics uses smaller kernels for larger models and for end2end YOLO26.
+        # We keep a single knob that aligns well across sizes.
+        if bottleneck_k is None:
+            if c3k:
+                # Ultralytics: small models (n/s) use k=3, larger (m/l/x) use k=1
+                bottleneck_k = 1 if o3 >= 256 else 3
+            else:
+                bottleneck_k = 1 if o3 >= 256 else 3
+
         # top-down
         self.up = nn.Upsample(scale_factor=2, mode="nearest")
-        self.td_c3k2_p4 = C3k2(c4 + c5, o4, n=n, c3k=c3k)
-        self.td_c3k2_p3 = C3k2(c3 + o4, o3, n=n, c3k=c3k)
+        self.td_c3k2_p4 = C3k2(c4 + c5, o4, n=n, c3k=c3k, bottleneck_k=bottleneck_k)
+        self.td_c3k2_p3 = C3k2(c3 + o4, o3, n=n, c3k=c3k, bottleneck_k=bottleneck_k)
 
         # bottom-up
         self.bu_down_p3 = ConvBNAct(o3, o3, 3, 2)
-        self.bu_c3k2_p4 = C3k2(o3 + o4, o4, n=n, c3k=c3k)
+        self.bu_c3k2_p4 = C3k2(o3 + o4, o4, n=n, c3k=c3k, bottleneck_k=bottleneck_k)
         self.bu_down_p4 = ConvBNAct(o4, o4, 3, 2)
+        # When a2c2f (YOLO26): Ultralytics uses n=1 and k=1 for last C3k2; YOLO11m/l use k=3
+        n_p5 = 1 if a2c2f else (n if c3k else 1)
+        k_p5 = 1 if (c3k and a2c2f) else bottleneck_k
         self.bu_c3k2_p5 = C3k2(
-            o4 + c5, o5, n=n if c3k else 1,
+            o4 + c5, o5, n=n_p5,
             c3k=not a2c2f and True,
             a2c2f=a2c2f,
+            bottleneck_k=k_p5,
         )
 
         self.out_channels = [o3, o4, o5]

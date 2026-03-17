@@ -1,4 +1,4 @@
-task: detection
+﻿task: detection
 
 # 转换后的权重（python tools/convert_ultralytics.py --model yolo26n.pt --out weights/yolo26n_converted.pth）
 # weights: weights/yolo26n_converted.pth
@@ -26,6 +26,6 @@ head:
   reg_max: 1
 
 postprocess:
-  conf: 0.25
+  conf: 0.35
   nms_iou: 0.45
   end2end: true

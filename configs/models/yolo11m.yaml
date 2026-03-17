@@ -5,13 +5,16 @@ backbone:
   depth: 0.50
   width: 1.00
   max_channels: 512
+  c3k2_12_c3k: true
+  bottleneck_k: 3
 
 neck:
   type: YOLOPAN
   in_channels: [512, 512, 512]
   out_channels: [256, 512, 512]
   depth: 0.50
-  c3k: false
+  c3k: true
+  bottleneck_k: 3
 
 head:
   type: YOLOHead

@@ -70,17 +70,20 @@ class Detector(BaseAlgorithm):
     # -- preprocessing -------------------------------------------------------
 
     def _preprocess(self, img: np.ndarray) -> Tuple[torch.Tensor, float, Tuple[int, int]]:
-        """Letterbox resize → normalise → tensor."""
+        """Letterbox resize → normalise → tensor (align with Ultralytics: round, center pad, BGR→RGB)."""
         h0, w0 = img.shape[:2]
         th, tw = self.input_size
         scale = min(th / h0, tw / w0)
-        nh, nw = int(h0 * scale), int(w0 * scale)
+        nh, nw = round(h0 * scale), round(w0 * scale)
         resized = cv2.resize(img, (nw, nh))
 
         pad_h, pad_w = th - nh, tw - nw
-        top, left = pad_h // 2, pad_w // 2
+        # Center padding like Ultralytics: round(dh/2 ± 0.1) style for center mode
+        top = round(pad_h / 2 - 0.1)
+        left = round(pad_w / 2 - 0.1)
         canvas = np.full((th, tw, 3), 114, dtype=np.uint8)
         canvas[top:top + nh, left:left + nw] = resized
+        canvas = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
 
         tensor = torch.from_numpy(canvas).permute(2, 0, 1).unsqueeze(0).float() / 255.0
         tensor = tensor.to(self.device)
@@ -147,6 +150,47 @@ class Detector(BaseAlgorithm):
         raw = self.model(tensor)
         boxes, scores = self._decode_outputs(raw, scale, pad)
 
+        # End-to-end (YOLO26 one-to-one): Ultralytics postprocess picks top-k over all class scores (N * nc),
+        # not "max per cell". This can keep duplicates and matches Ultralytics behavior better.
+        if self.end2end:
+            # NOTE: _decode_outputs already applies sigmoid to cls logits.
+            s = scores  # (N, nc)
+            n, nc = s.shape
+            flat = s.reshape(-1)  # (N*nc,)
+            k = min(flat.numel(), 300)
+            confs, flat_idx = flat.topk(k, largest=True, sorted=True)
+            keep = confs > self.conf
+            confs = confs[keep]
+            flat_idx = flat_idx[keep]
+            if confs.numel() == 0:
+                return []
+            box_idx = (flat_idx // nc).long()
+            cls_ids = (flat_idx % nc).long()
+            sel_boxes = boxes[box_idx]
+
+            if self._filter_ids is not None:
+                cls_mask = torch.tensor(
+                    [int(c) in self._filter_ids for c in cls_ids],
+                    dtype=torch.bool, device=sel_boxes.device,
+                )
+                sel_boxes = sel_boxes[cls_mask]
+                confs = confs[cls_mask]
+                cls_ids = cls_ids[cls_mask]
+                if sel_boxes.numel() == 0:
+                    return []
+
+            detections = []
+            for b, c, cid in zip(sel_boxes, confs, cls_ids):
+                bb = b.cpu().numpy()
+                detections.append(Detection(
+                    bbox=tuple(bb.tolist()),
+                    confidence=float(c),
+                    class_id=int(cid),
+                    class_name=(self.class_names[int(cid)] if self.class_names else None),
+                ))
+            return detections
+
+        # One-to-many (YOLO11): standard NMS path, use "max per cell"
         max_scores, cls_ids = scores.max(dim=1)
         keep_mask = max_scores > self.conf
         boxes = boxes[keep_mask]
@@ -168,17 +212,12 @@ class Detector(BaseAlgorithm):
         if boxes.numel() == 0:
             return []
 
-        if self.end2end:
-            # One-to-one head: each grid cell predicts at most one object,
-            # no NMS needed (YOLO26 one2one head)
-            keep_indices = range(min(len(boxes), 300))
-        else:
-            keep_indices = non_max_suppression(
-                boxes.cpu().numpy(),
-                max_scores.cpu().numpy(),
-                self.nms_iou,
-                class_ids=cls_ids.cpu().numpy(),
-            )[:300]
+        keep_indices = non_max_suppression(
+            boxes.cpu().numpy(),
+            max_scores.cpu().numpy(),
+            self.nms_iou,
+            class_ids=cls_ids.cpu().numpy(),
+        )[:300]
 
         detections = []
         for idx in keep_indices:

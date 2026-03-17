@@ -2,6 +2,7 @@
 示例 06 — YOLO26 端到端检测（NMS-free）
 
 YOLO26 使用 one-to-one 检测头，无需 NMS 后处理。
+支持全尺寸：n/s/m/l/x，换用 configs/models/yolo26s.yaml 等即可。
 
 前提条件:
     pip install ultralytics

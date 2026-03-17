@@ -121,16 +121,23 @@ def _map_detect_key(ul_suffix: str, use_one2one: bool = False) -> str:
             return f"head.reg_convs.{level}.{layer_idx}.{rest}"
 
     # Handle cls branch (cv3)
-    # ultralytics structure: cv3.{level}.{layer}.{sub}.{rest}
-    # layer 0/1: Sequential(DWConv, Conv1x1) — sub 0=DWConv, sub 1=Conv1x1
-    # layer 2: Conv2d (final pred)
+    # ultralytics structure:
+    #   cv3.{level}.0.{sub}.{rest}  (layer 0: Sequential(DWConv, Conv1x1))
+    #   cv3.{level}.1.{sub}.{rest}  (layer 1: Sequential(DWConv, Conv1x1))
+    #   cv3.{level}.2.{rest}        (layer 2: final Conv2d pred)
     m = re.match(r"cv3\.(\d+)\.(\d+)\.(.*)", ul_suffix)
     if m:
         level, layer_idx, rest = m.group(1), int(m.group(2)), m.group(3)
         if layer_idx == 2:
+            # e.g. cv3.0.2.weight -> head.cls_preds.0.weight
             return f"head.cls_preds.{level}.{rest}"
-        else:
-            return f"head.cls_convs.{level}.{layer_idx}.{rest}"
+        # layer 0/1 must include sub index
+        m2 = re.match(r"(\d+)\.(.*)", rest)
+        if not m2:
+            return None
+        sub_idx, rest2 = int(m2.group(1)), m2.group(2)
+        # e.g. cv3.0.0.1.conv.weight -> head.cls_convs.0.0.1.conv.weight
+        return f"head.cls_convs.{level}.{layer_idx}.{sub_idx}.{rest2}"
 
     if ul_suffix.startswith("dfl."):
         return None
