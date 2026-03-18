@@ -11,7 +11,7 @@ from visionframework import TaskRunner, Visualizer, Detection
 img = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
 
 # 检测
-task = TaskRunner("configs/runtime/detect.yaml")
+task = TaskRunner("runs/detection/yolo11/detect.yaml")
 result = task.process(img)
 detections = result.get("detections", [])
 

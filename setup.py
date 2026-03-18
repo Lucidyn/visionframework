@@ -6,11 +6,11 @@ long_description = readme.read_text(encoding="utf-8") if readme.exists() else ""
 
 setup(
     name="visionframework",
-    version="1.0.0",
+    version="2.0.0",
     description="Modular, component-based computer vision framework",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    packages=find_packages(exclude=["test", "test.*", "configs"]),
+    packages=find_packages(exclude=["test", "test.*"]),
     python_requires=">=3.8",
     install_requires=[
         "torch>=2.0.0",
@@ -22,5 +22,14 @@ setup(
     extras_require={
         "scipy": ["scipy>=1.10.0"],
         "dev": ["pytest>=7.0", "scipy>=1.10.0"],
+    },
+    include_package_data=True,
+    entry_points={
+        "console_scripts": [
+            "vf-test-yolo26=visionframework.tools.test_yolo26:main",
+            "vf-convert-ultralytics=visionframework.tools.convert_ultralytics:main",
+            "vf-convert-detr=visionframework.tools.convert_detr:main",
+            "vf-export-rfdetr-pth=visionframework.tools.export_rfdetr_torchscript:main",
+        ]
     },
 )

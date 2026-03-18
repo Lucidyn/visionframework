@@ -8,7 +8,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 import numpy as np
-from typing import List
+from typing import List, Optional
 
 from visionframework.utils.device import resolve_device
 
@@ -28,13 +28,15 @@ class BaseAlgorithm:
         在 CUDA 上使用半精度推理。
     """
 
-    def __init__(self, model: nn.Module, device: str = "auto",
+    def __init__(self, model: Optional[nn.Module], device: str = "auto",
                  fp16: bool = False, **_kw):
         self.fp16 = fp16 and torch.cuda.is_available()
         self.device = resolve_device(device)
-        self.model = model.to(self.device).eval()
-        if self.fp16:
-            self.model = self.model.half()
+        self.model = None
+        if model is not None:
+            self.model = model.to(self.device).eval()
+            if self.fp16:
+                self.model = self.model.half()
 
     def predict(self, img: np.ndarray):
         raise NotImplementedError

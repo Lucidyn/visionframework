@@ -8,11 +8,11 @@
     from visionframework import TaskRunner
 
     # 图片检测
-    task = TaskRunner("configs/runtime/detect.yaml")
+    task = TaskRunner("runs/detection/yolo11/detect.yaml")
     result = task.process(image)
 
     # 视频跟踪
-    task = TaskRunner("configs/runtime/tracking.yaml")
+    task = TaskRunner("runs/tracking/bytetrack/tracking.yaml")
     for frame, meta, result in task.run("data/video.mp4"):
         print(result["tracks"])
 """
@@ -63,6 +63,23 @@ def _build_pipeline_from_runtime(runtime_cfg: Dict[str, Any]):
     filter_classes = runtime_cfg.get("filter_classes")
 
     if pipeline_type == "detection":
+        if algorithm_type == "RFDETRPTHDetector":
+            from visionframework.algorithms.detection.rfdetr_pth_detector import RFDETRPTHDetector
+            detector = RFDETRPTHDetector(
+                model_size=runtime_cfg.get("model_size", "nano"),
+                weights=_resolve_weights(runtime_cfg, "detector") or runtime_cfg.get("weights", "rf-detr-nano.pth"),
+                resolution=runtime_cfg.get("resolution"),
+                conf=runtime_cfg.get("conf", 0.5),
+                num_select=runtime_cfg.get("num_select", 300),
+                class_names=runtime_cfg.get("class_names"),
+                filter_classes=filter_classes,
+                device=device,
+                fp16=fp16,
+                auto_download=runtime_cfg.get("auto_download", True),
+                weights_dir=runtime_cfg.get("weights_dir", "weights"),
+            )
+            return PIPELINES.get("detection")(detector=detector)
+
         det_cfg_path = models_cfg if isinstance(models_cfg, str) else models_cfg.get("detector")
         model_cfg = resolve_config(det_cfg_path) if det_cfg_path else {}
         model = build_model(model_cfg, weights=_resolve_weights(runtime_cfg, "detector"))

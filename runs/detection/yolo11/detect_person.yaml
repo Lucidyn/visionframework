@@ -1,0 +1,13 @@
+pipeline: detection
+
+models:
+  detector: configs/detection/yolo11/yolo11n.yaml
+
+weights: weights/detection/yolo11/yolo11n_converted.pth
+
+filter_classes:
+  - person
+
+device: auto
+fp16: false
+

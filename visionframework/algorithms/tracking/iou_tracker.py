@@ -5,12 +5,9 @@ IoU-based multi-object tracker.
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 
-from .utils import iou_cost_matrix, SCIPY_AVAILABLE
+from .utils import iou_cost_matrix, linear_assignment
 from visionframework.data.detection import Detection
 from visionframework.data.track import Track
-
-if SCIPY_AVAILABLE:
-    from scipy.optimize import linear_sum_assignment
 
 
 class IOUTracker:
@@ -43,31 +40,16 @@ class IOUTracker:
             return [], list(range(len(detections))), list(range(len(tracks)))
 
         cost = iou_cost_matrix([t.bbox for t in tracks], [d.bbox for d in detections])
-
-        if SCIPY_AVAILABLE:
-            tidx, didx = linear_sum_assignment(cost)
-            matches, u_dets, u_tracks = [], set(range(len(detections))), set(range(len(tracks)))
-            for t, d in zip(tidx, didx):
-                if cost[t, d] < (1.0 - self.iou_threshold):
-                    matches.append((t, d))
-                    u_dets.discard(d)
-                    u_tracks.discard(t)
-            return matches, list(u_dets), list(u_tracks)
-        else:
-            pairs = []
-            for i in range(len(tracks)):
-                for j in range(len(detections)):
-                    c = cost[i, j]
-                    if c < (1.0 - self.iou_threshold):
-                        pairs.append((c, i, j))
-            pairs.sort()
-            matches, u_dets, u_tracks = [], set(range(len(detections))), set(range(len(tracks)))
-            for _, i, j in pairs:
-                if i in u_tracks and j in u_dets:
-                    matches.append((i, j))
-                    u_tracks.remove(i)
-                    u_dets.remove(j)
-            return matches, list(u_dets), list(u_tracks)
+        matches, unmatched_tracks, unmatched_dets = linear_assignment(
+            cost_matrix=cost,
+            thresh=(1.0 - self.iou_threshold),
+        )
+        # matches: (K, 2) array of (track_idx, det_idx)
+        return (
+            [(int(t), int(d)) for t, d in matches],
+            [int(i) for i in unmatched_dets],
+            [int(i) for i in unmatched_tracks],
+        )
 
     @staticmethod
     def _validate_detections(detections) -> List[Detection]:

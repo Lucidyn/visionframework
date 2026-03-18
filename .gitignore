@@ -42,10 +42,15 @@ ENV/
 *.onnx
 *.weights
 
+# Weights cache folder (recommended)
+weights/
+
 # Output files
 output_*.jpg
 output_*.png
 output_*.mp4
+outputs/
+rfdetr_result.jpg
 
 # OS
 .DS_Store

@@ -1,0 +1,10 @@
+pipeline: detection
+
+models:
+  detector: configs/detection/yolo26/yolo26n.yaml
+
+weights: weights/detection/yolo26/yolo26n_converted.pth
+
+device: auto
+fp16: false
+

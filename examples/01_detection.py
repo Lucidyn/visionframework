@@ -15,7 +15,7 @@ from visionframework import TaskRunner, Visualizer
 img = cv2.imread("test_bus.jpg")
 
 # 通过 YAML 配置文件启动检测（weights 字段在 detect.yaml 中指定）
-task = TaskRunner("configs/runtime/detect.yaml")
+task = TaskRunner("runs/detection/yolo11/detect.yaml")
 result = task.process(img)
 
 detections = result.get("detections", [])

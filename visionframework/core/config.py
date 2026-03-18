@@ -7,6 +7,7 @@ import json
 import copy
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
+from functools import lru_cache
 
 try:
     import yaml
@@ -57,14 +58,39 @@ def merge_configs(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, A
     return result
 
 
-def resolve_config(path: Union[str, Path], base_dir: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
-    """Load a config and recursively resolve any ``_base_`` inheritance."""
-    path = Path(path)
-    if base_dir:
-        path = Path(base_dir) / path
+def _normalize_config_path(path: Union[str, Path], base_dir: Optional[Union[str, Path]] = None) -> Path:
+    p = Path(path).expanduser()
+    if base_dir is not None and not p.is_absolute():
+        p = Path(base_dir) / p
+    # resolve() makes behavior consistent across cwd; strict=False lets us
+    # keep a stable absolute key even if the file is created later.
+    return p.resolve(strict=False)
+
+
+@lru_cache(maxsize=256)
+def _resolve_config_cached(abs_path: str, mtime_ns: int) -> Dict[str, Any]:
+    """Internal cached resolver keyed by absolute path + mtime."""
+    path = Path(abs_path)
     cfg = load_config(path)
     base_file = cfg.pop("_base_", None)
     if base_file:
-        parent = resolve_config(base_file, base_dir=path.parent)
+        parent_path = _normalize_config_path(base_file, base_dir=path.parent)
+        # Use parent mtime to ensure cache invalidates across inheritance changes.
+        parent_mtime = parent_path.stat().st_mtime_ns
+        parent = _resolve_config_cached(str(parent_path), parent_mtime)
         cfg = merge_configs(parent, cfg)
     return cfg
+
+
+def resolve_config(path: Union[str, Path], base_dir: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+    """Load a config and recursively resolve any ``_base_`` inheritance.
+
+    Notes
+    -----
+    - *path* is normalized to an absolute path to avoid cwd-dependent behavior.
+    - Results are cached using file mtime to speed up repeated loads.
+    """
+    p = _normalize_config_path(path, base_dir=base_dir)
+    if not p.exists():
+        raise FileNotFoundError(f"Config not found: {p}")
+    return _resolve_config_cached(str(p), p.stat().st_mtime_ns)

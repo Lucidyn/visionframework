@@ -1,27 +1,23 @@
 """
 示例 07 — RF-DETR 目标检测（Roboflow，DINOv2 backbone）
 
-RF-DETR 使用可变形注意力 + DINOv2 backbone，通过适配器调用官方 rfdetr 包推理。
+RF-DETR 使用可变形注意力 + DINOv2 backbone，直接使用 VisionFramework 原生实现运行。
 
-前提条件:
-    pip install rfdetr
+注意:
+    - 默认加载官方 `.pth`（需要安装 rfdetr；权重缺失会自动下载）。
 """
 
 import cv2
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from tools.rfdetr_adapter import RFDETRAdapter
-from visionframework import Visualizer
+from visionframework import TaskRunner, Visualizer
 
 # 加载图片
 img = cv2.imread("test_bus.jpg")
 
-# 通过适配器运行 RF-DETR 推理（自动下载权重）
-adapter = RFDETRAdapter(model_size="base", conf=0.5)
-detections = adapter.predict(img)
+# 通过 YAML 运行（默认 nano `.pth`）
+task = TaskRunner("runs/detection/rfdetr/detect_nano.yaml")
+result = task.process(img)
+detections = result.get("detections", [])
 
 print(f"检测到 {len(detections)} 个目标")
 for det in detections:

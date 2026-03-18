@@ -2,11 +2,11 @@
 示例 06 — YOLO26 端到端检测（NMS-free）
 
 YOLO26 使用 one-to-one 检测头，无需 NMS 后处理。
-支持全尺寸：n/s/m/l/x，换用 configs/models/yolo26s.yaml 等即可。
+支持全尺寸：n/s/m/l/x，换用 configs/detection/yolo26/yolo26s.yaml 等即可。
 
 前提条件:
     pip install ultralytics
-    python tools/convert_ultralytics.py --model yolo26n.pt --out weights/yolo26n_converted.pth
+    python tools/convert_ultralytics.py --model yolo26n.pt --out weights/detection/yolo26/yolo26n_converted.pth
 """
 
 import cv2
@@ -15,8 +15,8 @@ from visionframework import TaskRunner, Visualizer
 # 加载图片
 img = cv2.imread("test_bus.jpg")
 
-# 通过 YAML 配置文件启动检测（weights 字段在 detect_yolo26.yaml 中指定）
-task = TaskRunner("configs/runtime/detect_yolo26.yaml")
+# 通过 YAML 配置文件启动检测（weights 字段在 detect.yaml 中指定）
+task = TaskRunner("runs/detection/yolo26/detect.yaml")
 result = task.process(img)
 
 detections = result.get("detections", [])

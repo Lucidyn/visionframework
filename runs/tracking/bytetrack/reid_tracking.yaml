@@ -1,0 +1,18 @@
+pipeline: reid_tracking
+
+models:
+  detector: configs/detection/yolo11/yolo11n.yaml
+  reid: configs/reid/osnet/osnet_reid.yaml
+
+weights:
+  detector: weights/detection/yolo11/yolo11n_converted.pth
+  reid: weights/reid/osnet/osnet_reid.pth
+
+tracker: configs/tracking/bytetrack/bytetrack.yaml
+
+device: auto
+fp16: false
+
+output:
+  show: true
+

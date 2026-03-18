@@ -8,7 +8,7 @@
 import numpy as np
 from visionframework import TaskRunner
 
-task = TaskRunner("configs/runtime/tracking.yaml")
+task = TaskRunner("runs/tracking/bytetrack/tracking.yaml")
 
 # 模拟处理多帧
 for i in range(5):

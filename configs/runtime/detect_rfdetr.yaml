@@ -1,8 +1,0 @@
-pipeline: detection
-algorithm: DETRDetector
-
-models:
-  detector: configs/models/rfdetr_base.yaml
-
-device: auto
-fp16: false

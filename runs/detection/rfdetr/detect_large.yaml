@@ -1,0 +1,15 @@
+pipeline: detection
+algorithm: RFDETRPTHDetector
+
+model_size: large
+weights: rf-detr-large-2026.pth
+weights_dir: weights/detection/rfdetr
+auto_download: true
+
+resolution: 704
+num_select: 300
+conf: 0.5
+
+device: auto
+fp16: false
+

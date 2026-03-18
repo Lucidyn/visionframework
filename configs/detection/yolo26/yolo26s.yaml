@@ -1,0 +1,29 @@
+task: detection
+
+backbone:
+  type: YOLOBackbone
+  depth: 0.50
+  width: 0.50
+  max_channels: 1024
+  sppf_cv1_act: false
+  sppf_residual: true
+
+neck:
+  type: YOLOPAN
+  in_channels: [256, 256, 512]
+  out_channels: [128, 256, 512]
+  depth: 0.50
+  c3k: true
+  a2c2f: true
+
+head:
+  type: YOLOHead
+  in_channels: [128, 256, 512]
+  num_classes: 80
+  reg_max: 1
+
+postprocess:
+  conf: 0.35
+  nms_iou: 0.45
+  end2end: true
+

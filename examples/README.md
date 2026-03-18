@@ -12,13 +12,19 @@
 | 可视化 | `04_visualization.py` | 检测结果绘制 |
 | DETR 检测 | `05_detr_detection.py` | Facebook DETR 官方权重 |
 | YOLO26 检测 | `06_yolo26_detection.py` | YOLO26 端到端检测（NMS-free）|
-| RF-DETR 检测 | `07_rfdetr_detection.py` | RF-DETR 适配器 |
+| RF-DETR 检测 | `07_rfdetr_detection.py` | RF-DETR 原生实现 |
 
 ## 运行方式
 
 ```bash
 # 确保在项目根目录
 cd visionframework
+
+# 推荐：开发模式安装（确保可直接 import visionframework）
+pip install -e .
+
+# 也可以使用命令行入口（安装后）
+# vf-test-yolo26 --quick
 
 # 运行示例
 python examples/01_detection.py
@@ -38,7 +44,7 @@ python examples/07_rfdetr_detection.py
 from visionframework import TaskRunner
 
 # 加载 YAML 配置并运行
-task = TaskRunner("configs/runtime/detect.yaml")
+task = TaskRunner("runs/detection/yolo11/detect.yaml")
 
 # 处理单张图片
 result = task.process(image)
@@ -52,38 +58,38 @@ for frame, meta, result in task.run("video.mp4"):
 
 ```bash
 # ultralytics YOLO 权重
-python tools/convert_ultralytics.py --model yolo11n.pt --out weights/yolo11n_vf.pt
+python -m visionframework.tools.convert_ultralytics --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
 
 # Facebook DETR 官方权重（458/458 keys 完美映射）
-python tools/convert_detr.py \
+python -m visionframework.tools.convert_detr \
     --url https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth \
-    --output weights/detr_r50.pth --verify
+    --output weights/detection/detr/detr_r50.pth --verify
 ```
 
-## RF-DETR 适配器
+## RF-DETR
 
-RF-DETR 采用适配器模式，直接封装 `rfdetr` 包推理（需 `pip install rfdetr`）：
+RF-DETR 默认加载官方 `.pth`（不存在会自动下载，需要安装 `rfdetr` 用于构建同构网络与下载权重）。
 
 ```bash
-python tools/rfdetr_adapter.py --model base --image test.jpg --conf 0.5
+python examples/07_rfdetr_detection.py
 ```
 
-```python
-from tools.rfdetr_adapter import RFDETRAdapter
-adapter = RFDETRAdapter(model_size="base", conf=0.5)
-detections = adapter.predict(image_bgr)
-```
+## 配置与目录
+
+- **runs/**：运行/流水线配置（入口 YAML），`TaskRunner("runs/...")` 加载的即此类文件。
+- **configs/**：仅模型配置（backbone/neck/head 等），由 runs 内 `models.detector`、`tracker` 等引用。
+- **weights/**：权重按 `weights/<任务>/<算法>/` 存放，路径在 runs 的 `weights` 字段中指定。详见项目根目录 `weights/README.md`。
 
 ## YAML 配置说明
 
-### 运行时配置 (configs/runtime/)
+### 运行配置 (runs/<task>/<algo>/)
 
 ```yaml
 pipeline: detection          # detection / tracking / segmentation / reid_tracking
 algorithm: DETRDetector      # 可选，指定检测算法类型
 
 models:
-  detector: configs/models/yolo11n.yaml  # 模型配置路径
+  detector: configs/detection/yolo11/yolo11n.yaml  # 模型配置路径
 
 device: auto                 # auto / cpu / cuda
 fp16: false                  # 半精度推理
@@ -95,7 +101,7 @@ filter_classes:
   - 5                        # 也可以用类别 ID
 ```
 
-### 模型配置 (configs/models/)
+### 模型配置 (configs/<task>/<algo>/)
 
 ```yaml
 backbone:
@@ -123,16 +129,22 @@ postprocess:
 # weights: weights/yolo11n_vf.pt
 ```
 
-### 内置运行时配置一览
+### 内置运行配置一览（runs/）
 
-| 配置文件 | 说明 |
-|----------|------|
-| `detect.yaml` | 通用 YOLO11 检测 |
-| `detect_yolo26.yaml` | YOLO26 端到端检测（NMS-free）|
-| `detect_detr.yaml` | DETR 检测 |
-| `detect_rfdetr.yaml` | RF-DETR 检测 |
-| `detect_person.yaml` | 只检测行人（类别过滤） |
-| `detect_vehicles.yaml` | 只检测车辆（类别过滤） |
-| `tracking.yaml` | ByteTrack 多目标跟踪 |
-| `reid_tracking.yaml` | ReID 增强跟踪 |
-| `segmentation.yaml` | 语义分割 |
+入口统一为 `TaskRunner("runs/...")`，运行配置内引用 `configs/` 下的模型配置与 `weights/` 下的权重。
+
+| 运行配置路径 | 说明 |
+|--------------|------|
+| `runs/detection/yolo11/detect.yaml` | 通用 YOLO11 检测 |
+| `runs/detection/yolo11/detect_person.yaml` | 只检测行人（类别过滤） |
+| `runs/detection/yolo11/detect_vehicles.yaml` | 只检测车辆（类别过滤） |
+| `runs/detection/yolo26/detect.yaml` | YOLO26 端到端检测（NMS-free）|
+| `runs/detection/detr/detect.yaml` | DETR 检测 |
+| `runs/detection/rfdetr/detect_nano.yaml` | RF-DETR `.pth` 检测（nano） |
+| `runs/detection/rfdetr/detect_small.yaml` | RF-DETR `.pth` 检测（small） |
+| `runs/detection/rfdetr/detect_base.yaml` | RF-DETR `.pth` 检测（base） |
+| `runs/detection/rfdetr/detect_medium.yaml` | RF-DETR `.pth` 检测（medium） |
+| `runs/detection/rfdetr/detect_large.yaml` | RF-DETR `.pth` 检测（large） |
+| `runs/tracking/bytetrack/tracking.yaml` | ByteTrack 多目标跟踪 |
+| `runs/tracking/bytetrack/reid_tracking.yaml` | ReID 增强跟踪 |
+| `runs/segmentation/resnet50/segmentation.yaml` | 语义分割 |

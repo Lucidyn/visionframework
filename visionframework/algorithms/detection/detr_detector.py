@@ -64,6 +64,12 @@ class DETRDetector(BaseAlgorithm):
         max_size = max(self.input_size)
         scale = min(max_size / max(h0, w0), max_size / min(h0, w0))
         nh, nw = int(h0 * scale), int(w0 * scale)
+
+        # Some ViT backbones (e.g. DINOv2) require H/W to be multiples of patch size.
+        patch = getattr(getattr(self.model, "backbone", None), "patch_size", None)
+        if isinstance(patch, int) and patch > 1:
+            nh = max(patch, (nh // patch) * patch)
+            nw = max(patch, (nw // patch) * patch)
         resized = cv2.resize(img, (nw, nh))
 
         # BGR → RGB → float [0,1] → ImageNet normalize

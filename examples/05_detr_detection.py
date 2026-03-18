@@ -15,8 +15,8 @@ from visionframework import TaskRunner, Visualizer
 # 加载图片
 img = cv2.imread("test_bus.jpg")
 
-# 通过 YAML 配置文件启动检测（weights 字段在 detect_detr.yaml 中指定）
-task = TaskRunner("configs/runtime/detect_detr.yaml")
+# 通过 YAML 配置文件启动检测（weights 字段在 detect.yaml 中指定）
+task = TaskRunner("runs/detection/detr/detect.yaml")
 result = task.process(img)
 
 detections = result.get("detections", [])

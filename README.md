@@ -18,6 +18,14 @@
 
 ```bash
 pip install torch torchvision opencv-python numpy pyyaml
+
+# 推荐：开发模式安装（避免 tools/examples 依赖当前工作目录）
+pip install -e .
+
+# 可选：安装后可直接使用命令行入口
+#   vf-test-yolo26 --quick
+#   vf-convert-ultralytics --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
+#   vf-export-rfdetr-pth --size nano --out weights/rf-detr-nano.pth
 ```
 
 所有示例的统一用法模式：**加载图片 → `TaskRunner` → 可视化保存**。
@@ -29,7 +37,7 @@ pip install torch torchvision opencv-python numpy pyyaml
 ```bash
 # 转换 ultralytics 官方权重
 pip install ultralytics
-python tools/convert_ultralytics.py --model yolo11n.pt --out weights/yolo11n_converted.pth
+python tools/convert_ultralytics.py --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
 ```
 
 ```python
@@ -37,7 +45,7 @@ import cv2
 from visionframework import TaskRunner, Visualizer
 
 img = cv2.imread("test_bus.jpg")
-task = TaskRunner("configs/runtime/detect.yaml")      # weights 字段已在 yaml 中指定
+task = TaskRunner("runs/detection/yolo11/detect.yaml")      # weights 字段已在 yaml 中指定
 result = task.process(img)
 
 vis = Visualizer()
@@ -53,11 +61,11 @@ cv2.imwrite("result.jpg", vis.draw_detections(img.copy(), result["detections"]))
 YOLO26 使用 one-to-one 检测头，无需 NMS 后处理，推理更快。
 
 ```bash
-python tools/convert_ultralytics.py --model yolo26n.pt --out weights/yolo26n_converted.pth
+python tools/convert_ultralytics.py --model yolo26n.pt --out weights/detection/yolo26/yolo26n_converted.pth
 ```
 
 ```python
-task = TaskRunner("configs/runtime/detect_yolo26.yaml")   # end2end 已在 yaml 中配置
+task = TaskRunner("runs/detection/yolo26/detect.yaml")   # end2end 已在 yaml 中配置
 result = task.process(img)
 ```
 
@@ -76,11 +84,11 @@ result = task.process(img)
 ```bash
 python tools/convert_detr.py \
     --url https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth \
-    --output weights/detr_r50.pth --verify
+    --output weights/detection/detr/detr_r50.pth --verify
 ```
 
 ```python
-task = TaskRunner("configs/runtime/detect_detr.yaml")
+task = TaskRunner("runs/detection/detr/detect.yaml")
 result = task.process(img)
 ```
 
@@ -95,11 +103,12 @@ pip install rfdetr
 ```
 
 ```python
-from tools.rfdetr_adapter import RFDETRAdapter
-from visionframework import Visualizer
+from visionframework import TaskRunner
 
-adapter = RFDETRAdapter(model_size="base", conf=0.5)
-detections = adapter.predict(img)
+# 需要官方 `.pth`，不存在会自动下载到 weights/ 并加载（支持 nano/small/base/medium/large）
+task = TaskRunner("runs/detection/rfdetr/detect_nano.yaml")
+result = task.process(img)
+detections = result["detections"]
 ```
 
 > 参考示例：`examples/07_rfdetr_detection.py`
@@ -109,7 +118,7 @@ detections = adapter.predict(img)
 ### 视频跟踪
 
 ```python
-task = TaskRunner("configs/runtime/tracking.yaml")
+task = TaskRunner("runs/tracking/bytetrack/tracking.yaml")
 for frame, meta, result in task.run("video.mp4"):
     tracks = result["tracks"]
 ```
@@ -162,31 +171,38 @@ visionframework/
 │   └── visualization/        # Visualizer（检测/跟踪/分割可视化）
 └── data/                     # Detection, Track, Pose 等数据结构
 
-configs/
-├── models/                   # 模型配置
-│   ├── yolo11n/s/m/l/x.yaml  # YOLO11 系列（YOLOBackbone + YOLOPAN）
-│   ├── yolo26n/s/m/l/x.yaml  # YOLO26 系列（NMS-free，reg_max=1）
-│   ├── detr_r50.yaml         # ResNet-50 + TransformerEncoder + DETRHead
-│   ├── rfdetr_base.yaml      # DINOv2 + DeformableEncoder + RFDETRHead
-│   ├── resnet50_seg.yaml     # ResNet-50 语义分割
-│   └── osnet_reid.yaml       # OSNet ReID 特征提取
-├── runtime/                  # 运行时配置
-│   ├── detect.yaml           # YOLO11 通用检测
-│   ├── detect_detr.yaml      # DETR 检测
-│   ├── detect_rfdetr.yaml    # RF-DETR 检测
-│   ├── detect_person.yaml    # 只检测行人（类别过滤示例）
-│   ├── detect_vehicles.yaml  # 只检测车辆（类别过滤示例）
-│   ├── tracking.yaml         # ByteTrack 跟踪
-│   ├── reid_tracking.yaml    # ReID 跟踪
-│   └── segmentation.yaml     # 语义分割
-└── components/               # 组件配置
-    ├── bytetrack.yaml        # ByteTracker 参数
-    └── iou_tracker.yaml      # IOUTracker 参数
+configs/                      # 仅模型配置（结构/backbone/head）
+├── detection/
+│   ├── yolo11/               # yolo11n/s/m/l/x.yaml
+│   ├── yolo26/               # yolo26n/s/m/l/x.yaml
+│   ├── detr/                 # detr_r50.yaml
+│   └── rfdetr/               # 无模型 yaml，用 pth + 内置配置
+├── tracking/bytetrack/       # bytetrack.yaml（跟踪器参数）
+├── segmentation/resnet50/    # resnet50_seg.yaml
+└── reid/osnet/               # osnet_reid.yaml
+
+runs/                         # 仅运行/流水线配置（入口 YAML，TaskRunner 加载）
+├── detection/
+│   ├── yolo11/               # detect.yaml, detect_person.yaml, detect_vehicles.yaml
+│   ├── yolo26/               # detect.yaml
+│   ├── detr/                 # detect.yaml
+│   └── rfdetr/               # detect_nano/small/base/medium/large.yaml
+├── tracking/bytetrack/       # tracking.yaml, reid_tracking.yaml
+└── segmentation/resnet50/   # segmentation.yaml
+
+weights/                      # 权重按 任务/算法 存放（见 weights/README.md）
+├── detection/yolo11/         # yolo11n_converted.pth 等
+├── detection/yolo26/
+├── detection/detr/
+├── detection/rfdetr/
+├── segmentation/resnet50/
+└── reid/osnet/
 
 tools/
 ├── convert_ultralytics.py    # ultralytics YOLO11/YOLO26 权重转换
+├── test_yolo26.py            # YOLO11/YOLO26 与 Ultralytics 对齐测试
 ├── convert_detr.py           # Facebook DETR 官方权重转换
-└── rfdetr_adapter.py         # RF-DETR 适配器（封装 rfdetr 包）
+└── export_rfdetr_torchscript.py # 导出 RF-DETR 官方 `.pth`（需要 rfdetr）
 
 examples/
 ├── 01_detection.py           # YOLO11 目标检测
@@ -195,40 +211,40 @@ examples/
 ├── 04_visualization.py       # 可视化工具用法
 ├── 05_detr_detection.py      # DETR 检测（Facebook 官方权重）
 ├── 06_yolo26_detection.py    # YOLO26 端到端检测（NMS-free）
-└── 07_rfdetr_detection.py    # RF-DETR 检测（Roboflow 适配器）
+└── 07_rfdetr_detection.py    # RF-DETR 检测（加载官方 `.pth`）
 ```
 
 ## 内置模型
 
-| 模型 | 配置文件 | Backbone | Neck | Head | 特点 |
-|------|----------|----------|------|------|------|
-| YOLO11n | `yolo11n.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，轻量 |
-| YOLO11s | `yolo11s.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，小型 |
-| YOLO11m | `yolo11m.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，中型 |
-| YOLO11l | `yolo11l.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，大型 |
-| YOLO11x | `yolo11x.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，超大 |
-| YOLO26n | `yolo26n.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
-| YOLO26s | `yolo26s.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
-| YOLO26m | `yolo26m.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
-| YOLO26l | `yolo26l.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
-| YOLO26x | `yolo26x.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
-| DETR-R50 | `detr_r50.yaml` | ResNet-50 | TransformerEncoderNeck | DETRHead | 无 NMS，集合预测 |
-| RF-DETR | `rfdetr_base.yaml` | DINOv2Backbone | DeformableEncoderNeck | RFDETRHead | 可变形注意力 |
-| 分割 | `resnet50_seg.yaml` | ResNet-50 | FPN | SegHead | 语义分割 |
-| ReID | `osnet_reid.yaml` | OSNet | — | ReIDHead | 行人重识别 |
+| 模型 | 模型配置（configs/） | Backbone | Neck | Head | 特点 |
+|------|----------------------|----------|------|------|------|
+| YOLO11n | `detection/yolo11/yolo11n.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，轻量 |
+| YOLO11s | `detection/yolo11/yolo11s.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，小型 |
+| YOLO11m | `detection/yolo11/yolo11m.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，中型 |
+| YOLO11l | `detection/yolo11/yolo11l.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，大型 |
+| YOLO11x | `detection/yolo11/yolo11x.yaml` | YOLOBackbone | YOLOPAN | YOLOHead | C3k2+C2PSA，超大 |
+| YOLO26n | `detection/yolo26/yolo26n.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
+| YOLO26s | `detection/yolo26/yolo26s.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
+| YOLO26m | `detection/yolo26/yolo26m.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
+| YOLO26l | `detection/yolo26/yolo26l.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
+| YOLO26x | `detection/yolo26/yolo26x.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
+| DETR-R50 | `detection/detr/detr_r50.yaml` | ResNet-50 | TransformerEncoderNeck | DETRHead | 无 NMS，集合预测 |
+| RF-DETR | `runs/detection/rfdetr/detect_nano.yaml` 等 | — | — | — | 官方 `.pth` 推理（nano/small/base/medium/large） |
+| 分割 | `segmentation/resnet50/resnet50_seg.yaml` | ResNet-50 | FPN | SegHead | 语义分割 |
+| ReID | `reid/osnet/osnet_reid.yaml` | OSNet | — | ReIDHead | 行人重识别 |
 
 ## 官方预训练权重
 
-权重路径在 **runtime YAML** 的 `weights` 字段中指定，`TaskRunner` 会自动加载，无需修改代码。
+权重路径在 **运行配置**（`runs/<task>/<algo>/*.yaml`）的 `weights` 字段中指定，`TaskRunner` 会自动加载，无需修改代码。运行配置内通过 `models.detector` 等引用 `configs/` 下的模型配置。
 
 ```yaml
-# configs/runtime/detect.yaml
-weights: weights/yolo11n_converted.pth   # 字符串：作用于 detector
+# runs/detection/yolo11/detect.yaml
+weights: weights/detection/yolo11/yolo11n_converted.pth   # 字符串：作用于 detector
 
 # 多模型场景（tracking + reid）
 weights:
-  detector: weights/yolo11n_converted.pth
-  reid: weights/osnet.pth
+  detector: weights/detection/yolo11/yolo11n_converted.pth
+  reid: weights/reid/osnet/osnet_reid.pth
 ```
 
 ### YOLO11 / YOLO26 (ultralytics)
@@ -237,10 +253,10 @@ weights:
 
 ```bash
 # YOLO11（支持 n/s/m/l/x）
-python tools/convert_ultralytics.py --model yolo11n.pt --out weights/yolo11n_converted.pth
+python tools/convert_ultralytics.py --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
 
 # YOLO26（支持 n/s/m/l/x，自动检测 one2one head）
-python tools/convert_ultralytics.py --model yolo26n.pt --out weights/yolo26n_converted.pth
+python tools/convert_ultralytics.py --model yolo26n.pt --out weights/detection/yolo26/yolo26n_converted.pth
 
 # 验证与 Ultralytics 推理一致（10 个模型：11n/s/m/l/x、26n/s/m/l/x）
 python tools/test_yolo26.py
@@ -251,7 +267,7 @@ python tools/test_yolo26.py
 ```bash
 python tools/convert_detr.py \
     --url https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth \
-    --output weights/detr_r50.pth --verify
+    --output weights/detection/detr/detr_r50.pth --verify
 
 # 支持的官方 checkpoint:
 #   DETR-R50:      https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth
@@ -262,10 +278,19 @@ python tools/convert_detr.py \
 
 ### RF-DETR (Roboflow)
 
-RF-DETR 架构复杂，采用适配器模式直接调用 `rfdetr` 包推理（权重自动下载），支持尺寸：`nano`, `small`, `base`, `medium`, `large`。
+RF-DETR 使用官方 `.pth` checkpoint 推理（需要 `rfdetr` 包来构建同构网络与下载权重）。
 
 ```bash
 pip install rfdetr
+```
+
+#### PTH（先从 nano 开始）
+
+```python
+from visionframework import TaskRunner
+
+task = TaskRunner("runs/detection/rfdetr/detect_nano.yaml")
+result = task.process(img)
 ```
 
 ## 运行时配置参数

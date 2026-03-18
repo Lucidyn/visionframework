@@ -1,0 +1,16 @@
+pipeline: tracking
+
+models:
+  detector: configs/detection/yolo11/yolo11n.yaml
+
+weights: weights/detection/yolo11/yolo11n_converted.pth
+
+tracker: configs/tracking/bytetrack/bytetrack.yaml
+
+device: auto
+fp16: false
+
+output:
+  show: true
+  save_video: results/out.mp4
+

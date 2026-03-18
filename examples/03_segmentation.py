@@ -9,7 +9,7 @@ from visionframework import TaskRunner
 
 img = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
 
-task = TaskRunner("configs/runtime/segmentation.yaml")
+task = TaskRunner("runs/segmentation/resnet50/segmentation.yaml")
 result = task.process(img)
 
 seg_map = result.get("segmentation")
