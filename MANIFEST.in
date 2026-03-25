@@ -1,4 +1,0 @@
-recursive-include configs *.yaml *.yml *.json
-recursive-include examples *.py *.md
-recursive-include tools *.py
-include README.md
