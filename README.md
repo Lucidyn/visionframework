@@ -7,7 +7,7 @@
 - **组件化架构** — Backbone / Neck / Head 自由组合，通过注册表动态实例化
 - **YAML 驱动** — 唯一入口 `TaskRunner(yaml_path)`，零代码配置切换模型和任务
 - **内置模型** — YOLO11、YOLO26、DETR、RT-DETR（Ultralytics HGNet **rtdetr-l/x**），以及 CSPDarknet、ResNet 等基础组件
-- **官方权重** — 支持加载 Facebook DETR（458/458 完美映射）、ultralytics YOLO、RT-DETR HG（**rtdetr-l/x.pt** 转换）权重
+- **官方权重** — 支持加载 Facebook DETR（458/458完美映射）、ultralytics YOLO、RT-DETR HG（**rtdetr-l/x.pt** 转换）权重
 - **YOLO26 端到端** — NMS-free one-to-one 检测头，`end2end: true` 一键启用
 - **多任务支持** — 检测、分割、跟踪、ReID 跟踪，统一 pipeline 管理
 - **最少依赖** — 核心仅需 `torch`、`opencv-python`、`numpy`、`pyyaml`
