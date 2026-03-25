@@ -16,6 +16,40 @@ except ImportError:
     _YAML = False
 
 
+def require_detector_weights(
+    repo_root: Union[str, Path],
+    runtime_yaml_rel: Union[str, Path],
+    *,
+    hint: str = "",
+    label: Optional[str] = None,
+) -> None:
+    """If *runtime_yaml_rel* declares string detector weights but the file is missing, print and ``sys.exit(1)``.
+
+    Run YAML often sets ``weights: path/to.pth``; when the file is absent the
+    framework still builds the model with random weights — detections are usually
+    empty. Examples call this for a clear error before inference.
+    """
+    import sys
+
+    root = Path(repo_root).resolve()
+    cfg = load_config(root / runtime_yaml_rel)
+    w = cfg.get("weights")
+    if isinstance(w, dict):
+        w = w.get("detector")
+    if not isinstance(w, str) or not w.strip():
+        return
+    wp = Path(w.strip())
+    if not wp.is_absolute():
+        wp = root / wp
+    if wp.is_file():
+        return
+    prefix = f"[{label}] " if label else ""
+    print(f"{prefix}错误：未找到权重文件：", wp.resolve())
+    if hint:
+        print(hint)
+    sys.exit(1)
+
+
 def load_config(path: Union[str, Path]) -> Dict[str, Any]:
     """Load a YAML or JSON config file and return a plain dict."""
     path = Path(path)

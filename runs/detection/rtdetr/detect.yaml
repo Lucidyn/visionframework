@@ -1,0 +1,13 @@
+# 权重：下载官方 rtdetr-l.pt 后运行
+#   python -m visionframework.tools.convert_ultralytics_rtdetr_hg --weights <rtdetr-l.pt> --variant l --out weights/detection/rtdetr/rtdetr_l_vf.pth
+# 使用官方 .pt 时遵守 Ultralytics AGPL-3.0，详见 NOTICE。
+pipeline: detection
+algorithm: RTDETRDetector
+
+models:
+  detector: configs/detection/rtdetr/rtdetr_l.yaml
+
+weights: weights/detection/rtdetr/rtdetr_l_vf.pth
+
+device: auto
+fp16: false

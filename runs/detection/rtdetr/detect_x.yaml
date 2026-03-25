@@ -1,0 +1,11 @@
+# 权重：官方 rtdetr-x.pt → convert_ultralytics_rtdetr_hg --variant x
+pipeline: detection
+algorithm: RTDETRDetector
+
+models:
+  detector: configs/detection/rtdetr/rtdetr_x.yaml
+
+weights: weights/detection/rtdetr/rtdetr_x_vf.pth
+
+device: auto
+fp16: false

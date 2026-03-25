@@ -6,8 +6,8 @@
 
 - **组件化架构** — Backbone / Neck / Head 自由组合，通过注册表动态实例化
 - **YAML 驱动** — 唯一入口 `TaskRunner(yaml_path)`，零代码配置切换模型和任务
-- **内置模型** — YOLO11、YOLO26、DETR、RF-DETR，以及 CSPDarknet、ResNet 等基础组件
-- **官方权重** — 支持加载 Facebook DETR（458/458 完美映射）、ultralytics YOLO 官方预训练权重
+- **内置模型** — YOLO11、YOLO26、DETR、RT-DETR（Ultralytics HGNet **rtdetr-l/x**），以及 CSPDarknet、ResNet 等基础组件
+- **官方权重** — 支持加载 Facebook DETR（458/458 完美映射）、ultralytics YOLO、RT-DETR HG（**rtdetr-l/x.pt** 转换）权重
 - **YOLO26 端到端** — NMS-free one-to-one 检测头，`end2end: true` 一键启用
 - **多任务支持** — 检测、分割、跟踪、ReID 跟踪，统一 pipeline 管理
 - **最少依赖** — 核心仅需 `torch`、`opencv-python`、`numpy`、`pyyaml`
@@ -25,10 +25,11 @@ pip install -e .
 # 可选：安装后可直接使用命令行入口
 #   vf-test-yolo26 --quick
 #   vf-convert-ultralytics --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
-#   vf-export-rfdetr-pth --size nano --out weights/rf-detr-nano.pth
 ```
 
-所有示例的统一用法模式：**加载图片 → `TaskRunner` → 可视化保存**。
+所有示例的统一用法模式：**加载图片 → `TaskRunner` → 可视化保存**。仓库根目录提供真实样图 **`test_bus.jpg`**（Ultralytics 公开 [bus.jpg](https://ultralytics.com/images/bus.jpg)，便于检测/可视化示例）；若缺失可运行 `python examples/04_visualization.py`，脚本会尝试自动下载。`04_visualization.py` 保存的 `visualization_demo.jpg` 是 **手动示意框**（验证绘制管线），不是模型推理。
+
+**重要：** `runs/.../detect.yaml` 里若配置了 `weights` 但对应文件不存在，框架不会中止，只会用**随机初始化**的权重推理，结果几乎总是 **0 个检测**，保存的图片上就像什么也没检测到。示例 `01` / `05` / `06` / `07` 在启动时调用 `visionframework.core.config.require_detector_weights` 检查权重；自定义脚本可同样复用该函数。请先按各示例注释转换或下载权重。
 
 ---
 
@@ -96,22 +97,29 @@ result = task.process(img)
 
 ---
 
-### RF-DETR 检测（Roboflow，DINOv2 backbone）
+### RT-DETR 检测（Ultralytics **rtdetr-l / rtdetr-x**，HGNet）
+
+与 [Ultralytics RT-DETR](https://docs.ultralytics.com/models/rtdetr/) 官方 **COCO 预训练**（`rtdetr-l.pt` / `rtdetr-x.pt`）**权重布局**对齐：HGNet + PAN/AIFI + `RTDETRDecoder` 均为框架内 **纯 PyTorch** 实现，**推理与转换 `.pt` 不需要安装 `ultralytics`**。**无 NMS**。使用官方 `.pt` 时须遵守 **AGPL-3.0**（见 **`NOTICE`**）。可选：`pip install -e ".[rtdetr-verify]"` 以运行与 `ultralytics` 逐位对齐的测试。
 
 ```bash
-pip install rfdetr
+python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
+    --weights path/to/rtdetr-l.pt --variant l \
+    --out weights/detection/rtdetr/rtdetr_l_vf.pth --verify
+python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
+    --weights path/to/rtdetr-x.pt --variant x \
+    --out weights/detection/rtdetr/rtdetr_x_vf.pth --verify
 ```
 
 ```python
-from visionframework import TaskRunner
-
-# 需要官方 `.pth`，不存在会自动下载到 weights/ 并加载（支持 nano/small/base/medium/large）
-task = TaskRunner("runs/detection/rfdetr/detect_nano.yaml")
+# l：runs/detection/rtdetr/detect.yaml  →  rtdetr_l_vf.pth
+# x：runs/detection/rtdetr/detect_x.yaml →  rtdetr_x_vf.pth
+task = TaskRunner("runs/detection/rtdetr/detect.yaml")
 result = task.process(img)
-detections = result["detections"]
+vis = Visualizer()
+cv2.imwrite("rtdetr_result_l.jpg", vis.draw_detections(img.copy(), result["detections"]))
 ```
 
-> 参考示例：`examples/07_rfdetr_detection.py`
+> 参考示例：`examples/07_rtdetr_detection.py`（**一次运行**会依次推理 l 与 x，并写出 `rtdetr_result_l.jpg`、`rtdetr_result_x.jpg`，同时用 l 结果覆盖 `rtdetr_result.jpg`）。安装后也可用 `vf-convert-rtdetr --weights ... --variant l|x --out ...`。
 
 ---
 
@@ -142,17 +150,19 @@ visionframework/
 │   ├── conv.py               # ConvBNAct, DWConvBNAct, DepthwiseSepConv, Focus
 │   ├── csp.py                # C3k2, C2PSA, PSABlock, Attention, C2f, CSPBlock
 │   ├── pooling.py            # SPPF（支持 cv1_act/residual）, SPP
-│   ├── mlp.py                # MLP（DETR/RF-DETR 共享）
+│   ├── mlp.py                # MLP（DETR 等 Transformer 头共享）
 │   ├── attention.py          # SEBlock, CBAM, TransformerBlock
 │   ├── positional.py         # 2D 正弦位置编码
 │   └── deformable_attn.py    # 可变形注意力
 ├── models/
-│   ├── backbones/            # YOLOBackbone, ResNet, CSPDarknet, DINOv2Backbone
-│   ├── necks/                # YOLOPAN, PAN, FPN, TransformerEncoderNeck, DeformableEncoderNeck
-│   └── heads/                # YOLOHead, DETRHead, RFDETRHead, SegHead, ReIDHead
+│   ├── backbones/            # YOLOBackbone, ResNet, RTDETRHGBackbone, CSPDarknet, DINOv2Backbone
+│   ├── necks/                # YOLOPAN, PAN, FPN, TransformerEncoderNeck, …
+│   ├── heads/                # YOLOHead, DETRHead, RTDETRHGDecoder, SegHead, ReIDHead
+│   ├── layers/               # 共享块（随 YOLO/DETR 等组件使用）
+│   └── ops/                  # 可变形注意力等（如 MSDeformAttn）
 ├── algorithms/
 │   ├── base.py               # BaseAlgorithm（设备管理、fp16、predict_batch 共享基类）
-│   ├── detection/            # Detector (YOLO/YOLO26), DETRDetector (DETR)
+│   ├── detection/            # Detector, DETRDetector, RTDETRDetector
 │   ├── segmentation/         # Segmenter
 │   ├── tracking/             # ByteTracker, IOUTracker
 │   └── reid/                 # Embedder
@@ -176,7 +186,7 @@ configs/                      # 仅模型配置（结构/backbone/head）
 │   ├── yolo11/               # yolo11n/s/m/l/x.yaml
 │   ├── yolo26/               # yolo26n/s/m/l/x.yaml
 │   ├── detr/                 # detr_r50.yaml
-│   └── rfdetr/               # 无模型 yaml，用 pth + 内置配置
+│   └── rtdetr/               # rtdetr_l.yaml, rtdetr_x.yaml
 ├── tracking/bytetrack/       # bytetrack.yaml（跟踪器参数）
 ├── segmentation/resnet50/    # resnet50_seg.yaml
 └── reid/osnet/               # osnet_reid.yaml
@@ -186,7 +196,7 @@ runs/                         # 仅运行/流水线配置（入口 YAML，TaskRu
 │   ├── yolo11/               # detect.yaml, detect_person.yaml, detect_vehicles.yaml
 │   ├── yolo26/               # detect.yaml
 │   ├── detr/                 # detect.yaml
-│   └── rfdetr/               # detect_nano/small/base/medium/large.yaml
+│   └── rtdetr/               # detect.yaml（l）, detect_x.yaml
 ├── tracking/bytetrack/       # tracking.yaml, reid_tracking.yaml
 └── segmentation/resnet50/   # segmentation.yaml
 
@@ -194,15 +204,15 @@ weights/                      # 权重按 任务/算法 存放（见 weights/REA
 ├── detection/yolo11/         # yolo11n_converted.pth 等
 ├── detection/yolo26/
 ├── detection/detr/
-├── detection/rfdetr/
+├── detection/rtdetr/
 ├── segmentation/resnet50/
 └── reid/osnet/
 
 tools/
-├── convert_ultralytics.py    # ultralytics YOLO11/YOLO26 权重转换
-├── test_yolo26.py            # YOLO11/YOLO26 与 Ultralytics 对齐测试
-├── convert_detr.py           # Facebook DETR 官方权重转换
-└── export_rfdetr_torchscript.py # 导出 RF-DETR 官方 `.pth`（需要 rfdetr）
+├── convert_ultralytics.py           # ultralytics YOLO11/YOLO26 权重转换
+├── convert_ultralytics_rtdetr_hg.py # Ultralytics rtdetr-l/x .pt → 框架 .pth
+├── test_yolo26.py                   # YOLO11/YOLO26 与 Ultralytics 对齐测试
+└── convert_detr.py                  # Facebook DETR 官方权重转换
 
 examples/
 ├── 01_detection.py           # YOLO11 目标检测
@@ -211,7 +221,9 @@ examples/
 ├── 04_visualization.py       # 可视化工具用法
 ├── 05_detr_detection.py      # DETR 检测（Facebook 官方权重）
 ├── 06_yolo26_detection.py    # YOLO26 端到端检测（NMS-free）
-└── 07_rfdetr_detection.py    # RF-DETR 检测（加载官方 `.pth`）
+└── 07_rtdetr_detection.py    # RT-DETR（HGNet l/x；输出 rtdetr_result_{l,x}.jpg）
+
+test/                         # pytest；说明见 test/README.md
 ```
 
 ## 内置模型
@@ -229,7 +241,8 @@ examples/
 | YOLO26l | `detection/yolo26/yolo26l.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
 | YOLO26x | `detection/yolo26/yolo26x.yaml` | YOLOBackbone | YOLOPAN(c3k) | YOLOHead | NMS-free，reg_max=1 |
 | DETR-R50 | `detection/detr/detr_r50.yaml` | ResNet-50 | TransformerEncoderNeck | DETRHead | 无 NMS，集合预测 |
-| RF-DETR | `runs/detection/rfdetr/detect_nano.yaml` 等 | — | — | — | 官方 `.pth` 推理（nano/small/base/medium/large） |
+| RT-DETR-l | `detection/rtdetr/rtdetr_l.yaml` | RTDETRHGBackbone（含 PAN/AIFI） | — | RTDETRHGDecoder | 无 NMS；纯 PyTorch；官方 `.pt` 见 `NOTICE` |
+| RT-DETR-x | `detection/rtdetr/rtdetr_x.yaml` | RTDETRHGBackbone（同上，宽版） | — | RTDETRHGDecoder | 同上 |
 | 分割 | `segmentation/resnet50/resnet50_seg.yaml` | ResNet-50 | FPN | SegHead | 语义分割 |
 | ReID | `reid/osnet/osnet_reid.yaml` | OSNet | — | ReIDHead | 行人重识别 |
 
@@ -276,29 +289,27 @@ python tools/convert_detr.py \
 #   DETR-DC5-R101: https://dl.fbaipublicfiles.com/detr/detr-r101-dc5-a2e86def.pth
 ```
 
-### RF-DETR (Roboflow)
-
-RF-DETR 使用官方 `.pth` checkpoint 推理（需要 `rfdetr` 包来构建同构网络与下载权重）。
+### RT-DETR HG（Ultralytics **rtdetr-l / rtdetr-x**）
 
 ```bash
-pip install rfdetr
+python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
+    --weights path/to/rtdetr-l.pt --variant l \
+    --out weights/detection/rtdetr/rtdetr_l_vf.pth --verify
+python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
+    --weights path/to/rtdetr-x.pt --variant x \
+    --out weights/detection/rtdetr/rtdetr_x_vf.pth --verify
+
+# 安装后也可: vf-convert-rtdetr --weights ... --variant l|x --out ...
 ```
 
-#### PTH（先从 nano 开始）
-
-```python
-from visionframework import TaskRunner
-
-task = TaskRunner("runs/detection/rfdetr/detect_nano.yaml")
-result = task.process(img)
-```
+转换后的 `.pth` 需与 `configs/detection/rtdetr/rtdetr_{l,x}.yaml` 一致。**推理与上述转换命令不需要安装 `ultralytics`**。使用官方 `.pt` 须遵守 **AGPL-3.0**（见 **`NOTICE`**）。可选安装 **`pip install -e ".[rtdetr-verify]"`** 以运行与 Ultralytics 对齐的额外测试。
 
 ## 运行时配置参数
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `pipeline` | str | 任务类型：`detection` / `tracking` / `segmentation` / `reid_tracking` |
-| `algorithm` | str | 检测算法：`Detector`（默认）或 `DETRDetector` |
+| `algorithm` | str | 检测算法：`Detector`（默认）、`DETRDetector` 或 `RTDETRDetector` |
 | `models.detector` | str | 检测模型配置路径 |
 | `models.segmenter` | str | 分割模型配置路径 |
 | `models.reid` | str | ReID 模型配置路径 |
@@ -366,6 +377,27 @@ head:
   reg_max: 16
 ```
 
+## 测试
+
+在项目根目录执行（需开发依赖）：
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+- **`test/`**：`test/core`、`test/models`、`test/algorithms`、`test/utils`、`test/pipelines` 等，覆盖配置解析、注册表、各检测/跟踪算法与可视化等。
+- **RT-DETR**：`test/models/test_rtdetr.py` 为结构/构建测试；`test/algorithms/test_rtdetr_pretrained.py` 中  
+  - 默认可跑的 **smoke**：随机权重 + `TaskRunner`，不要求预训练文件；  
+  - 标记 **`rtdetr_official`**：需环境变量 **`RTDETR_L_PT`**、**`RTDETR_X_PT`** 分别指向官方 COCO 的 `rtdetr-l.pt`、`rtdetr-x.pt`（用于现场转换并断言 bus 图至少检出目标）。示例：
+  ```bash
+  set RTDETR_L_PT=C:\path\to\rtdetr-l.pt
+  set RTDETR_X_PT=C:\path\to\rtdetr-x.pt
+  pytest -m rtdetr_official
+  ```
+  （Linux/macOS 使用 `export`。）未设置时对应用例 **skip**。
+- 更多说明见 **`test/README.md`**；标记定义见 **`pyproject.toml`** 中 `[tool.pytest.ini_options]`。
+
 ## 依赖
 
 | 包 | 版本 | 说明 |
@@ -375,9 +407,8 @@ head:
 | numpy | ≥1.20 | 数值计算 |
 | pyyaml | ≥5.0 | 配置文件 |
 | scipy | 可选 | ByteTrack 匹配 |
-| ultralytics | 可选 | YOLO 权重转换 |
-| rfdetr | 可选 | RF-DETR 推理适配器 |
+| ultralytics | 可选 | YOLO 权重转换；RT-DETR 对齐测试（`pip install -e ".[rtdetr-verify]"`） |
 
 ## 许可
 
-MIT License
+VisionFramework 以 **MIT License** 发布。使用 RT-DETR HG（`RTDETRHGBackbone` / `RTDETRHGDecoder`）及 Ultralytics 官方权重时，还须遵守 **Ultralytics AGPL-3.0**（见 **`NOTICE`**）。

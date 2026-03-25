@@ -2,7 +2,7 @@
 DINOv2 Backbone — 基于 Vision Transformer 的特征提取。
 
 通过 torch.hub 加载 Meta AI 的 DINOv2 预训练 ViT 模型，
-提取多尺度特征供 RF-DETR 等检测器使用。
+提取多尺度特征供检测器等下游任务使用。
 """
 
 import torch

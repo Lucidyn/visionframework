@@ -6,7 +6,6 @@ from visionframework.models.heads.yolo_head import YOLOHead
 from visionframework.models.heads.seg_head import SegHead
 from visionframework.models.heads.reid_head import ReIDHead
 from visionframework.models.heads.detr_head import DETRHead
-from visionframework.models.heads.rfdetr_head import RFDETRHead
 
 
 class TestYOLOHead:
@@ -67,14 +66,3 @@ class TestDETRHead:
         pos = torch.randn(1, 16, 64)
         _, bbox_pred = head((memory, pos, (4, 4)))
         assert (bbox_pred >= 0).all() and (bbox_pred <= 1).all()
-
-
-class TestRFDETRHead:
-    def test_output_shapes(self):
-        head = RFDETRHead(d_model=64, nhead=4, num_layers=2,
-                          num_queries=50, num_classes=80, n_points=4,
-                          dim_feedforward=128)
-        memory = torch.randn(1, 64, 64)
-        cls_logits, bbox_pred = head((memory, (8, 8)))
-        assert cls_logits.shape == (1, 50, 81)
-        assert bbox_pred.shape == (1, 50, 4)

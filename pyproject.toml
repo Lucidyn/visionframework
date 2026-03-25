@@ -43,6 +43,7 @@ dev = [
     "pytest-cov>=4.0.0",
     "scipy>=1.10.0",
 ]
+rtdetr-verify = ["ultralytics>=8.4.0"]
 
 [tool.setuptools.packages.find]
 include = ["visionframework*"]
@@ -54,6 +55,9 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-q --tb=short"
+markers = [
+    "rtdetr_official: 可选；需环境变量 RTDETR_L_PT、RTDETR_X_PT 指向官方 rtdetr-l.pt / rtdetr-x.pt（pytest -m rtdetr_official；未设置则 skip）",
+]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::UserWarning",

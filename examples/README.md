@@ -9,10 +9,10 @@
 | 目标检测 | `01_detection.py` | YOLO11 单图检测 |
 | 多目标跟踪 | `02_tracking.py` | ByteTrack 多帧跟踪 |
 | 语义分割 | `03_segmentation.py` | ResNet50 语义分割 |
-| 可视化 | `04_visualization.py` | 检测结果绘制 |
+| 可视化 | `04_visualization.py` | 在真实样图上画**手动示意框**（非模型输出），保存 `visualization_demo.jpg`，无需权重 |
 | DETR 检测 | `05_detr_detection.py` | Facebook DETR 官方权重 |
 | YOLO26 检测 | `06_yolo26_detection.py` | YOLO26 端到端检测（NMS-free）|
-| RF-DETR 检测 | `07_rfdetr_detection.py` | RF-DETR 原生实现 |
+| RT-DETR 检测 | `07_rtdetr_detection.py` | RT-DETR **l / x**（HGNet，Ultralytics 官方 `rtdetr-l.pt` / `rtdetr-x.pt` 经转换后的 `.pth`）；依次跑 `detect.yaml` 与 `detect_x.yaml`，输出 `rtdetr_result_l.jpg`、`rtdetr_result_x.jpg`，`rtdetr_result.jpg` 与 l 结果相同 |
 
 ## 运行方式
 
@@ -26,6 +26,8 @@ pip install -e .
 # 也可以使用命令行入口（安装后）
 # vf-test-yolo26 --quick
 
+# 真实测试图：根目录 test_bus.jpg（Ultralytics bus 样图）；缺失时运行 04 可自动下载
+
 # 运行示例
 python examples/01_detection.py
 python examples/02_tracking.py
@@ -33,12 +35,22 @@ python examples/03_segmentation.py
 python examples/04_visualization.py
 python examples/05_detr_detection.py
 python examples/06_yolo26_detection.py
-python examples/07_rfdetr_detection.py
+python examples/07_rtdetr_detection.py
 ```
+
+`07_rtdetr_detection.py` 会检查 **`rtdetr_l_vf.pth`** 与 **`rtdetr_x_vf.pth`** 是否存在于 `runs/detection/rtdetr/detect.yaml`、`detect_x.yaml` 所配置的路径；缺一则报错退出。请先下载官方 `.pt` 并按下方命令转换（许可见根目录 **`NOTICE`**）。
 
 ## 核心用法
 
-框架唯一入口是 `TaskRunner(yaml_path)`：
+框架唯一入口是 `TaskRunner(yaml_path)`。若运行 YAML 里写了 `weights` 但文件不存在，框架仍会用随机权重推理（结果常为空）；示例脚本使用 `require_detector_weights` 提前报错：
+
+```python
+from pathlib import Path
+from visionframework.core.config import require_detector_weights
+
+root = Path(__file__).resolve().parent.parent
+require_detector_weights(root, "runs/detection/yolo11/detect.yaml", hint="请先转换权重。")
+```
 
 ```python
 from visionframework import TaskRunner
@@ -64,14 +76,14 @@ python -m visionframework.tools.convert_ultralytics --model yolo11n.pt --out wei
 python -m visionframework.tools.convert_detr \
     --url https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth \
     --output weights/detection/detr/detr_r50.pth --verify
-```
 
-## RF-DETR
-
-RF-DETR 默认加载官方 `.pth`（不存在会自动下载，需要安装 `rfdetr` 用于构建同构网络与下载权重）。
-
-```bash
-python examples/07_rfdetr_detection.py
+# RT-DETR HG（rtdetr-l / rtdetr-x；转换仅需 torch；建议加 --verify；官方 .pt 许可见 NOTICE）
+python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
+    --weights path/to/rtdetr-l.pt --variant l \
+    --out weights/detection/rtdetr/rtdetr_l_vf.pth --verify
+python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
+    --weights path/to/rtdetr-x.pt --variant x \
+    --out weights/detection/rtdetr/rtdetr_x_vf.pth --verify
 ```
 
 ## 配置与目录
@@ -86,7 +98,7 @@ python examples/07_rfdetr_detection.py
 
 ```yaml
 pipeline: detection          # detection / tracking / segmentation / reid_tracking
-algorithm: DETRDetector      # 可选，指定检测算法类型
+algorithm: DETRDetector      # 可选：DETRDetector / RTDETRDetector（RT-DETR）等
 
 models:
   detector: configs/detection/yolo11/yolo11n.yaml  # 模型配置路径
@@ -140,11 +152,8 @@ postprocess:
 | `runs/detection/yolo11/detect_vehicles.yaml` | 只检测车辆（类别过滤） |
 | `runs/detection/yolo26/detect.yaml` | YOLO26 端到端检测（NMS-free）|
 | `runs/detection/detr/detect.yaml` | DETR 检测 |
-| `runs/detection/rfdetr/detect_nano.yaml` | RF-DETR `.pth` 检测（nano） |
-| `runs/detection/rfdetr/detect_small.yaml` | RF-DETR `.pth` 检测（small） |
-| `runs/detection/rfdetr/detect_base.yaml` | RF-DETR `.pth` 检测（base） |
-| `runs/detection/rfdetr/detect_medium.yaml` | RF-DETR `.pth` 检测（medium） |
-| `runs/detection/rfdetr/detect_large.yaml` | RF-DETR `.pth` 检测（large） |
+| `runs/detection/rtdetr/detect.yaml` | RT-DETR-**l**（HGNet，默认 `rtdetr_l_vf.pth`） |
+| `runs/detection/rtdetr/detect_x.yaml` | RT-DETR-**x**（HGNet，默认 `rtdetr_x_vf.pth`） |
 | `runs/tracking/bytetrack/tracking.yaml` | ByteTrack 多目标跟踪 |
 | `runs/tracking/bytetrack/reid_tracking.yaml` | ReID 增强跟踪 |
 | `runs/segmentation/resnet50/segmentation.yaml` | 语义分割 |

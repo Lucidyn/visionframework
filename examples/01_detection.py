@@ -5,16 +5,27 @@
 
 前提条件:
     pip install ultralytics
-    python tools/convert_ultralytics.py --model yolo11n.pt --out weights/yolo11n_converted.pth
+    python tools/convert_ultralytics.py --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
 """
+
+from pathlib import Path
 
 import cv2
 from visionframework import TaskRunner, Visualizer
+from visionframework.core.config import require_detector_weights
 
-# 加载图片
+root = Path(__file__).resolve().parent.parent
+require_detector_weights(
+    root,
+    "runs/detection/yolo11/detect.yaml",
+    hint=(
+        "说明：detect.yaml 里配置了 weights，但该路径不存在时框架不会报错，只会用随机初始化的网络推理，"
+        "置信度极低，检测结果通常为空，保存的 yolo11n_result.jpg 上就像「什么也没检测到」。\n"
+        "请先按本文件注释转换 ultralytics 权重后再运行。"
+    ),
+)
+
 img = cv2.imread("test_bus.jpg")
-
-# 通过 YAML 配置文件启动检测（weights 字段在 detect.yaml 中指定）
 task = TaskRunner("runs/detection/yolo11/detect.yaml")
 result = task.process(img)
 
@@ -23,7 +34,6 @@ print(f"检测到 {len(detections)} 个目标")
 for det in detections:
     print(f"  类别={det.class_id}, 置信度={det.confidence:.3f}, 框={det.bbox}")
 
-# 可视化并保存
 vis = Visualizer()
 result_img = vis.draw_detections(img.copy(), detections)
 cv2.imwrite("yolo11n_result.jpg", result_img)

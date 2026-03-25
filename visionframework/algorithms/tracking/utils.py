@@ -2,7 +2,7 @@
 Shared utilities for tracker implementations.
 
 Consolidates IoU calculation, cost-matrix construction, and linear assignment
-so that byte_tracker, iou_tracker, and reid_tracker don't each carry their own copy.
+so that byte_tracker and iou_tracker don't each carry their own copy.
 """
 
 import numpy as np

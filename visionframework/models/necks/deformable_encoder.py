@@ -1,5 +1,5 @@
 """
-Deformable Encoder Neck — 用于 RF-DETR 的可变形注意力编码器。
+Deformable Encoder Neck — 可变形注意力编码器 neck。
 """
 
 import torch
@@ -38,7 +38,7 @@ class DeformableEncoderLayer(nn.Module):
 
 @NECKS.register("DeformableEncoderNeck")
 class DeformableEncoderNeck(nn.Module):
-    """RF-DETR 风格的可变形注意力编码器 neck。
+    """可变形 Transformer 编码器风格的 neck。
 
     Parameters
     ----------

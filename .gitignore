@@ -45,12 +45,14 @@ ENV/
 # Weights cache folder (recommended)
 weights/
 
+# Ultralytics / RT-DETR mini-train datasets (coco8 等)
+datasets/
+
 # Output files
 output_*.jpg
 output_*.png
 output_*.mp4
 outputs/
-rfdetr_result.jpg
 
 # OS
 .DS_Store

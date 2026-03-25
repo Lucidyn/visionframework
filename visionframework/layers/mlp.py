@@ -1,5 +1,5 @@
 """
-MLP — 简单多层感知机，供 DETR/RF-DETR head 共享使用。
+MLP — 简单多层感知机，供 DETR 等 Transformer 检测头共享使用。
 """
 
 import torch.nn as nn

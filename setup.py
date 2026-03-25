@@ -22,6 +22,7 @@ setup(
     extras_require={
         "scipy": ["scipy>=1.10.0"],
         "dev": ["pytest>=7.0", "scipy>=1.10.0"],
+        "rtdetr-verify": ["ultralytics>=8.4.0"],
     },
     include_package_data=True,
     entry_points={
@@ -29,7 +30,7 @@ setup(
             "vf-test-yolo26=visionframework.tools.test_yolo26:main",
             "vf-convert-ultralytics=visionframework.tools.convert_ultralytics:main",
             "vf-convert-detr=visionframework.tools.convert_detr:main",
-            "vf-export-rfdetr-pth=visionframework.tools.export_rfdetr_torchscript:main",
+            "vf-convert-rtdetr=visionframework.tools.convert_ultralytics_rtdetr_hg:main",
         ]
     },
 )

@@ -4,7 +4,13 @@ import json
 import pytest
 from pathlib import Path
 
-from visionframework.core.config import load_config, save_config, merge_configs, resolve_config
+from visionframework.core.config import (
+    load_config,
+    save_config,
+    merge_configs,
+    resolve_config,
+    require_detector_weights,
+)
 
 
 class TestLoadConfig:
@@ -58,6 +64,31 @@ class TestMergeConfigs:
         result = merge_configs(base, override)
         assert result["model"]["backbone"] == {"type": "A", "depth": 0.5}
         assert result["model"]["neck"]["type"] == "B"
+
+
+class TestRequireDetectorWeights:
+    def test_passes_when_weights_file_exists(self, tmp_path):
+        w = tmp_path / "model.pth"
+        w.write_bytes(b"0")
+        run = tmp_path / "run.yaml"
+        run.write_text(f"weights: {w.name}\n", encoding="utf-8")
+        require_detector_weights(tmp_path, "run.yaml")
+
+    def test_exits_when_weights_missing(self, tmp_path, monkeypatch):
+        import sys
+
+        run = tmp_path / "run.yaml"
+        run.write_text("weights: nowhere.pth\n", encoding="utf-8")
+        codes = []
+
+        def fake_exit(code):
+            codes.append(code)
+            raise RuntimeError("exit-stub")
+
+        monkeypatch.setattr(sys, "exit", fake_exit)
+        with pytest.raises(RuntimeError, match="exit-stub"):
+            require_detector_weights(tmp_path, "run.yaml", hint="get weights")
+        assert codes == [1]
 
 
 class TestResolveConfig:

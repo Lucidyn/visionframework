@@ -63,23 +63,6 @@ def _build_pipeline_from_runtime(runtime_cfg: Dict[str, Any]):
     filter_classes = runtime_cfg.get("filter_classes")
 
     if pipeline_type == "detection":
-        if algorithm_type == "RFDETRPTHDetector":
-            from visionframework.algorithms.detection.rfdetr_pth_detector import RFDETRPTHDetector
-            detector = RFDETRPTHDetector(
-                model_size=runtime_cfg.get("model_size", "nano"),
-                weights=_resolve_weights(runtime_cfg, "detector") or runtime_cfg.get("weights", "rf-detr-nano.pth"),
-                resolution=runtime_cfg.get("resolution"),
-                conf=runtime_cfg.get("conf", 0.5),
-                num_select=runtime_cfg.get("num_select", 300),
-                class_names=runtime_cfg.get("class_names"),
-                filter_classes=filter_classes,
-                device=device,
-                fp16=fp16,
-                auto_download=runtime_cfg.get("auto_download", True),
-                weights_dir=runtime_cfg.get("weights_dir", "weights"),
-            )
-            return PIPELINES.get("detection")(detector=detector)
-
         det_cfg_path = models_cfg if isinstance(models_cfg, str) else models_cfg.get("detector")
         model_cfg = resolve_config(det_cfg_path) if det_cfg_path else {}
         model = build_model(model_cfg, weights=_resolve_weights(runtime_cfg, "detector"))
@@ -92,6 +75,19 @@ def _build_pipeline_from_runtime(runtime_cfg: Dict[str, Any]):
                 conf=pp.get("conf", 0.25),
                 class_names=model_cfg.get("class_names"),
                 filter_classes=filter_classes,
+            )
+        elif algorithm_type == "RTDETRDetector":
+            from visionframework.algorithms.detection.rtdetr_detector import RTDETRDetector
+            detector = RTDETRDetector(
+                model=model,
+                device=device,
+                fp16=fp16,
+                input_size=int(pp.get("input_size", 640)),
+                conf=pp.get("conf", 0.5),
+                max_det=int(pp.get("max_det", 300)),
+                class_names=model_cfg.get("class_names"),
+                filter_classes=filter_classes,
+                input_layout=str(pp.get("input_layout", "bgr")),
             )
         else:
             detector = Detector(

@@ -1,5 +1,5 @@
 from .detector import Detector
 from .detr_detector import DETRDetector
-from .rfdetr_pth_detector import RFDETRPTHDetector
+from .rtdetr_detector import RTDETRDetector
 
-__all__ = ["Detector", "DETRDetector", "RFDETRPTHDetector"]
+__all__ = ["Detector", "DETRDetector", "RTDETRDetector"]
