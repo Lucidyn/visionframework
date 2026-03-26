@@ -43,15 +43,18 @@ def _resolve_weights(runtime_cfg: Dict[str, Any], role: str) -> Any:
     """从 runtime 配置中解析指定角色的权重路径。
 
     支持两种写法：
-    - ``weights: path/to/weights.pth``          — 单一权重，作用于 detector
-    - ``weights: {detector: ..., reid: ...}``   — 按角色分别指定
+    - ``weights: path/to/weights.pth`` — 按 ``pipeline`` 绑定默认角色（detection→detector，segmentation→segmenter）
+    - ``weights: {detector: ..., reid: ..., segmenter: ...}`` — 按角色分别指定
     """
     weights = runtime_cfg.get("weights")
     if weights is None:
         return None
     if isinstance(weights, dict):
         return weights.get(role)
-    # 字符串形式只作用于 detector（最常见场景）
+    pipeline = runtime_cfg.get("pipeline", "detection")
+    if pipeline == "segmentation" and role == "segmenter":
+        return weights
+    # 字符串形式默认作用于 detector（检测 / 跟踪）
     return weights if role == "detector" else None
 
 
@@ -121,13 +124,62 @@ def _build_detection_algorithm(
     return cls(**builders[name]())
 
 
+def _looks_like_filesystem_path(s: str) -> bool:
+    """用于 strict_weights：仅对像本地路径的字符串做存在性检查（hub 名如 yolo11n-seg.pt 跳过）。"""
+    if not s:
+        return False
+    p = Path(s)
+    if p.is_absolute():
+        return True
+    return "/" in s or "\\" in s
+
+
+def _build_segmentation_algorithm(
+    model_cfg: Dict[str, Any],
+    runtime_cfg: Dict[str, Any],
+    *,
+    strict_weights: bool = False,
+) -> Any:
+    """实例化 YOLO11Segmenter / YOLO26Segmenter（Ultralytics 权重，无需 build_model）。"""
+    import visionframework.algorithms.segmentation.yolo_segmenter  # noqa: F401
+
+    pp = _postprocess(model_cfg)
+    device = runtime_cfg.get("device", "auto")
+    fp16 = runtime_cfg.get("fp16", False)
+    name = runtime_cfg.get("algorithm") or model_cfg.get("algorithm")
+    if not name:
+        raise ValueError(
+            "segmentation 需在 runtime 或 segmenter 模型 YAML 中指定 "
+            "`algorithm: YOLO11Segmenter` 或 `YOLO26Segmenter`"
+        )
+    weights = _resolve_weights(runtime_cfg, "segmenter")
+    if not weights:
+        raise ValueError(
+            "segmentation 需要权重：设置 `weights: path/to.pt` 或 `weights: {segmenter: ...}`"
+        )
+    wstr = str(weights)
+    if strict_weights and _looks_like_filesystem_path(wstr):
+        wp = Path(wstr).expanduser()
+        if not wp.is_file():
+            raise FileNotFoundError(f"分割权重文件不存在: {wp.resolve()}")
+
+    cls = ALGORITHMS.get(name)
+    return cls(
+        weights=wstr,
+        device=device,
+        conf=float(pp.get("conf", 0.25)),
+        iou=float(pp.get("iou", pp.get("nms_iou", 0.45))),
+        imgsz=int(pp.get("imgsz", 640)),
+        fp16=fp16,
+    )
+
+
 def _build_pipeline_from_runtime(
     runtime_cfg: Dict[str, Any],
     *,
     strict_weights: bool = False,
 ):
     """根据 runtime 配置组装 pipeline。"""
-    from visionframework.algorithms.segmentation.segmenter import Segmenter
     from visionframework.algorithms.reid.embedder import Embedder
     from visionframework.algorithms.tracking.byte_tracker import ByteTracker
     from visionframework.algorithms.tracking.centroid_tracker import CentroidTracker
@@ -155,13 +207,9 @@ def _build_pipeline_from_runtime(
     if pipeline_type == "segmentation":
         seg_cfg_path = models_cfg if isinstance(models_cfg, str) else models_cfg.get("segmenter")
         model_cfg = resolve_config(seg_cfg_path) if seg_cfg_path else {}
-        model = build_model(
-            model_cfg,
-            weights=_resolve_weights(runtime_cfg, "segmenter"),
-            strict_weights=strict_weights,
+        segmenter = _build_segmentation_algorithm(
+            model_cfg, runtime_cfg, strict_weights=strict_weights
         )
-        segmenter = Segmenter(model=model, device=device, fp16=fp16,
-                              num_classes=model_cfg.get("head", {}).get("num_classes", 21))
         return PIPELINES.get("segmentation")(segmenter=segmenter)
 
     if pipeline_type in ("tracking", "reid_tracking"):

@@ -195,7 +195,7 @@ visionframework/
 ├── algorithms/
 │   ├── base.py               # BaseAlgorithm（设备管理、fp16、predict_batch 共享基类）
 │   ├── detection/            # Detector, DETRDetector, RTDETRDetector
-│   ├── segmentation/         # Segmenter
+│   ├── segmentation/         # YOLO11Segmenter, YOLO26Segmenter（Ultralytics）
 │   ├── tracking/             # ByteTracker, IOUTracker
 │   └── reid/                 # Embedder
 ├── pipelines/                # DetectionPipeline, TrackingPipeline, ...
@@ -220,7 +220,8 @@ configs/                      # 仅模型配置（结构/backbone/head）
 │   ├── detr/                 # detr_r50.yaml
 │   └── rtdetr/               # rtdetr_l.yaml, rtdetr_x.yaml
 ├── tracking/bytetrack/       # bytetrack.yaml（跟踪器参数）
-├── segmentation/resnet50/    # resnet50_seg.yaml
+├── segmentation/yolo11/      # yolo11_seg.yaml
+├── segmentation/yolo26/      # yolo26_seg.yaml
 └── reid/osnet/               # osnet_reid.yaml
 
 runs/                         # 仅运行/流水线配置（入口 YAML，TaskRunner 加载）
@@ -230,14 +231,16 @@ runs/                         # 仅运行/流水线配置（入口 YAML，TaskRu
 │   ├── detr/                 # detect.yaml
 │   └── rtdetr/               # detect.yaml（l）, detect_x.yaml
 ├── tracking/bytetrack/       # tracking.yaml, reid_tracking.yaml
-└── segmentation/resnet50/   # segmentation.yaml
+├── segmentation/yolo11/     # yolo11n_seg.yaml … yolo11x_seg.yaml
+└── segmentation/yolo26/     # yolo26n_seg.yaml … yolo26x_seg.yaml
 
 weights/                      # 权重按 任务/算法 存放（见 weights/README.md）
 ├── detection/yolo11/         # yolo11n_converted.pth 等
 ├── detection/yolo26/
 ├── detection/detr/
 ├── detection/rtdetr/
-├── segmentation/resnet50/
+├── segmentation/yolo11/
+├── segmentation/yolo26/
 └── reid/osnet/
 
 tools/
@@ -249,7 +252,7 @@ tools/
 examples/
 ├── 01_detection.py           # YOLO11 目标检测
 ├── 02_tracking.py            # 多目标跟踪
-├── 03_segmentation.py        # 语义分割
+├── 03_segmentation.py        # YOLO11/YOLO26 实例分割（Ultralytics）
 ├── 04_visualization.py       # 可视化工具用法
 ├── 05_detr_detection.py      # DETR 检测（Facebook 官方权重）
 ├── 06_yolo26_detection.py    # YOLO26 端到端检测（NMS-free）
@@ -275,16 +278,20 @@ test/                         # pytest；说明见 test/README.md
 | DETR-R50 | `detection/detr/detr_r50.yaml` | ResNet-50 | TransformerEncoderNeck | DETRHead | 无 NMS，集合预测 |
 | RT-DETR-l | `detection/rtdetr/rtdetr_l.yaml` | RTDETRHGBackbone（含 PAN/AIFI） | — | RTDETRHGDecoder | 无 NMS；纯 PyTorch；官方 `.pt` 见 `NOTICE` |
 | RT-DETR-x | `detection/rtdetr/rtdetr_x.yaml` | RTDETRHGBackbone（同上，宽版） | — | RTDETRHGDecoder | 同上 |
-| 分割 | `segmentation/resnet50/resnet50_seg.yaml` | ResNet-50 | FPN | SegHead | 语义分割 |
+| YOLO11 实例分割 | `segmentation/yolo11/yolo11_seg.yaml` | Ultralytics | — | — | 需 `pip install ultralytics`；权重 `yolo11*-seg.pt` |
+| YOLO26 实例分割 | `segmentation/yolo26/yolo26_seg.yaml` | Ultralytics | — | — | 同上；权重 `yolo26*-seg.pt` |
 | ReID | `reid/osnet/osnet_reid.yaml` | OSNet | — | ReIDHead | 行人重识别 |
 
 ## 官方预训练权重
 
-权重路径在 **运行配置**（`runs/<task>/<algo>/*.yaml`）的 `weights` 字段中指定，`TaskRunner` 会自动加载，无需修改代码。运行配置内通过 `models.detector` 等引用 `configs/` 下的模型配置。
+权重路径在 **运行配置**（`runs/<task>/<algo>/*.yaml`）的 `weights` 字段中指定，`TaskRunner` 会自动加载，无需修改代码。运行配置内通过 `models.detector` / `models.segmenter` 等引用 `configs/` 下的模型配置。
 
 ```yaml
 # runs/detection/yolo11/detect.yaml
 weights: weights/detection/yolo11/yolo11n_converted.pth   # 字符串：作用于 detector
+
+# runs/segmentation/yolo11/yolo11n_seg.yaml（实例分割）
+weights: yolo11n-seg.pt   # 字符串：pipeline=segmentation 时作用于 segmenter（可为 hub 名或本地 .pt）
 
 # 多模型场景（tracking + reid）
 weights:
@@ -341,7 +348,7 @@ python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `pipeline` | str | 任务类型：`detection` / `tracking` / `segmentation` / `reid_tracking` |
-| `algorithm` | str | 检测算法：`Detector`（默认）、`DETRDetector` 或 `RTDETRDetector` |
+| `algorithm` | str | 检测：`Detector`（默认）、`DETRDetector`、`RTDETRDetector`；分割：`YOLO11Segmenter`、`YOLO26Segmenter` |
 | `models.detector` | str | 检测模型配置路径 |
 | `models.segmenter` | str | 分割模型配置路径 |
 | `models.reid` | str | ReID 模型配置路径 |

@@ -1,5 +1,5 @@
 """
-Segmentation pipeline.
+Segmentation pipeline (YOLO 实例分割).
 """
 
 from __future__ import annotations
@@ -11,17 +11,11 @@ from .base import BasePipeline
 
 @PIPELINES.register("segmentation")
 class SegmentationPipeline(BasePipeline):
-    """Frame → Segmenter → segmentation map.
-
-    Parameters
-    ----------
-    segmenter : Segmenter
-        A segmentation algorithm instance.
-    """
+    """Frame → YOLO Segment → ``detections``（含 ``mask``）。"""
 
     def __init__(self, segmenter, **_kw):
         self.segmenter = segmenter
 
     def process(self, frame) -> Dict[str, Any]:
-        seg_map = self.segmenter.predict(frame)
-        return {"seg_map": seg_map}
+        detections = self.segmenter.predict(frame)
+        return {"detections": detections}

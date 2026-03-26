@@ -9,7 +9,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-默认选项在 `pyproject.toml` 的 `[tool.pytest.ini_options]` 中配置（如 `addopts = "-q --tb=short"`）。
+默认选项在 `pyproject.toml` 的 `[tool.pytest.ini_options]` 中配置（含 `-m "not yolo_seg"`，排除需下载 Ultralytics YOLO 分割权重的慢测）。
 
 根目录 **`conftest.py`** 会 `setdefault("VISIONFRAMEWORK_LOG_LEVEL", "WARNING")`，避免 `TaskRunner` 等在测试中输出 INFO。调试单测时可临时设置 `VISIONFRAMEWORK_LOG_LEVEL=INFO`。
 
@@ -30,11 +30,13 @@ pytest
 | 标记 | 含义 |
 |------|------|
 | `rtdetr_official` | 需要 **`RTDETR_L_PT`** 与 **`RTDETR_X_PT`** 指向 Ultralytics 官方 COCO 权重 `rtdetr-l.pt`、`rtdetr-x.pt`。未设置或文件不存在时，对应用例 **skip**。 |
+| `yolo_seg` | YOLO11/YOLO26 全尺寸 `*-seg.pt` 推理 + **Visualizer 叠加 + PNG 往返**（需 `pip install ultralytics`）。测试图优先 `test/fixtures/bus.jpg`。默认 `pytest` **不收集**；显式运行：`pytest -m yolo_seg`。若某权重缓存损坏会 **skip** 并提示删除后重下。 |
 
 运行仅含该标记的用例：
 
 ```bash
 pytest -m rtdetr_official
+pytest -m yolo_seg test/algorithms/test_yolo_segmentation.py
 ```
 
 ## RT-DETR 相关

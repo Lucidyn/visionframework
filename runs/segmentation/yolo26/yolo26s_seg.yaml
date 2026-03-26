@@ -1,0 +1,5 @@
+pipeline: segmentation
+models:
+  segmenter: configs/segmentation/yolo26/yolo26_seg.yaml
+weights: yolo26s-seg.pt
+device: cpu

@@ -8,7 +8,7 @@
 |------|------|------|
 | 目标检测 | `01_detection.py` | YOLO11 单图检测 |
 | 多目标跟踪 | `02_tracking.py` | ByteTrack 多帧跟踪 |
-| 语义分割 | `03_segmentation.py` | ResNet50 语义分割 |
+| 实例分割 | `03_segmentation.py` | YOLO11/YOLO26（Ultralytics `*-seg.pt`） |
 | 可视化 | `04_visualization.py` | 在真实样图上画**手动示意框**（非模型输出），保存 `visualization_demo.jpg`，无需权重 |
 | DETR 检测 | `05_detr_detection.py` | Facebook DETR 官方权重 |
 | YOLO26 检测 | `06_yolo26_detection.py` | YOLO26 端到端检测（NMS-free）|
@@ -161,4 +161,4 @@ postprocess:
 | `runs/detection/rtdetr/detect_x.yaml` | RT-DETR-**x**（HGNet，默认 `rtdetr_x_vf.pth`） |
 | `runs/tracking/bytetrack/tracking.yaml` | ByteTrack 多目标跟踪 |
 | `runs/tracking/bytetrack/reid_tracking.yaml` | ReID 增强跟踪 |
-| `runs/segmentation/resnet50/segmentation.yaml` | 语义分割 |
+| `runs/segmentation/yolo11/yolo11n_seg.yaml` 等 | 实例分割（各尺寸见 `runs/segmentation/yolo11/`、`yolo26/`） |

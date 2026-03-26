@@ -13,6 +13,8 @@
 
 `TaskRunner` 解析运行配置后，对 **检测** 任务通过 `_build_detection_algorithm` 从 `ALGORITHMS` 注册表装配 `Detector` / `DETRDetector` / `RTDETRDetector`（由 runtime 的 `algorithm` 字段选择，缺省为 `Detector`）。
 
+**分割（segmentation）** 不走 `build_model`：由 `_build_segmentation_algorithm` 装配 `YOLO11Segmenter` / `YOLO26Segmenter`（Ultralytics `*-seg.pt`，需单独安装 `ultralytics`）。管线输出为 `{"detections": [...]}`，每个 `Detection` 含实例 `mask`。
+
 ## 跟踪（tracking / reid_tracking）
 
 跟踪管线在装配检测器时 **复用同一套** `_build_detection_algorithm`：可在 runtime YAML 中设置 `algorithm: DETRDetector` 或 `RTDETRDetector`（若模型配置与权重匹配）。跟踪器（ByteTrack / IOUTracker）配置仍通过 `tracker` 字段提供。
@@ -35,3 +37,5 @@
 1. 实现类并 `@ALGORITHMS.register("YourDetector")`。  
 2. 在 [`task_api.py`](../visionframework/task_api.py) 的 `_build_detection_algorithm` 内 `builders` 字典中增加 `"YourDetector": _kw_your` 及对应参数字典工厂。  
 3. 补充测试（参见 `test/test_task_api.py`）。
+
+分割算法若需接入 `TaskRunner`，在 `task_api._build_segmentation_algorithm` 中扩展（当前为 Ultralytics YOLO seg 专用）。

@@ -1,0 +1,5 @@
+pipeline: segmentation
+models:
+  segmenter: configs/segmentation/yolo11/yolo11_seg.yaml
+weights: yolo11n-seg.pt
+device: cpu

@@ -1,3 +1,3 @@
-from .segmenter import Segmenter
+from .yolo_segmenter import YOLO11Segmenter, YOLO26Segmenter
 
-__all__ = ["Segmenter"]
+__all__ = ["YOLO11Segmenter", "YOLO26Segmenter"]
