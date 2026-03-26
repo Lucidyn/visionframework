@@ -1,6 +1,6 @@
 # VisionFramework v2.0
 
-模块化、组件式计算机视觉框架。通过 YAML 配置驱动，支持目标检测、语义分割、多目标跟踪等任务。
+模块化、组件式计算机视觉框架。通过 YAML 配置驱动，支持目标检测、**实例分割**（YOLO11/YOLO26）、多目标跟踪等任务。
 
 ## 特性
 
@@ -27,6 +27,7 @@ pip install -e .
 #   vf-run -c runs/detection/yolo11/detect.yaml -s test_bus.jpg -o out_vis
 #   python -m visionframework.tools.run_inference --config ... --source ...
 #   vf-test-yolo26 --quick
+#   vf-save-yolo-seg          # 或 python -m visionframework.tools.save_yolo_seg_visualization
 #   vf-convert-ultralytics --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
 ```
 
@@ -107,6 +108,38 @@ result = task.process(img)
 | SPPF | cv1 有激活 | cv1 无激活 + 残差连接 |
 
 > 参考示例：`examples/06_yolo26_detection.py`
+
+---
+
+### YOLO 实例分割（YOLO11 / YOLO26）
+
+依赖 **Ultralytics** 的 Segment 权重（`yolo11n-seg.pt`、`yolo26n-seg.pt` 等；首次运行可从 Ultralytics 自动拉取）。分割管线 **不** 经过 `build_model`，由 `YOLO11Segmenter` / `YOLO26Segmenter` 直接加载；`TaskRunner` 返回 `{"detections": [...]}`，每个 `Detection` 带实例 **mask**。
+
+```bash
+pip install ultralytics
+# 或：pip install -e ".[yolo-seg]"
+```
+
+```python
+import cv2
+from visionframework import TaskRunner, Visualizer
+
+img = cv2.imread("test/fixtures/bus.jpg")  # 或 test_bus.jpg
+task = TaskRunner("runs/segmentation/yolo11/yolo11n_seg.yaml")
+result = task.process(img)
+cv2.imwrite("seg_vis.jpg", Visualizer().draw(img.copy(), result))
+```
+
+各尺寸运行配置见 `runs/segmentation/yolo11/yolo11{n,s,m,l,x}_seg.yaml` 与 `runs/segmentation/yolo26/yolo26{n,s,m,l,x}_seg.yaml`。一键导出 **全部尺寸** 可视化 PNG（默认目录 `outputs/segmentation_viz/`，已在 `.gitignore`）：
+
+```bash
+python -m visionframework.tools.save_yolo_seg_visualization
+# 仅 n 档快速试跑：python -m visionframework.tools.save_yolo_seg_visualization --quick
+```
+
+自动化测试（需 `ultralytics`，默认 `pytest` 不运行）：`pytest -m yolo_seg test/algorithms/test_yolo_segmentation.py`。说明见 **`test/README.md`**。使用官方预训练权重须遵守 **AGPL-3.0**（见 **`NOTICE`**）。
+
+> 参考示例：`examples/03_segmentation.py`
 
 ---
 
@@ -244,10 +277,11 @@ weights/                      # 权重按 任务/算法 存放（见 weights/REA
 └── reid/osnet/
 
 tools/
-├── convert_ultralytics.py           # ultralytics YOLO11/YOLO26 权重转换
-├── convert_ultralytics_rtdetr_hg.py # Ultralytics rtdetr-l/x .pt → 框架 .pth
-├── test_yolo26.py                   # YOLO11/YOLO26 与 Ultralytics 对齐测试
-└── convert_detr.py                  # Facebook DETR 官方权重转换
+├── convert_ultralytics.py              # ultralytics YOLO11/YOLO26 权重转换
+├── convert_ultralytics_rtdetr_hg.py    # Ultralytics rtdetr-l/x .pt → 框架 .pth
+├── test_yolo26.py                      # YOLO11/YOLO26 与 Ultralytics 对齐测试
+├── save_yolo_seg_visualization.py      # YOLO11/26 全尺寸实例分割可视化 PNG → outputs/segmentation_viz/
+└── convert_detr.py                     # Facebook DETR 官方权重转换
 
 examples/
 ├── 01_detection.py           # YOLO11 目标检测
@@ -300,6 +334,8 @@ weights:
 ```
 
 ### YOLO11 / YOLO26 (ultralytics)
+
+**检测**权重需用下方命令转为框架 `ModelWrapper` 用 `.pth`。**实例分割**（`*-seg.pt`）不经转换，由 `YOLO11Segmenter` / `YOLO26Segmenter` 直接加载；可选 `pip install -e ".[yolo-seg]"`。
 
 转换工具自动检测模型类型，YOLO26 会自动使用 one-to-one head 权重：
 
@@ -359,6 +395,10 @@ python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
 | `strict_weights` | bool | `true` 时：声明的权重路径若不存在则报错，而非静默随机初始化 |
 
 `TaskRunner` 亦接受 **`pathlib.Path`** 作为配置文件路径；构造函数关键字 **`strict_weights`** 可覆盖 YAML 中的同名项。
+
+## 测试
+
+在仓库根目录执行 `pytest`（默认排除 `yolo_seg` 慢测，见 `pyproject.toml`）。分割、跟踪、检测等说明见 **`test/README.md`**。可选依赖：`pip install -e ".[dev]"`、**`pip install -e ".[yolo-seg]"`**（跑 YOLO 实例分割测试）、`pip install -e ".[rtdetr-verify]"`（RT-DETR 对齐测试）。
 
 ## 日志
 

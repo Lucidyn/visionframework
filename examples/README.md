@@ -8,7 +8,7 @@
 |------|------|------|
 | 目标检测 | `01_detection.py` | YOLO11 单图检测 |
 | 多目标跟踪 | `02_tracking.py` | ByteTrack 多帧跟踪 |
-| 实例分割 | `03_segmentation.py` | YOLO11/YOLO26（Ultralytics `*-seg.pt`） |
+| 实例分割 | `03_segmentation.py` | YOLO11/YOLO26：`TaskRunner` + `Visualizer`，结果写入 `outputs/segmentation_demo/seg_yolo11n_demo.jpg`（需 `ultralytics`） |
 | 可视化 | `04_visualization.py` | 在真实样图上画**手动示意框**（非模型输出），保存 `visualization_demo.jpg`，无需权重 |
 | DETR 检测 | `05_detr_detection.py` | Facebook DETR 官方权重 |
 | YOLO26 检测 | `06_yolo26_detection.py` | YOLO26 端到端检测（NMS-free）|
@@ -70,10 +70,23 @@ for frame, meta, result in task.run("video.mp4"):
     ...
 ```
 
+## 实例分割（补充）
+
+- **依赖**：`pip install ultralytics` 或 `pip install -e ".[yolo-seg]"`。
+- **运行配置**：`runs/segmentation/yolo11/yolo11n_seg.yaml` 等（`pipeline: segmentation`，`weights` 为 `yolo11n-seg.pt` 等）。
+- **批量导出可视化**（各尺寸一张 PNG，默认 `outputs/segmentation_viz/`）：
+
+```bash
+python -m visionframework.tools.save_yolo_seg_visualization
+python -m visionframework.tools.save_yolo_seg_visualization --quick   # 仅 11n + 26n
+```
+
+- **测试**：`pytest -m yolo_seg test/algorithms/test_yolo_segmentation.py`（见 **`test/README.md`**）。
+
 ## 权重转换工具
 
 ```bash
-# ultralytics YOLO 权重
+# ultralytics YOLO 检测权重（转为框架 .pth；实例分割 *-seg.pt 不需要此步）
 python -m visionframework.tools.convert_ultralytics --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
 
 # Facebook DETR 官方权重（458/458 keys 完美映射）
@@ -99,6 +112,18 @@ python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
 ## YAML 配置说明
 
 ### 运行配置 (runs/<task>/<algo>/)
+
+**实例分割** runtime 示例：
+
+```yaml
+pipeline: segmentation
+models:
+  segmenter: configs/segmentation/yolo11/yolo11_seg.yaml
+weights: yolo11n-seg.pt   # 或 weights: { segmenter: path/to.pt }
+device: cpu
+```
+
+（`algorithm: YOLO11Segmenter` 写在 `configs/segmentation/yolo11/yolo11_seg.yaml` 中，亦可写在 runtime 顶层覆盖。）
 
 ```yaml
 pipeline: detection          # detection / tracking / segmentation / reid_tracking

@@ -38,4 +38,4 @@
 2. 在 [`task_api.py`](../visionframework/task_api.py) 的 `_build_detection_algorithm` 内 `builders` 字典中增加 `"YourDetector": _kw_your` 及对应参数字典工厂。  
 3. 补充测试（参见 `test/test_task_api.py`）。
 
-分割算法若需接入 `TaskRunner`，在 `task_api._build_segmentation_algorithm` 中扩展（当前为 Ultralytics YOLO seg 专用）。
+分割算法若需接入 `TaskRunner`，在 `task_api._build_segmentation_algorithm` 中扩展（当前为 Ultralytics YOLO seg 专用）。批量导出分割可视化 PNG：`python -m visionframework.tools.save_yolo_seg_visualization`（安装后 `vf-save-yolo-seg`）。

@@ -19,7 +19,7 @@ pytest
 |------|------|
 | `test/core/` | 配置加载、注册表、`build_model` 等 |
 | `test/models/` | Backbone / neck / head / RT-DETR 模块等 |
-| `test/algorithms/` | 检测器、跟踪器；含 RT-DETR 预训练相关用例 |
+| `test/algorithms/` | 检测器、跟踪器、**YOLO 实例分割**（`test_yolo_segmentation.py`）；含 RT-DETR 预训练相关用例 |
 | `test/utils/` | bbox、NMS、过滤、可视化、`logging_config` 等 |
 | `test/pipelines/` | 管线构建与行为 |
 | `test/test_task_api.py` | `TaskRunner`、`_build_detection_algorithm`、`strict_weights`、跟踪管线冒烟 |
@@ -39,6 +39,16 @@ pytest -m rtdetr_official
 pytest -m yolo_seg test/algorithms/test_yolo_segmentation.py
 ```
 
+可选安装 **`pip install -e ".[yolo-seg]"`**（与 `yolo_seg` 测试相同依赖）。
+
+## YOLO 实例分割（`yolo_seg`）
+
+- **文件**：`test/algorithms/test_yolo_segmentation.py`
+- **内容**：对 YOLO11 / YOLO26 各 5 档尺寸（`yolo11n-seg.pt` … `yolo26x-seg.pt`）做推理；**`Visualizer` 叠加**与 **PNG 写回读**；`TaskRunner` + runtime YAML 路径各一条。
+- **测试图**：优先 `test_bus.jpg`，其次 **`test/fixtures/bus.jpg`**（无网络时避免下载失败）。
+- **损坏权重**：若本地缓存的 `.pt` 不完整，相关用例 **`pytest.skip`** 并提示删除缓存后重下。
+- **导出可视化**：`python -m visionframework.tools.save_yolo_seg_visualization`（不写测试内；见主 **README**）。
+
 ## RT-DETR 相关
 
 - **`test/algorithms/test_rtdetr_pretrained.py`**
@@ -50,4 +60,5 @@ pytest -m yolo_seg test/algorithms/test_yolo_segmentation.py
 
 ## 可选：与 Ultralytics 对齐的验证依赖
 
-安装 `pip install -e ".[rtdetr-verify]"` 后，可使用与 Ultralytics 逐张量/推理对齐的额外测试（若仓库中提供；详见各测试文件 docstring）。
+- **`pip install -e ".[rtdetr-verify]"`**：RT-DETR 等与 Ultralytics 逐张量/推理对齐的额外测试（详见各测试文件 docstring）。
+- **`pip install -e ".[yolo-seg]"`**：YOLO 实例分割（`pytest -m yolo_seg`）。
