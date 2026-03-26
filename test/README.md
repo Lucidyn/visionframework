@@ -11,6 +11,8 @@ pytest
 
 默认选项在 `pyproject.toml` 的 `[tool.pytest.ini_options]` 中配置（如 `addopts = "-q --tb=short"`）。
 
+根目录 **`conftest.py`** 会 `setdefault("VISIONFRAMEWORK_LOG_LEVEL", "WARNING")`，避免 `TaskRunner` 等在测试中输出 INFO。调试单测时可临时设置 `VISIONFRAMEWORK_LOG_LEVEL=INFO`。
+
 ## 目录结构（摘要）
 
 | 路径 | 内容 |
@@ -18,8 +20,9 @@ pytest
 | `test/core/` | 配置加载、注册表、`build_model` 等 |
 | `test/models/` | Backbone / neck / head / RT-DETR 模块等 |
 | `test/algorithms/` | 检测器、跟踪器；含 RT-DETR 预训练相关用例 |
-| `test/utils/` | bbox、NMS、过滤、可视化等 |
+| `test/utils/` | bbox、NMS、过滤、可视化、`logging_config` 等 |
 | `test/pipelines/` | 管线构建与行为 |
+| `test/test_task_api.py` | `TaskRunner`、`_build_detection_algorithm`、`strict_weights`、跟踪管线冒烟 |
 | `test/fixtures/` | 可选静态资源（如 `bus.jpg`，供官方权重测试） |
 
 ## Pytest 标记

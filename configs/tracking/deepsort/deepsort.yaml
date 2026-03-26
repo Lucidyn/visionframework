@@ -1,0 +1,7 @@
+type: deepsort
+max_age: 30
+min_hits: 3
+iou_threshold: 0.3
+lambda_emb: 0.5
+emb_thresh: 0.25
+ema_alpha: 0.9

@@ -37,7 +37,13 @@ class ModelWrapper(nn.Module):
         return self.head(feats)
 
 
-def _load_weights(model: nn.Module, weights_path: str, strict: bool = False) -> nn.Module:
+def _load_weights(
+    model: nn.Module,
+    weights_path: str,
+    strict: bool = False,
+    *,
+    strict_weights: bool = False,
+) -> nn.Module:
     """Load pretrained weights into *model*.
 
     Parameters
@@ -49,8 +55,13 @@ def _load_weights(model: nn.Module, weights_path: str, strict: bool = False) -> 
         If ``True`` every key must match exactly.  Default ``False`` to
         allow partial loading (e.g. loading backbone-only weights into a
         full model).
+    strict_weights : bool
+        If ``True`` and *weights_path* is missing on disk, raise
+        ``FileNotFoundError`` instead of skipping load.
     """
     if not os.path.isfile(weights_path):
+        if strict_weights:
+            raise FileNotFoundError(f"权重文件不存在: {weights_path}")
         logger.warning("权重文件不存在，跳过加载: %s", weights_path)
         return model
 
@@ -83,7 +94,12 @@ def _load_weights(model: nn.Module, weights_path: str, strict: bool = False) -> 
     return model
 
 
-def build_model(cfg: Dict[str, Any], weights: Optional[str] = None) -> nn.Module:
+def build_model(
+    cfg: Dict[str, Any],
+    weights: Optional[str] = None,
+    *,
+    strict_weights: bool = False,
+) -> nn.Module:
     """Build a ``ModelWrapper`` from a model-config dict.
 
     Parameters
@@ -94,6 +110,9 @@ def build_model(cfg: Dict[str, Any], weights: Optional[str] = None) -> nn.Module
         pretrained checkpoint path.
     weights : str, optional
         Override weights path (takes precedence over ``cfg["weights"]``).
+    strict_weights : bool
+        If ``True`` and the resolved weights path is non-empty but the file
+        is missing, raise ``FileNotFoundError``.
     """
     cfg = cfg.copy()
     weights_path = weights or cfg.pop("weights", None)
@@ -105,15 +124,20 @@ def build_model(cfg: Dict[str, Any], weights: Optional[str] = None) -> nn.Module
     model = ModelWrapper(backbone, neck, head)
 
     if weights_path:
-        _load_weights(model, weights_path, strict=strict)
+        _load_weights(model, weights_path, strict=strict, strict_weights=strict_weights)
 
     return model
 
 
-def build_model_from_file(path: str, weights: Optional[str] = None) -> nn.Module:
+def build_model_from_file(
+    path: str,
+    weights: Optional[str] = None,
+    *,
+    strict_weights: bool = False,
+) -> nn.Module:
     """Convenience: load a YAML model config and build the model."""
     cfg = resolve_config(path)
-    return build_model(cfg, weights=weights)
+    return build_model(cfg, weights=weights, strict_weights=strict_weights)
 
 
 def build_algorithm(cfg: Dict[str, Any]) -> Any:

@@ -20,10 +20,14 @@
 # 确保在项目根目录
 cd visionframework
 
+# 可选：查看 TaskRunner 初始化等 INFO 日志
+#   set VISIONFRAMEWORK_LOG_LEVEL=INFO   （Linux/macOS: export ...）
+
 # 推荐：开发模式安装（确保可直接 import visionframework）
 pip install -e .
 
 # 也可以使用命令行入口（安装后）
+# vf-run -c runs/detection/yolo11/detect.yaml -s test_bus.jpg -o out_vis
 # vf-test-yolo26 --quick
 
 # 真实测试图：根目录 test_bus.jpg（Ultralytics bus 样图）；缺失时运行 04 可自动下载
@@ -98,13 +102,14 @@ python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
 
 ```yaml
 pipeline: detection          # detection / tracking / segmentation / reid_tracking
-algorithm: DETRDetector      # 可选：DETRDetector / RTDETRDetector（RT-DETR）等
+algorithm: DETRDetector      # 可选：Detector（默认）/ DETRDetector / RTDETRDetector；跟踪 pipeline 同样适用
 
 models:
   detector: configs/detection/yolo11/yolo11n.yaml  # 模型配置路径
 
 device: auto                 # auto / cpu / cuda
 fp16: false                  # 半精度推理
+strict_weights: false        # true：权重路径不存在则报错（否则可能静默用随机权重）
 
 # 类别过滤：只检测指定类别，支持名称 (str) 和 ID (int) 混用
 filter_classes:

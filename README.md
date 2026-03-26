@@ -11,6 +11,7 @@
 - **YOLO26 端到端** — NMS-free one-to-one 检测头，`end2end: true` 一键启用
 - **多任务支持** — 检测、分割、跟踪、ReID 跟踪，统一 pipeline 管理
 - **最少依赖** — 核心仅需 `torch`、`opencv-python`、`numpy`、`pyyaml`
+- **命令行推理** — 安装后可用 `vf-run -c <runtime.yaml> -s <图/目录/视频/摄像头>` 一条跑通并可选保存可视化
 
 ## 快速开始
 
@@ -23,8 +24,37 @@ pip install torch torchvision opencv-python numpy pyyaml
 pip install -e .
 
 # 可选：安装后可直接使用命令行入口
+#   vf-run -c runs/detection/yolo11/detect.yaml -s test_bus.jpg -o out_vis
+#   python -m visionframework.tools.run_inference --config ... --source ...
 #   vf-test-yolo26 --quick
 #   vf-convert-ultralytics --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
+```
+
+### 命令行推理（`vf-run`）
+
+在准备好 `runs/.../detect.yaml` 与权重后（参见各检测示例），可在项目根目录执行：
+
+```bash
+vf-run -c runs/detection/yolo11/detect.yaml -s test_bus.jpg -o out_vis
+```
+
+`--source` 支持单图、图片目录、视频文件，或摄像头序号（如 `0`）。`--out` 为可选输出目录，会写入带检测框的可视化图；视频会保存为 `frame_000000_vf.jpg` 等。`--max-frames N` 可限制处理帧数。`--strict-weights` 与 `TaskRunner` 行为一致。
+
+### Python：批量与目录 API
+
+`TaskRunner` 除 `process` / `run` 外还提供：
+
+| 方法 | 说明 |
+|------|------|
+| `process_batch(images)` | 多张已加载的 BGR 图（`numpy`）依次推理 |
+| `process_paths(paths)` | 按路径 `cv2.imread` 后推理 |
+| `iter_results(source)` | 与 `run` 相同数据源，只产出 `(meta, result)`，不保留帧 |
+| `collect_results(source, max_frames=...)` | 将结果收集为列表；长视频建议流式 `run` 或设 `max_frames` |
+
+```python
+task = TaskRunner("runs/detection/yolo11/detect.yaml")
+outs = task.process_batch([img1, img2])
+rows = task.collect_results("path/to/img_dir", max_frames=100)
 ```
 
 所有示例的统一用法模式：**加载图片 → `TaskRunner` → 可视化保存**。仓库根目录提供真实样图 **`test_bus.jpg`**（Ultralytics 公开 [bus.jpg](https://ultralytics.com/images/bus.jpg)，便于检测/可视化示例）；若缺失可运行 `python examples/04_visualization.py`，脚本会尝试自动下载。`04_visualization.py` 保存的 `visualization_demo.jpg` 是 **手动示意框**（验证绘制管线），不是模型推理。
@@ -130,6 +160,8 @@ task = TaskRunner("runs/tracking/bytetrack/tracking.yaml")
 for frame, meta, result in task.run("video.mp4"):
     tracks = result["tracks"]
 ```
+
+跟踪与检测共用同一套检测算法装配：在 runtime YAML 中可设置 `algorithm: Detector`（默认）、`DETRDetector` 或 `RTDETRDetector`（须与 `models.detector` 指向的模型配置及权重一致）。更完整的分层说明见 **`docs/ARCHITECTURE.md`**。
 
 ### 类别过滤
 
@@ -313,10 +345,26 @@ python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
 | `models.detector` | str | 检测模型配置路径 |
 | `models.segmenter` | str | 分割模型配置路径 |
 | `models.reid` | str | ReID 模型配置路径 |
-| `tracker` | str/dict | 跟踪器配置路径或内联配置 |
+| `tracker` | str/dict | 跟踪器配置路径或内联配置；`type`：`bytetrack`（默认）、`iou`、`centroid`、`sort`、`deepsort` |
 | `device` | str | `auto` / `cpu` / `cuda` |
 | `fp16` | bool | 半精度推理 |
 | `filter_classes` | list | 类别过滤，支持名称 (str) 和 ID (int) 混用 |
+| `strict_weights` | bool | `true` 时：声明的权重路径若不存在则报错，而非静默随机初始化 |
+
+`TaskRunner` 亦接受 **`pathlib.Path`** 作为配置文件路径；构造函数关键字 **`strict_weights`** 可覆盖 YAML 中的同名项。
+
+## 日志
+
+首次创建 **`TaskRunner`** 时会配置 `visionframework` 包级 logger（不修改根 logger）。未设置环境变量时，默认级别为 **WARNING**，不会在控制台打印 `TaskRunner` 初始化时的 INFO 行。
+
+| 环境变量 | 说明 |
+|----------|------|
+| `VISIONFRAMEWORK_LOG_LEVEL` | 优先使用；值为 `DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL`（大小写不敏感） |
+| `VF_LOG_LEVEL` | 与上等价的简写别名 |
+
+需要排查管线/算法加载时，可在运行前执行 `set VISIONFRAMEWORK_LOG_LEVEL=INFO`（PowerShell：`$env:VISIONFRAMEWORK_LOG_LEVEL='INFO'`）。也可在代码中调用 `visionframework.utils.configure_visionframework_logging()` 或传入显式级别；`reset_visionframework_logging()` 主要用于测试复位（见 `test/utils/test_logging_config.py`）。
+
+仓库内 **`conftest.py`** 对 pytest 默认 `setdefault(..., WARNING)`，避免测试日志刷屏。
 
 ## 模型 YAML 关键参数
 

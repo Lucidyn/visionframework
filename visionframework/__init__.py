@@ -4,7 +4,7 @@ VisionFramework — 模块化、组件式计算机视觉框架。
 通过 backbone / neck / head 可组合组件构建视觉模型，
 全程 YAML 配置驱动，支持检测、分割、跟踪、ReID 等任务。
 
-唯一公共入口: ``TaskRunner(yaml_path)``
+唯一公共入口: ``TaskRunner(yaml_path)``（``yaml_path`` 为 ``str`` 或 ``pathlib.Path``）
 """
 
 __version__ = "2.0.0"

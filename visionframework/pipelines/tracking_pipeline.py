@@ -17,8 +17,8 @@ class TrackingPipeline(BasePipeline):
     ----------
     detector : Detector
         Detection algorithm.
-    tracker : ByteTracker | IOUTracker
-        Tracking algorithm.
+    tracker
+        Any tracker from ``visionframework.algorithms.tracking`` with ``update(detections, frame)``.
     """
 
     def __init__(self, detector, tracker, **_kw):

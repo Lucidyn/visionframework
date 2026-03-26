@@ -2,6 +2,11 @@
 Shared pytest fixtures.
 """
 
+import os
+
+# 默认安静，避免 TaskRunner 等在测试里输出 INFO；若需调试可设 VISIONFRAMEWORK_LOG_LEVEL=INFO
+os.environ.setdefault("VISIONFRAMEWORK_LOG_LEVEL", "WARNING")
+
 import numpy as np
 import pytest
 

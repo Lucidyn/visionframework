@@ -31,6 +31,7 @@ setup(
             "vf-convert-ultralytics=visionframework.tools.convert_ultralytics:main",
             "vf-convert-detr=visionframework.tools.convert_detr:main",
             "vf-convert-rtdetr=visionframework.tools.convert_ultralytics_rtdetr_hg:main",
+            "vf-run=visionframework.tools.run_inference:main",
         ]
     },
 )

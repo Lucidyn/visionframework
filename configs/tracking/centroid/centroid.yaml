@@ -1,0 +1,4 @@
+type: centroid
+max_distance: 64.0
+max_age: 30
+min_hits: 3

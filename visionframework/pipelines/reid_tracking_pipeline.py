@@ -20,7 +20,7 @@ class ReIDTrackingPipeline(BasePipeline):
     ----------
     detector : Detector
     embedder : Embedder
-    tracker : ByteTracker | IOUTracker
+    tracker : Any tracker from ``visionframework.algorithms.tracking`` implementing ``update(detections, frame)``
     """
 
     def __init__(self, detector, embedder, tracker, **_kw):
