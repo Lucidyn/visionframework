@@ -43,6 +43,7 @@ dev = [
     "pytest-cov>=4.0.0",
     "scipy>=1.10.0",
 ]
+# ultralytics：仅 yolo-seg / rtdetr-verify 等可选能力；YOLO 检测权重 convert_ultralytics 不依赖此包
 rtdetr-verify = ["ultralytics>=8.4.0"]
 yolo-seg = ["ultralytics>=8.4.0"]
 

@@ -4,8 +4,8 @@
 通过 YAML 配置文件驱动 YOLO11n 检测器，处理单张图片并输出可视化结果。
 
 前提条件:
-    pip install ultralytics
     python tools/convert_ultralytics.py --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
+    （转换仅需 PyTorch，无需 pip install ultralytics）
 """
 
 from pathlib import Path
@@ -21,7 +21,7 @@ require_detector_weights(
     hint=(
         "说明：detect.yaml 里配置了 weights，但该路径不存在时框架不会报错，只会用随机初始化的网络推理，"
         "置信度极低，检测结果通常为空，保存的 yolo11n_result.jpg 上就像「什么也没检测到」。\n"
-        "请先按本文件注释转换 ultralytics 权重后再运行。"
+        "请先按本文件注释将官方 yolo11n.pt 转为框架权重后再运行。"
     ),
 )
 

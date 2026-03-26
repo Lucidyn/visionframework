@@ -5,8 +5,8 @@ YOLO26 使用 one-to-one 检测头，无需 NMS 后处理。
 支持全尺寸：n/s/m/l/x，换用 configs/detection/yolo26/yolo26s.yaml 等即可。
 
 前提条件:
-    pip install ultralytics
     python tools/convert_ultralytics.py --model yolo26n.pt --out weights/detection/yolo26/yolo26n_converted.pth
+    （转换仅需 PyTorch，无需 pip install ultralytics）
 """
 
 from pathlib import Path

@@ -1,7 +1,10 @@
 """
-ultralytics → VisionFramework 权重转换工具。
+ultralytics 格式 YOLO11/YOLO26 ``.pt`` → VisionFramework 权重转换。
 
-将 ultralytics YOLO11/YOLO26 的 .pt 权重转为本框架可直接加载的 state_dict。
+从官方 ``.pt`` checkpoint 中读取 ``model`` 权重并映射到本框架 ``state_dict``。
+**转换仅需 PyTorch（``torch.load``），不需要安装 ``ultralytics`` 包。**
+
+``UltralyticsDetector``（供 ``test_yolo26.py`` 等与官方输出对比）仍依赖 ``ultralytics``，需单独安装。
 
 用法:
     python -m visionframework.tools.convert_ultralytics --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
@@ -165,11 +168,31 @@ def convert_weights(ul_state_dict: dict) -> OrderedDict[str, torch.Tensor]:
     return vf_state_dict
 
 
-def convert_from_file(model_path: str, output_path: str | None = None) -> OrderedDict[str, torch.Tensor]:
-    from ultralytics import YOLO
+def load_ultralytics_pt_state_dict(model_path: str) -> dict:
+    """从 Ultralytics 官方 ``.pt`` 中取出 ``model.*`` 的 state_dict，**仅需 torch**，无需安装 ultralytics。
 
-    yolo = YOLO(model_path)
-    ul_sd = yolo.model.state_dict()
+    与 ``ultralytics.YOLO(path).model.state_dict()`` 在标准 checkpoint 格式下等价。
+    """
+    ckpt = torch.load(model_path, map_location="cpu", weights_only=False)
+    if not isinstance(ckpt, dict):
+        raise ValueError(f"无法解析 checkpoint（期望 dict）: {model_path}")
+
+    for key in ("model", "ema"):
+        if key not in ckpt:
+            continue
+        m = ckpt[key]
+        if isinstance(m, nn.Module):
+            return m.state_dict()
+        if isinstance(m, dict):
+            return m
+
+    raise ValueError(
+        f"checkpoint 中未找到可转换的 model/ema 权重: {model_path}，键: {list(ckpt.keys())[:20]}"
+    )
+
+
+def convert_from_file(model_path: str, output_path: str | None = None) -> OrderedDict[str, torch.Tensor]:
+    ul_sd = load_ultralytics_pt_state_dict(model_path)
     vf_sd = convert_weights(ul_sd)
     print(f"转换完成: {len(ul_sd)} -> {len(vf_sd)} keys")
 

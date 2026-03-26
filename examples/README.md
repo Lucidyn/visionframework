@@ -85,8 +85,9 @@ python -m visionframework.tools.save_yolo_seg_visualization --quick   # 仅 11n 
 
 ## 权重转换工具
 
+YOLO **检测**用的 `yolo11n.pt` / `yolo26n.pt` 转框架 `.pth`：**仅需 PyTorch**（`convert_ultralytics` 用 `torch.load` 读 checkpoint，**不需要**安装 `ultralytics` 包）。**实例分割** `*-seg.pt` 不经此脚本，推理见上文「实例分割」。
+
 ```bash
-# ultralytics YOLO 检测权重（转为框架 .pth；实例分割 *-seg.pt 不需要此步）
 python -m visionframework.tools.convert_ultralytics --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
 
 # Facebook DETR 官方权重（458/458 keys 完美映射）

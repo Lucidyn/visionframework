@@ -7,7 +7,7 @@
 - **组件化架构** — Backbone / Neck / Head 自由组合，通过注册表动态实例化
 - **YAML 驱动** — 唯一入口 `TaskRunner(yaml_path)`，零代码配置切换模型和任务
 - **内置模型** — YOLO11、YOLO26、DETR、RT-DETR（Ultralytics HGNet **rtdetr-l/x**），以及 CSPDarknet、ResNet 等基础组件
-- **官方权重** — 支持加载 Facebook DETR（458/458完美映射）、ultralytics YOLO、RT-DETR HG（**rtdetr-l/x.pt** 转换）权重
+- **官方权重** — 支持加载 Facebook DETR（458/458完美映射）、Ultralytics 格式 YOLO `.pt`（**转换仅需 torch**，无需安装 `ultralytics` 包）、RT-DETR HG（**rtdetr-l/x.pt** 转换）权重
 - **YOLO26 端到端** — NMS-free one-to-one 检测头，`end2end: true` 一键启用
 - **多任务支持** — 检测、分割、跟踪、ReID 跟踪，统一 pipeline 管理
 - **最少依赖** — 核心仅需 `torch`、`opencv-python`、`numpy`、`pyyaml`
@@ -67,8 +67,7 @@ rows = task.collect_results("path/to/img_dir", max_frames=100)
 ### YOLO11 目标检测
 
 ```bash
-# 转换 ultralytics 官方权重
-pip install ultralytics
+# 将 Ultralytics 官方 yolo11n.pt 转为框架权重（仅需 PyTorch，无需 pip install ultralytics）
 python tools/convert_ultralytics.py --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
 ```
 
@@ -312,8 +311,8 @@ test/                         # pytest；说明见 test/README.md
 | DETR-R50 | `detection/detr/detr_r50.yaml` | ResNet-50 | TransformerEncoderNeck | DETRHead | 无 NMS，集合预测 |
 | RT-DETR-l | `detection/rtdetr/rtdetr_l.yaml` | RTDETRHGBackbone（含 PAN/AIFI） | — | RTDETRHGDecoder | 无 NMS；纯 PyTorch；官方 `.pt` 见 `NOTICE` |
 | RT-DETR-x | `detection/rtdetr/rtdetr_x.yaml` | RTDETRHGBackbone（同上，宽版） | — | RTDETRHGDecoder | 同上 |
-| YOLO11 实例分割 | `segmentation/yolo11/yolo11_seg.yaml` | Ultralytics | — | — | 需 `pip install ultralytics`；权重 `yolo11*-seg.pt` |
-| YOLO26 实例分割 | `segmentation/yolo26/yolo26_seg.yaml` | Ultralytics | — | — | 同上；权重 `yolo26*-seg.pt` |
+| YOLO11 实例分割 | `segmentation/yolo11/yolo11_seg.yaml` | Ultralytics 库 | — | — | 推理需 `pip install ultralytics`（与检测权重转换无关） |
+| YOLO26 实例分割 | `segmentation/yolo26/yolo26_seg.yaml` | Ultralytics 库 | — | — | 同上 |
 | ReID | `reid/osnet/osnet_reid.yaml` | OSNet | — | ReIDHead | 行人重识别 |
 
 ## 官方预训练权重
@@ -333,9 +332,13 @@ weights:
   reid: weights/reid/osnet/osnet_reid.pth
 ```
 
-### YOLO11 / YOLO26 (ultralytics)
+### YOLO11 / YOLO26（检测 `.pt` 转换）
 
-**检测**权重需用下方命令转为框架 `ModelWrapper` 用 `.pth`。**实例分割**（`*-seg.pt`）不经转换，由 `YOLO11Segmenter` / `YOLO26Segmenter` 直接加载；可选 `pip install -e ".[yolo-seg]"`。
+**检测**权重用下方命令转为框架 `ModelWrapper` 可用的 `.pth`。`tools/convert_ultralytics.py` 内部使用 **`torch.load` 读取 checkpoint**，**不依赖 `ultralytics` Python 包**。
+
+**实例分割**（`*-seg.pt`）不经此脚本转换，推理需 `YOLO11Segmenter` / `YOLO26Segmenter`，请 **`pip install ultralytics`** 或 **`pip install -e ".[yolo-seg]"`**。
+
+`tools/test_yolo26.py` 若要与官方 **Ultralytics 逐框对比**，需已安装 `ultralytics`（用于 `UltralyticsDetector`）。
 
 转换工具自动检测模型类型，YOLO26 会自动使用 one-to-one head 权重：
 
@@ -346,7 +349,7 @@ python tools/convert_ultralytics.py --model yolo11n.pt --out weights/detection/y
 # YOLO26（支持 n/s/m/l/x，自动检测 one2one head）
 python tools/convert_ultralytics.py --model yolo26n.pt --out weights/detection/yolo26/yolo26n_converted.pth
 
-# 验证与 Ultralytics 推理一致（10 个模型：11n/s/m/l/x、26n/s/m/l/x）
+# 可选：与 Ultralytics 推理对齐（需 pip install ultralytics）
 python tools/test_yolo26.py
 ```
 
@@ -502,7 +505,7 @@ pytest
 | numpy | ≥1.20 | 数值计算 |
 | pyyaml | ≥5.0 | 配置文件 |
 | scipy | 可选 | ByteTrack 匹配 |
-| ultralytics | 可选 | YOLO 权重转换；RT-DETR 对齐测试（`pip install -e ".[rtdetr-verify]"`） |
+| ultralytics | 可选 | **YOLO 实例分割**推理与 `yolo_seg` 测试（`pip install -e ".[yolo-seg]"`）；RT-DETR 与官方对齐测试（`pip install -e ".[rtdetr-verify]"`）。**检测**用的 YOLO `.pt` → 框架 `.pth` **不**需要本包（`convert_ultralytics.py` 仅用 torch） |
 
 ## 许可
 
