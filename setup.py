@@ -23,7 +23,7 @@ setup(
         "scipy": ["scipy>=1.10.0"],
         "dev": ["pytest>=7.0", "scipy>=1.10.0"],
         "rtdetr-verify": ["ultralytics>=8.4.0"],
-        "yolo-seg": ["ultralytics>=8.4.0"],
+        "yolo-seg": [],
     },
     include_package_data=True,
     entry_points={

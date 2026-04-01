@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tempfile
 from pathlib import Path
 
 import cv2
@@ -36,6 +37,33 @@ QUICK_CASES = [
     ("YOLO11Segmenter", "yolo11n-seg.pt"),
     ("YOLO26Segmenter", "yolo26n-seg.pt"),
 ]
+
+_ASSETS_BASE = "https://github.com/ultralytics/assets/releases/download/v8.3.0"
+_ASSETS_Y26 = "https://github.com/ultralytics/assets/releases/download/v8.4.0"
+
+
+def _seg_yaml_for_hub(hub_id: str, cls_name: str) -> Path:
+    stem = Path(hub_id).stem
+    base = stem.replace("-seg", "")
+    family = "yolo11" if cls_name == "YOLO11Segmenter" else "yolo26"
+    return REPO_ROOT / "configs" / "segmentation" / family / f"{base}_seg.yaml"
+
+
+def _download_seg_pt(name: str, dest: Path) -> bool:
+    import urllib.request
+
+    urls = (
+        [f"{_ASSETS_Y26}/{name}", f"{_ASSETS_BASE}/{name}"]
+        if name.startswith("yolo26")
+        else [f"{_ASSETS_BASE}/{name}", f"{_ASSETS_Y26}/{name}"]
+    )
+    for url in urls:
+        try:
+            urllib.request.urlretrieve(url, str(dest))
+            return dest.is_file() and dest.stat().st_size > 1000
+        except OSError:
+            continue
+    return False
 
 
 def _load_bus_bgr() -> "object":
@@ -63,12 +91,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = p.parse_args(argv)
 
-    try:
-        import ultralytics  # noqa: F401
-    except ImportError:
-        print("请先安装: pip install ultralytics", file=sys.stderr)
-        return 1
-
     import visionframework.algorithms.segmentation.yolo_segmenter  # noqa: F401
     from visionframework import Visualizer
     from visionframework.core.registry import ALGORITHMS
@@ -77,13 +99,31 @@ def main(argv: list[str] | None = None) -> int:
     cases = QUICK_CASES if args.quick else YOLO_SEG_CASES
     out_dir = args.out.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir = Path(tempfile.mkdtemp(prefix="vf_seg_w_"))
 
     vis = Visualizer()
     ok, skip = 0, 0
     for cls_name, hub_id in cases:
         cls = ALGORITHMS.get(cls_name)
+        wpath = Path(hub_id)
+        if not wpath.is_file():
+            wpath = cache_dir / hub_id
+            if not _download_seg_pt(hub_id, wpath):
+                print(f"[skip] {hub_id}: 无法下载权重", file=sys.stderr)
+                skip += 1
+                continue
+        ypath = _seg_yaml_for_hub(hub_id, cls_name)
+        if not ypath.is_file():
+            print(f"[skip] {hub_id}: 缺少配置 {ypath}", file=sys.stderr)
+            skip += 1
+            continue
         try:
-            seg = cls(weights=hub_id, device="cpu", conf=0.25)
+            seg = cls(
+                weights=str(wpath),
+                device="cpu",
+                conf=0.25,
+                model_yaml=str(ypath),
+            )
             dets = seg.predict(img)
         except RuntimeError as e:
             msg = str(e).lower()

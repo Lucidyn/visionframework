@@ -8,7 +8,7 @@
 |------|------|------|
 | 目标检测 | `01_detection.py` | YOLO11 单图检测 |
 | 多目标跟踪 | `02_tracking.py` | ByteTrack 多帧跟踪 |
-| 实例分割 | `03_segmentation.py` | YOLO11/YOLO26：`TaskRunner` + `Visualizer`，结果写入 `outputs/segmentation_demo/seg_yolo11n_demo.jpg`（需 `ultralytics`） |
+| 实例分割 | `03_segmentation.py` | YOLO11：`TaskRunner` + `Visualizer`，结果写入 `outputs/segmentation_demo/seg_yolo11n_demo.jpg`（需本地 `yolo11n-seg.pt` 与匹配 YAML） |
 | 可视化 | `04_visualization.py` | 在真实样图上画**手动示意框**（非模型输出），保存 `visualization_demo.jpg`，无需权重 |
 | DETR 检测 | `05_detr_detection.py` | Facebook DETR 官方权重 |
 | YOLO26 检测 | `06_yolo26_detection.py` | YOLO26 端到端检测（NMS-free）|
@@ -72,9 +72,9 @@ for frame, meta, result in task.run("video.mp4"):
 
 ## 实例分割（补充）
 
-- **依赖**：`pip install ultralytics` 或 `pip install -e ".[yolo-seg]"`。
-- **运行配置**：`runs/segmentation/yolo11/yolo11n_seg.yaml` 等（`pipeline: segmentation`，`weights` 为 `yolo11n-seg.pt` 等）。
-- **批量导出可视化**（各尺寸一张 PNG，默认 `outputs/segmentation_viz/`）：
+- **依赖**：仅需 **PyTorch**；将官方 `*-seg.pt` 置于运行目录或配置为绝对路径（与 `configs/segmentation/.../{n,s,m,l,x}_seg.yaml` 尺寸一致）。
+- **运行配置**：`runs/segmentation/yolo11/yolo11n_seg.yaml` 等；`models.segmenter` 必须指向**同档** `configs/segmentation/.../{variant}_seg.yaml`，`weights` 为对应 `yolo11n-seg.pt` 等。
+- **批量导出可视化**（各尺寸一张 PNG，默认 `outputs/segmentation_viz/`，目录已在 `.gitignore`）：
 
 ```bash
 python -m visionframework.tools.save_yolo_seg_visualization
@@ -85,7 +85,7 @@ python -m visionframework.tools.save_yolo_seg_visualization --quick   # 仅 11n 
 
 ## 权重转换工具
 
-YOLO **检测**用的 `yolo11n.pt` / `yolo26n.pt` 转框架 `.pth`：**仅需 PyTorch**（`convert_ultralytics` 用 `torch.load` 读 checkpoint，**不需要**安装 `ultralytics` 包）。**实例分割** `*-seg.pt` 不经此脚本，推理见上文「实例分割」。
+YOLO **检测**用的 `yolo11n.pt` / `yolo26n.pt` 转框架 `.pth`：**仅需 PyTorch**（`convert_ultralytics` 用 `torch.load` 读 checkpoint）。**实例分割**可用 `convert_segment_from_file` 导出映射后的 `.pth`，或直接由 `YOLO11Segmenter` 从 `.pt` 加载；均**不需要** `ultralytics` 包。
 
 ```bash
 python -m visionframework.tools.convert_ultralytics --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
@@ -114,17 +114,17 @@ python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
 
 ### 运行配置 (runs/<task>/<algo>/)
 
-**实例分割** runtime 示例：
+**实例分割** runtime 示例（权重与 `segmenter` 指向的 YAML 须同档，例如 n 档）：
 
 ```yaml
 pipeline: segmentation
 models:
-  segmenter: configs/segmentation/yolo11/yolo11_seg.yaml
+  segmenter: configs/segmentation/yolo11/yolo11n_seg.yaml
 weights: yolo11n-seg.pt   # 或 weights: { segmenter: path/to.pt }
 device: cpu
 ```
 
-（`algorithm: YOLO11Segmenter` 写在 `configs/segmentation/yolo11/yolo11_seg.yaml` 中，亦可写在 runtime 顶层覆盖。）
+（`algorithm: YOLO11Segmenter` 写在 `configs/segmentation/...` 模型 YAML 中，亦可写在 runtime 顶层覆盖。）
 
 ```yaml
 pipeline: detection          # detection / tracking / segmentation / reid_tracking

@@ -9,7 +9,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-默认选项在 `pyproject.toml` 的 `[tool.pytest.ini_options]` 中配置（含 `-m "not yolo_seg"`，排除需下载 Ultralytics YOLO 分割权重的慢测）。
+默认选项在 `pyproject.toml` 的 `[tool.pytest.ini_options]` 中配置（含 `-m "not yolo_seg"`，排除需下载官方 `*-seg.pt` 的慢测）。
 
 根目录 **`conftest.py`** 会 `setdefault("VISIONFRAMEWORK_LOG_LEVEL", "WARNING")`，避免 `TaskRunner` 等在测试中输出 INFO。调试单测时可临时设置 `VISIONFRAMEWORK_LOG_LEVEL=INFO`。
 
@@ -30,7 +30,7 @@ pytest
 | 标记 | 含义 |
 |------|------|
 | `rtdetr_official` | 需要 **`RTDETR_L_PT`** 与 **`RTDETR_X_PT`** 指向 Ultralytics 官方 COCO 权重 `rtdetr-l.pt`、`rtdetr-x.pt`。未设置或文件不存在时，对应用例 **skip**。 |
-| `yolo_seg` | YOLO11/YOLO26 全尺寸 `*-seg.pt` 推理 + **Visualizer 叠加 + PNG 往返**（需 `pip install ultralytics`）。测试图优先 `test/fixtures/bus.jpg`。默认 `pytest` **不收集**；显式运行：`pytest -m yolo_seg`。若某权重缓存损坏会 **skip** 并提示删除后重下。 |
+| `yolo_seg` | YOLO11/YOLO26 全尺寸 `*-seg.pt` 推理 + **Visualizer 叠加 + PNG 往返**（**仅需 PyTorch**，权重由测试从 GitHub release 下载）。测试图优先 `test/fixtures/bus.jpg`。默认 `pytest` **不收集**；显式运行：`pytest -m yolo_seg`。若某权重下载损坏会 **skip**。 |
 
 运行仅含该标记的用例：
 
@@ -39,15 +39,13 @@ pytest -m rtdetr_official
 pytest -m yolo_seg test/algorithms/test_yolo_segmentation.py
 ```
 
-可选安装 **`pip install -e ".[yolo-seg]"`**（与 `yolo_seg` 测试相同依赖）。
-
 ## YOLO 实例分割（`yolo_seg`）
 
 - **文件**：`test/algorithms/test_yolo_segmentation.py`
-- **内容**：对 YOLO11 / YOLO26 各 5 档尺寸（`yolo11n-seg.pt` … `yolo26x-seg.pt`）做推理；**`Visualizer` 叠加**与 **PNG 写回读**；`TaskRunner` + runtime YAML 路径各一条。
+- **内容**：对 YOLO11 / YOLO26 各 5 档尺寸做推理；**`Visualizer` 叠加**与 **PNG 写回读**；`TaskRunner` + runtime YAML 各一条。
 - **测试图**：优先 `test_bus.jpg`，其次 **`test/fixtures/bus.jpg`**（无网络时避免下载失败）。
-- **损坏权重**：若本地缓存的 `.pt` 不完整，相关用例 **`pytest.skip`** 并提示删除缓存后重下。
-- **导出可视化**：`python -m visionframework.tools.save_yolo_seg_visualization`（不写测试内；见主 **README**）。
+- **损坏权重**：若下载的 `.pt` 不完整，相关用例 **`pytest.skip`**。
+- **导出可视化**：`python -m visionframework.tools.save_yolo_seg_visualization`（见主 **README**）。
 
 ## RT-DETR 相关
 
@@ -60,5 +58,4 @@ pytest -m yolo_seg test/algorithms/test_yolo_segmentation.py
 
 ## 可选：与 Ultralytics 对齐的验证依赖
 
-- **`pip install -e ".[rtdetr-verify]"`**：RT-DETR 等与 Ultralytics 逐张量/推理对齐的额外测试（详见各测试文件 docstring）。
-- **`pip install -e ".[yolo-seg]"`**：YOLO 实例分割（`pytest -m yolo_seg`）。
+- **`pip install -e ".[rtdetr-verify]"`**：RT-DETR 等与 Ultralytics 逐张量/推理对齐的额外测试（需安装 `ultralytics`，详见各测试文件 docstring）。

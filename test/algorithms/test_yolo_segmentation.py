@@ -1,7 +1,7 @@
-"""YOLO11 / YOLO26 实例分割：Ultralytics 全尺寸权重推理测试。
+"""YOLO11 / YOLO26 实例分割：原生 PyTorch 推理测试（无需 ``ultralytics``）。
 
 默认 ``pytest`` 通过 ``addopts`` 排除本模块（``-m 'not yolo_seg'``）。
-安装 ``ultralytics`` 后运行（含推理、``Visualizer`` 叠加与 PNG 落盘）::
+需可下载或已缓存官方 ``*-seg.pt`` 权重后运行::
 
     pytest -m yolo_seg test/algorithms/test_yolo_segmentation.py
 """
@@ -19,6 +19,8 @@ from visionframework.core.registry import ALGORITHMS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _FIXTURE_BUS = REPO_ROOT / "test" / "fixtures" / "bus.jpg"
+_ASSETS_BASE = "https://github.com/ultralytics/assets/releases/download/v8.3.0"
+_ASSETS_Y26 = "https://github.com/ultralytics/assets/releases/download/v8.4.0"
 
 
 @pytest.fixture(scope="module")
@@ -44,6 +46,46 @@ def bus_bgr(tmp_path_factory):
     assert img is not None
     return img
 
+
+def _ensure_seg_pt(name: str, tmp_path: Path) -> Path:
+    """下载或复用 ``*-seg.pt`` 到临时目录。"""
+    import urllib.request
+
+    dest = tmp_path / name
+    if dest.is_file():
+        return dest
+    urls = (
+        [f"{_ASSETS_Y26}/{name}", f"{_ASSETS_BASE}/{name}"]
+        if name.startswith("yolo26")
+        else [f"{_ASSETS_BASE}/{name}", f"{_ASSETS_Y26}/{name}"]
+    )
+    last_err: OSError | None = None
+    for url in urls:
+        try:
+            urllib.request.urlretrieve(url, str(dest))
+            last_err = None
+            break
+        except OSError as e:
+            last_err = e
+            continue
+    if last_err is not None:
+        pytest.skip(f"无法下载权重 {name}: {last_err}")
+    if not dest.is_file() or dest.stat().st_size < 1000:
+        pytest.skip(f"权重无效或下载失败: {name}")
+    return dest
+
+
+def _seg_yaml_for_hub(hub_id: str, cls_name: str) -> str:
+    stem = Path(hub_id).stem
+    base = stem.replace("-seg", "")
+    family = "yolo11" if cls_name == "YOLO11Segmenter" else "yolo26"
+    rel = f"configs/segmentation/{family}/{base}_seg.yaml"
+    p = REPO_ROOT / rel
+    if not p.is_file():
+        pytest.skip(f"缺少模型配置: {rel}")
+    return rel
+
+
 YOLO_SEG_CASES = [
     ("YOLO11Segmenter", "yolo11n-seg.pt"),
     ("YOLO11Segmenter", "yolo11s-seg.pt"),
@@ -59,20 +101,6 @@ YOLO_SEG_CASES = [
 
 
 pytestmark = pytest.mark.yolo_seg
-
-
-def _skip_if_corrupt_ultralytics_weight(exc: BaseException, hub_id: str) -> None:
-    """不完整下载或损坏的 .pt 会触发 torch zip 读失败，跳过并提示清理缓存。"""
-    msg = str(exc).lower()
-    if isinstance(exc, RuntimeError) and (
-        "zip" in msg
-        or "central directory" in msg
-        or "pytorchstreamreader" in msg
-        or "failed finding" in msg
-    ):
-        pytest.skip(
-            f"权重文件可能损坏或下载不完整（请删除缓存中的 {hub_id} 后重试）: {exc}"
-        )
 
 
 def _assert_visualization_ok(img: np.ndarray, result_dict: dict) -> np.ndarray:
@@ -97,39 +125,35 @@ def _assert_png_roundtrip(drawn: np.ndarray, path: Path) -> None:
 
 @pytest.mark.parametrize("cls_name,hub_id", YOLO_SEG_CASES)
 def test_yolo_seg_all_sizes_load_and_predict_bus(cls_name, hub_id, bus_bgr, tmp_path):
-    pytest.importorskip("ultralytics")
     cls = ALGORITHMS.get(cls_name)
-    img = bus_bgr
-    try:
-        seg = cls(weights=hub_id, device="cpu", conf=0.25)
-        dets = seg.predict(img)
-    except RuntimeError as e:
-        _skip_if_corrupt_ultralytics_weight(e, hub_id)
-        raise
+    seg_yaml = _seg_yaml_for_hub(hub_id, cls_name)
+    wpt = _ensure_seg_pt(hub_id, tmp_path)
+    seg = cls(
+        weights=str(wpt),
+        device="cpu",
+        conf=0.25,
+        model_yaml=str(REPO_ROOT / seg_yaml),
+    )
+    dets = seg.predict(bus_bgr)
     assert isinstance(dets, list)
     assert len(dets) >= 1, "bus 图应至少检出 1 个实例"
     for d in dets:
         assert d.mask is not None
         assert d.mask.ndim == 2
-        assert d.mask.shape[0] == img.shape[0] and d.mask.shape[1] == img.shape[1]
+        assert d.mask.shape[0] == bus_bgr.shape[0] and d.mask.shape[1] == bus_bgr.shape[1]
 
-    drawn = _assert_visualization_ok(img, {"detections": dets})
+    drawn = _assert_visualization_ok(bus_bgr, {"detections": dets})
     safe = hub_id.replace(".pt", "").replace("-", "_")
     _assert_png_roundtrip(drawn, tmp_path / f"{cls_name}_{safe}_seg.png")
 
 
 @pytest.mark.parametrize("cls_name,hub_id", YOLO_SEG_CASES)
 def test_taskrunner_segmentation_runtime_yaml(cls_name, hub_id, monkeypatch, tmp_path, bus_bgr):
-    pytest.importorskip("ultralytics")
     monkeypatch.chdir(REPO_ROOT)
     from visionframework import TaskRunner
 
-    seg_rel = (
-        "configs/segmentation/yolo11/yolo11_seg.yaml"
-        if cls_name == "YOLO11Segmenter"
-        else "configs/segmentation/yolo26/yolo26_seg.yaml"
-    )
-    assert (REPO_ROOT / seg_rel).is_file()
+    seg_yaml = _seg_yaml_for_hub(hub_id, cls_name)
+    wpt = _ensure_seg_pt(hub_id, tmp_path)
 
     import yaml
 
@@ -138,19 +162,15 @@ def test_taskrunner_segmentation_runtime_yaml(cls_name, hub_id, monkeypatch, tmp
         yaml.safe_dump(
             {
                 "pipeline": "segmentation",
-                "models": {"segmenter": seg_rel},
-                "weights": hub_id,
+                "models": {"segmenter": seg_yaml},
+                "weights": str(wpt),
                 "device": "cpu",
             },
         ),
         encoding="utf-8",
     )
-    try:
-        task = TaskRunner(run)
-        r = task.process(bus_bgr)
-    except RuntimeError as e:
-        _skip_if_corrupt_ultralytics_weight(e, hub_id)
-        raise
+    task = TaskRunner(run)
+    r = task.process(bus_bgr)
     assert "detections" in r
     for d in r["detections"]:
         assert d.has_mask()

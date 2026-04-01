@@ -1,4 +1,3 @@
-# 默认与 ``yolo11n_seg.yaml``（nano）一致；其余尺寸请使用 ``yolo11s_seg.yaml`` … ``yolo11x_seg.yaml``。
 task: segmentation
 algorithm: YOLO11Segmenter
 

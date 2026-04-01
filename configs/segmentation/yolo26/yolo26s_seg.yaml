@@ -1,30 +1,29 @@
-# 默认与 ``yolo26n_seg.yaml`` 一致；其余尺寸见 ``yolo26s_seg.yaml`` … ``yolo26x_seg.yaml``。
 task: segmentation
 algorithm: YOLO26Segmenter
 
 backbone:
   type: YOLOBackbone
   depth: 0.50
-  width: 0.25
+  width: 0.50
   max_channels: 1024
   sppf_cv1_act: false
   sppf_residual: true
 
 neck:
   type: YOLOPAN
-  in_channels: [128, 128, 256]
-  out_channels: [64, 128, 256]
+  in_channels: [256, 256, 512]
+  out_channels: [128, 256, 512]
   depth: 0.50
   c3k: true
   a2c2f: true
 
 head:
   type: YOLO26SegmentHead
-  in_channels: [64, 128, 256]
+  in_channels: [128, 256, 512]
   num_classes: 80
   reg_max: 1
   nm: 32
-  npr: 64
+  npr: 128
 
 postprocess:
   conf: 0.35

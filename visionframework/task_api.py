@@ -139,8 +139,9 @@ def _build_segmentation_algorithm(
     runtime_cfg: Dict[str, Any],
     *,
     strict_weights: bool = False,
+    segmenter_yaml_path: Optional[str] = None,
 ) -> Any:
-    """实例化 YOLO11Segmenter / YOLO26Segmenter（Ultralytics 权重，无需 build_model）。"""
+    """实例化 YOLO11Segmenter / YOLO26Segmenter（``torch.load`` + 完整模型 YAML，无需 ultralytics）。"""
     import visionframework.algorithms.segmentation.yolo_segmenter  # noqa: F401
 
     pp = _postprocess(model_cfg)
@@ -166,6 +167,7 @@ def _build_segmentation_algorithm(
     cls = ALGORITHMS.get(name)
     return cls(
         weights=wstr,
+        model_yaml=segmenter_yaml_path,
         device=device,
         conf=float(pp.get("conf", 0.25)),
         iou=float(pp.get("iou", pp.get("nms_iou", 0.45))),
@@ -208,7 +210,10 @@ def _build_pipeline_from_runtime(
         seg_cfg_path = models_cfg if isinstance(models_cfg, str) else models_cfg.get("segmenter")
         model_cfg = resolve_config(seg_cfg_path) if seg_cfg_path else {}
         segmenter = _build_segmentation_algorithm(
-            model_cfg, runtime_cfg, strict_weights=strict_weights
+            model_cfg,
+            runtime_cfg,
+            strict_weights=strict_weights,
+            segmenter_yaml_path=str(seg_cfg_path) if seg_cfg_path else None,
         )
         return PIPELINES.get("segmentation")(segmenter=segmenter)
 

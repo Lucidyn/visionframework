@@ -13,7 +13,7 @@
 
 `TaskRunner` 解析运行配置后，对 **检测** 任务通过 `_build_detection_algorithm` 从 `ALGORITHMS` 注册表装配 `Detector` / `DETRDetector` / `RTDETRDetector`（由 runtime 的 `algorithm` 字段选择，缺省为 `Detector`）。
 
-**分割（segmentation）** 不走 `build_model`：由 `_build_segmentation_algorithm` 装配 `YOLO11Segmenter` / `YOLO26Segmenter`（Ultralytics `*-seg.pt`，需单独安装 `ultralytics`）。管线输出为 `{"detections": [...]}`，每个 `Detection` 含实例 `mask`。
+**分割（segmentation）** 在 `task_api` 中不直接调用 `build_model`：由 `_build_segmentation_algorithm` 实例化 `YOLO11Segmenter` / `YOLO26Segmenter`，其在内部根据 `configs/segmentation/...` 调用 `build_model` 并对官方 `*-seg.pt` 做 `convert_segment_weights` 后加载（**仅需 PyTorch**，无需 `ultralytics` 包）。管线输出为 `{"detections": [...]}`，每个 `Detection` 含实例 **mask**。
 
 ## 跟踪（tracking / reid_tracking）
 
@@ -38,4 +38,4 @@
 2. 在 [`task_api.py`](../visionframework/task_api.py) 的 `_build_detection_algorithm` 内 `builders` 字典中增加 `"YourDetector": _kw_your` 及对应参数字典工厂。  
 3. 补充测试（参见 `test/test_task_api.py`）。
 
-分割算法若需接入 `TaskRunner`，在 `task_api._build_segmentation_algorithm` 中扩展（当前为 Ultralytics YOLO seg 专用）。批量导出分割可视化 PNG：`python -m visionframework.tools.save_yolo_seg_visualization`（安装后 `vf-save-yolo-seg`）。
+扩展分割算法：在 `ALGORITHMS` 注册后，于 `_build_segmentation_algorithm` 中按名称分支传入 `model_yaml` / 权重即可。批量导出分割可视化 PNG：`python -m visionframework.tools.save_yolo_seg_visualization`（安装后若配置了 `vf-save-yolo-seg` 入口亦同）。

@@ -6,8 +6,11 @@ ultralytics 格式 YOLO11/YOLO26 ``.pt`` → VisionFramework 权重转换。
 
 ``UltralyticsDetector``（供 ``test_yolo26.py`` 等与官方输出对比）仍依赖 ``ultralytics``，需单独安装。
 
+实例分割 ``*-seg.pt`` 使用 :func:`convert_segment_from_file` / :func:`convert_segment_weights`（同样仅需 torch）。
+
 用法:
     python -m visionframework.tools.convert_ultralytics --model yolo11n.pt --out weights/detection/yolo11/yolo11n_converted.pth
+    python -c "from visionframework.tools.convert_ultralytics import convert_segment_from_file; convert_segment_from_file('yolo11n-seg.pt', 'weights/segmentation/yolo11n_seg.pth')"
     python -m visionframework.tools.convert_ultralytics --model yolo11n.pt --image test_bus.jpg --test
 """
 
@@ -134,6 +137,84 @@ def _map_detect_key(ul_suffix: str, use_one2one: bool = False) -> str | None:
     return None
 
 
+def _map_cv4_key(ul_suffix: str, use_one2one_cv4: bool = False) -> str | None:
+    """Segment head mask coefficient branch ``cv4`` / ``one2one_cv4`` → ``head.cv4``."""
+    if use_one2one_cv4:
+        if ul_suffix.startswith("cv4.") and not ul_suffix.startswith("one2one_cv4."):
+            return None
+        ul_suffix = ul_suffix.replace("one2one_cv4.", "cv4.", 1)
+    else:
+        if ul_suffix.startswith("one2one_cv4."):
+            return None
+
+    m = re.match(r"cv4\.(\d+)\.(\d+)\.(.*)", ul_suffix)
+    if not m:
+        return None
+    level, layer_idx, rest = m.group(1), int(m.group(2)), m.group(3)
+    if layer_idx == 2:
+        return f"head.cv4.{level}.2.{rest}"
+    return f"head.cv4.{level}.{layer_idx}.{rest}"
+
+
+def _map_segment_head_rest(
+    rest: str,
+    *,
+    use_one2one: bool,
+    use_one2one_cv4: bool,
+) -> str | None:
+    """Map last module (Segment head): detect + ``proto`` + ``cv4``."""
+    if rest.startswith("proto."):
+        return f"head.{rest}"
+    if rest.startswith("cv4.") or rest.startswith("one2one_cv4."):
+        return _map_cv4_key(rest, use_one2one_cv4=use_one2one_cv4)
+    k = _map_detect_key(rest, use_one2one=use_one2one)
+    if k is None:
+        return None
+    # VisionFramework segment heads wrap :class:`YOLOHead` as ``head.det``
+    assert k.startswith("head.")
+    return "head.det." + k[len("head.") :]
+
+
+def build_segment_mapping(ul_state_dict: dict) -> OrderedDict[str, str]:
+    """同 :func:`build_mapping`，并映射 Segment 的 ``proto`` / ``cv4``（及 ``one2one_cv4``）。"""
+    use_one2one = any(f"model.{HEAD_IDX}.one2one_cv2" in k for k in ul_state_dict.keys())
+    use_one2one_cv4 = any(f"model.{HEAD_IDX}.one2one_cv4" in k for k in ul_state_dict.keys())
+    if use_one2one:
+        print("检测到 YOLO26 (one-to-one head)，使用 one2one_cv2/cv3 权重")
+    if use_one2one_cv4:
+        print("检测到 Segment one2one_cv4，使用 one2one 掩码系数分支")
+
+    mapping: OrderedDict[str, str] = OrderedDict()
+    for ul_key in ul_state_dict.keys():
+        m = re.match(r"model\.(\d+)\.(.*)", ul_key)
+        if not m:
+            continue
+        idx, rest = m.group(1), m.group(2)
+
+        vf_key = None
+        if idx in BACKBONE_MAP:
+            vf_key = f"{BACKBONE_MAP[idx]}.{rest}"
+        elif idx in NECK_MAP:
+            vf_key = f"{NECK_MAP[idx]}.{rest}"
+        elif idx == HEAD_IDX:
+            vf_key = _map_segment_head_rest(
+                rest, use_one2one=use_one2one, use_one2one_cv4=use_one2one_cv4
+            )
+
+        if vf_key is not None:
+            mapping[ul_key] = vf_key
+    return mapping
+
+
+def convert_segment_weights(ul_state_dict: dict) -> OrderedDict[str, torch.Tensor]:
+    """ultralytics ``*-seg.pt`` state_dict → VisionFramework ``YOLOSegmentHead`` / ``YOLO26SegmentHead``。"""
+    mapping = build_segment_mapping(ul_state_dict)
+    vf_state_dict: OrderedDict[str, torch.Tensor] = OrderedDict()
+    for ul_key, vf_key in mapping.items():
+        vf_state_dict[vf_key] = ul_state_dict[ul_key]
+    return vf_state_dict
+
+
 def build_mapping(ul_state_dict: dict) -> OrderedDict[str, str]:
     """构建从 ultralytics key → VisionFramework key 的完整映射。"""
     use_one2one = any(f"model.{HEAD_IDX}.one2one_cv2" in k for k in ul_state_dict.keys())
@@ -196,6 +277,17 @@ def convert_from_file(model_path: str, output_path: str | None = None) -> Ordere
     vf_sd = convert_weights(ul_sd)
     print(f"转换完成: {len(ul_sd)} -> {len(vf_sd)} keys")
 
+    if output_path:
+        torch.save(vf_sd, output_path)
+        print(f"已保存至: {output_path}")
+    return vf_sd
+
+
+def convert_segment_from_file(model_path: str, output_path: str | None = None) -> OrderedDict[str, torch.Tensor]:
+    """将 ``*-seg.pt`` 转为 VisionFramework 分割头 ``state_dict``（含 ``proto`` / ``cv4``）。"""
+    ul_sd = load_ultralytics_pt_state_dict(model_path)
+    vf_sd = convert_segment_weights(ul_sd)
+    print(f"分割权重转换: {len(ul_sd)} -> {len(vf_sd)} keys")
     if output_path:
         torch.save(vf_sd, output_path)
         print(f"已保存至: {output_path}")

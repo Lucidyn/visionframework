@@ -1,20 +1,17 @@
 """
 示例 03 — YOLO 实例分割（YOLO11 / YOLO26）
 
-使用 Ultralytics Segment 权重（``yolo11n-seg.pt`` / ``yolo26n-seg.pt`` 等），
-``TaskRunner`` 返回 ``{"detections": [...]}``，每项含 ``mask``。
+使用官方 ``*-seg.pt``（``torch.load`` + 框架内 ``YOLOSegmentHead`` / ``YOLO26SegmentHead``），
+**无需安装 ultralytics**。``TaskRunner`` 返回 ``{"detections": [...]}``，每项含 ``mask``。
 
-前提::
+权重：将 ``yolo11n-seg.pt`` 放在当前工作目录或给出绝对路径；或从 Ultralytics 发布页下载。
 
-    pip install ultralytics
-    # 或: pip install -e ".[yolo-seg]"
-
-换模型尺寸：改用 ``runs/segmentation/yolo11/yolo11s_seg.yaml`` 或
-``runs/segmentation/yolo26/yolo26n_seg.yaml`` 等。
+换模型尺寸：使用与权重匹配的 ``runs/segmentation/.../{variant}_seg.yaml``（``segmenter`` 指向同尺寸的 ``configs/segmentation/...``）。
 
 批量导出各尺寸可视化：::
 
     python -m visionframework.tools.save_yolo_seg_visualization
+    python -m visionframework.tools.save_yolo_seg_visualization --quick
 """
 
 from pathlib import Path
@@ -34,6 +31,7 @@ for candidate in (root / "test_bus.jpg", root / "test" / "fixtures" / "bus.jpg")
 if img_path is None:
     raise SystemExit("请放置 test_bus.jpg 于仓库根目录，或使用 test/fixtures/bus.jpg")
 
+# 与 yolo11n-seg.pt 架构一致的运行配置（见 models.segmenter）
 task = TaskRunner(str(root / "runs/segmentation/yolo11/yolo11n_seg.yaml"))
 img = cv2.imread(str(img_path))
 if img is None:

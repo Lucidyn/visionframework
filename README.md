@@ -112,12 +112,7 @@ result = task.process(img)
 
 ### YOLO 实例分割（YOLO11 / YOLO26）
 
-依赖 **Ultralytics** 的 Segment 权重（`yolo11n-seg.pt`、`yolo26n-seg.pt` 等；首次运行可从 Ultralytics 自动拉取）。分割管线 **不** 经过 `build_model`，由 `YOLO11Segmenter` / `YOLO26Segmenter` 直接加载；`TaskRunner` 返回 `{"detections": [...]}`，每个 `Detection` 带实例 **mask**。
-
-```bash
-pip install ultralytics
-# 或：pip install -e ".[yolo-seg]"
-```
+使用官方 **COCO 预训练** `*-seg.pt`（与 `configs/segmentation/...` 中 backbone/neck/head 尺寸一致）。框架内 **纯 PyTorch**（`torch.load` + `convert_segment_weights`），**无需** `ultralytics`。`YOLO11Segmenter` / `YOLO26Segmenter` 在内部 `build_model` 并加载权重；`TaskRunner` 返回 `{"detections": [...]}`，每个 `Detection` 带实例 **mask**。
 
 ```python
 import cv2
@@ -136,7 +131,7 @@ python -m visionframework.tools.save_yolo_seg_visualization
 # 仅 n 档快速试跑：python -m visionframework.tools.save_yolo_seg_visualization --quick
 ```
 
-自动化测试（需 `ultralytics`，默认 `pytest` 不运行）：`pytest -m yolo_seg test/algorithms/test_yolo_segmentation.py`。说明见 **`test/README.md`**。使用官方预训练权重须遵守 **AGPL-3.0**（见 **`NOTICE`**）。
+自动化测试（默认 `pytest` 不运行）：`pytest -m yolo_seg test/algorithms/test_yolo_segmentation.py`（需可下载官方 `*-seg.pt`）。说明见 **`test/README.md`**。使用官方预训练权重须遵守 **AGPL-3.0**（见 **`NOTICE`**）。
 
 > 参考示例：`examples/03_segmentation.py`
 
@@ -227,7 +222,7 @@ visionframework/
 ├── algorithms/
 │   ├── base.py               # BaseAlgorithm（设备管理、fp16、predict_batch 共享基类）
 │   ├── detection/            # Detector, DETRDetector, RTDETRDetector
-│   ├── segmentation/         # YOLO11Segmenter, YOLO26Segmenter（Ultralytics）
+│   ├── segmentation/         # YOLO11Segmenter, YOLO26Segmenter（原生 PyTorch）
 │   ├── tracking/             # ByteTracker, IOUTracker
 │   └── reid/                 # Embedder
 ├── pipelines/                # DetectionPipeline, TrackingPipeline, ...
@@ -285,7 +280,7 @@ tools/
 examples/
 ├── 01_detection.py           # YOLO11 目标检测
 ├── 02_tracking.py            # 多目标跟踪
-├── 03_segmentation.py        # YOLO11/YOLO26 实例分割（Ultralytics）
+├── 03_segmentation.py        # YOLO11/YOLO26 实例分割（原生 PyTorch）
 ├── 04_visualization.py       # 可视化工具用法
 ├── 05_detr_detection.py      # DETR 检测（Facebook 官方权重）
 ├── 06_yolo26_detection.py    # YOLO26 端到端检测（NMS-free）
@@ -311,8 +306,8 @@ test/                         # pytest；说明见 test/README.md
 | DETR-R50 | `detection/detr/detr_r50.yaml` | ResNet-50 | TransformerEncoderNeck | DETRHead | 无 NMS，集合预测 |
 | RT-DETR-l | `detection/rtdetr/rtdetr_l.yaml` | RTDETRHGBackbone（含 PAN/AIFI） | — | RTDETRHGDecoder | 无 NMS；纯 PyTorch；官方 `.pt` 见 `NOTICE` |
 | RT-DETR-x | `detection/rtdetr/rtdetr_x.yaml` | RTDETRHGBackbone（同上，宽版） | — | RTDETRHGDecoder | 同上 |
-| YOLO11 实例分割 | `segmentation/yolo11/yolo11_seg.yaml` | Ultralytics 库 | — | — | 推理需 `pip install ultralytics`（与检测权重转换无关） |
-| YOLO26 实例分割 | `segmentation/yolo26/yolo26_seg.yaml` | Ultralytics 库 | — | — | 同上 |
+| YOLO11 实例分割 | `segmentation/yolo11/yolo11{n,s,m,l,x}_seg.yaml` | YOLOBackbone | YOLOPAN | YOLOSegmentHead | 纯 PyTorch；`*-seg.pt` 用 `convert_segment_weights` 映射加载 |
+| YOLO26 实例分割 | `segmentation/yolo26/yolo26{n,s,m,l,x}_seg.yaml` | YOLOBackbone | YOLOPAN | YOLO26SegmentHead | 同上；NMS-free 与检测一致 |
 | ReID | `reid/osnet/osnet_reid.yaml` | OSNet | — | ReIDHead | 行人重识别 |
 
 ## 官方预训练权重
@@ -336,7 +331,7 @@ weights:
 
 **检测**权重用下方命令转为框架 `ModelWrapper` 可用的 `.pth`。`tools/convert_ultralytics.py` 内部使用 **`torch.load` 读取 checkpoint**，**不依赖 `ultralytics` Python 包**。
 
-**实例分割**（`*-seg.pt`）不经此脚本转换，推理需 `YOLO11Segmenter` / `YOLO26Segmenter`，请 **`pip install ultralytics`** 或 **`pip install -e ".[yolo-seg]"`**。
+**实例分割**（`*-seg.pt`）：`convert_ultralytics.py` 提供 **`convert_segment_from_file`** / **`convert_segment_weights`**，将官方权重映射为 ``YOLOSegmentHead`` / ``YOLO26SegmentHead``；**推理仅需 PyTorch**。`pytest -m yolo_seg` 会下载各尺寸权重（较慢，默认不跑）。
 
 `tools/test_yolo26.py` 若要与官方 **Ultralytics 逐框对比**，需已安装 `ultralytics`（用于 `UltralyticsDetector`）。
 
@@ -401,7 +396,7 @@ python -m visionframework.tools.convert_ultralytics_rtdetr_hg \
 
 ## 测试
 
-在仓库根目录执行 `pytest`（默认排除 `yolo_seg` 慢测，见 `pyproject.toml`）。分割、跟踪、检测等说明见 **`test/README.md`**。可选依赖：`pip install -e ".[dev]"`、**`pip install -e ".[yolo-seg]"`**（跑 YOLO 实例分割测试）、`pip install -e ".[rtdetr-verify]"`（RT-DETR 对齐测试）。
+在仓库根目录执行 `pytest`（默认排除 `yolo_seg` 慢测，见 `pyproject.toml`）。分割、跟踪、检测等说明见 **`test/README.md`**。可选依赖：`pip install -e ".[dev]"`、`pip install -e ".[rtdetr-verify]"`（RT-DETR 等与 Ultralytics 对齐的测试）。
 
 ## 日志
 
@@ -505,7 +500,7 @@ pytest
 | numpy | ≥1.20 | 数值计算 |
 | pyyaml | ≥5.0 | 配置文件 |
 | scipy | 可选 | ByteTrack 匹配 |
-| ultralytics | 可选 | **YOLO 实例分割**推理与 `yolo_seg` 测试（`pip install -e ".[yolo-seg]"`）；RT-DETR 与官方对齐测试（`pip install -e ".[rtdetr-verify]"`）。**检测**用的 YOLO `.pt` → 框架 `.pth` **不**需要本包（`convert_ultralytics.py` 仅用 torch） |
+| ultralytics | 可选 | `tools/test_yolo26.py` 中与官方 **UltralyticsDetector** 对比；RT-DETR 与官方对齐测试（`pip install -e ".[rtdetr-verify]"`）。**YOLO 检测/实例分割**框架推理 **不**需要本包（`convert_ultralytics.py` 与分割映射仅用 torch） |
 
 ## 许可
 

@@ -1,27 +1,26 @@
-# 默认与 ``yolo11n_seg.yaml``（nano）一致；其余尺寸请使用 ``yolo11s_seg.yaml`` … ``yolo11x_seg.yaml``。
 task: segmentation
 algorithm: YOLO11Segmenter
 
 backbone:
   type: YOLOBackbone
   depth: 0.50
-  width: 0.25
+  width: 0.50
   max_channels: 1024
 
 neck:
   type: YOLOPAN
-  in_channels: [128, 128, 256]
-  out_channels: [64, 128, 256]
+  in_channels: [256, 256, 512]
+  out_channels: [128, 256, 512]
   depth: 0.50
   c3k: false
 
 head:
   type: YOLOSegmentHead
-  in_channels: [64, 128, 256]
+  in_channels: [128, 256, 512]
   num_classes: 80
   reg_max: 16
   nm: 32
-  npr: 64
+  npr: 128
 
 postprocess:
   conf: 0.25

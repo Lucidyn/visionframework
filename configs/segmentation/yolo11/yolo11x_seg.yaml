@@ -1,0 +1,31 @@
+task: segmentation
+algorithm: YOLO11Segmenter
+
+backbone:
+  type: YOLOBackbone
+  depth: 1.00
+  width: 1.50
+  max_channels: 768
+  c3k2_12_c3k: true
+  bottleneck_k: 3
+
+neck:
+  type: YOLOPAN
+  in_channels: [768, 768, 768]
+  out_channels: [384, 768, 768]
+  depth: 1.00
+  c3k: true
+  bottleneck_k: 3
+
+head:
+  type: YOLOSegmentHead
+  in_channels: [384, 768, 768]
+  num_classes: 80
+  reg_max: 16
+  nm: 32
+  npr: 384
+
+postprocess:
+  conf: 0.25
+  iou: 0.45
+  imgsz: 640
